@@ -1,0 +1,37 @@
+{
+  "name": "model-heritage-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "packageManager": "pnpm@9.7.1",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx",
+    "clean": "rm -rf node_modules pnpm-lock.yaml && pnpm install"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1",
+    "axios": "^1.7.7",
+    "lucide-react": "^0.436.0",
+    "clsx": "^2.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "tailwindcss": "^3.4.10",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.41"
+  },
+  "pnpm": {
+    "overrides": {
+      "eslint": "^9.9.1"
+    }
+  }
+}

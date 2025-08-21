@@ -1,0 +1,7 @@
+This is a test model file for demonstration purposes.
+It simulates a machine learning model for testing the upload functionality.
+Model: Test BERT-like model
+Parameters: ~110M
+Architecture: Transformer
+Training: Fine-tuned on custom dataset
+
