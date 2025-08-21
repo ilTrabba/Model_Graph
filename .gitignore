@@ -1,4 +1,11 @@
 ModelHeritageEnv/
 
+# Frontend
 model_heritage_frontend/pnpm-lock.yaml
 model_heritage_frontend/node_modules
+model_heritage_frontend/dist
+
+# Backend
+model_heritage_backend/src/__pycache__
+model_heritage_backend/src/*/__pycache__
+model_heritage_backend/src/database/app.db
