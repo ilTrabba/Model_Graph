@@ -1,3 +1,8 @@
+#!/bin/bash
+
+# Define the global virtual environment name
+GLOBAL_VENV_NAME="ModelHeritageEnv"
+
 # --- Run Backend in background ---
 echo "Starting backend..."
 cd model_heritage_backend
