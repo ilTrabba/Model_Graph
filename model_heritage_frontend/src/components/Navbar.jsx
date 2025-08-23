@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Plus, Database } from 'lucide-react';
+import { Plus, Database, Network } from 'lucide-react';
 
 export default function Navbar() {
   const location = useLocation();
@@ -26,6 +26,18 @@ export default function Navbar() {
               }`}
             >
               Models
+            </Link>
+            
+            <Link
+              to="/graph"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1 ${
+                location.pathname === '/graph'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Network className="h-4 w-4" />
+              <span>Graph</span>
             </Link>
             
             <Link to="/add-model">

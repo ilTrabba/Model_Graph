@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 
 from src.models.model import db, Model, Family
+from src.services.sync_service import sync_service
 
 models_bp = Blueprint('models', __name__)
 
@@ -193,6 +194,13 @@ def upload_model():
         model.processed_at = datetime.utcnow()
         
         db.session.commit()
+        
+        # Sync to Neo4j if connected
+        try:
+            sync_service.sync_single_model(model_id)
+        except Exception as e:
+            # Log the error but don't fail the upload
+            print(f"Failed to sync model to Neo4j: {e}")
         
         return jsonify({
             'model_id': model_id,
