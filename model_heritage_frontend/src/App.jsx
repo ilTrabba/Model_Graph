@@ -4,7 +4,6 @@ import HomePage from './pages/HomePage';
 import ModelsPage from './pages/ModelsPage';
 import ModelDetailPage from './pages/ModelDetailPage';
 import AddModelPage from './pages/AddModelPage';
-import GraphPage from './pages/GraphPage';
 import './App.css';
 
 function App() {
@@ -18,7 +17,6 @@ function App() {
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/models/:id" element={<ModelDetailPage />} />
             <Route path="/add-model" element={<AddModelPage />} />
-            <Route path="/graph" element={<GraphPage />} />
           </Routes>
         </main>
       </div>
