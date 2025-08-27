@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="content-type"/>
+<title>RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs</title>
+<!--Generated on Tue Sep 10 22:37:27 2024 by LaTeXML (version 0.8.8) http://dlmf.nist.gov/LaTeXML/.-->
+<meta content="width=device-width, initial-scale=1, shrink-to-fit=no" name="viewport"/>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" type="text/css"/>
+<link href="/static/browse/0.3.4/css/ar5iv.0.7.9.min.css" rel="stylesheet" type="text/css"/>
+<link href="/static/browse/0.3.4/css/ar5iv-fonts.0.7.9.min.css" rel="stylesheet" type="text/css"/>
+<link href="/static/browse/0.3.4/css/latexml_styles.css" rel="stylesheet" type="text/css"/>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.3.3/html2canvas.min.js"></script>
+<script src="/static/browse/0.3.4/js/addons_new.js"></script>
+<script src="/static/browse/0.3.4/js/feedbackOverlay.js"></script>
+<base href="/html/2409.06897v1/"/></head>
+<body>
+<nav class="ltx_page_navbar">
+<nav class="ltx_TOC">
+<ol class="ltx_toclist">
+<li class="ltx_tocentry ltx_tocentry_section"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S1" title="In RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">1 </span>Introduction</span></a></li>
+<li class="ltx_tocentry ltx_tocentry_section">
+<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2" title="In RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2 </span>Methods</span></a>
+<ol class="ltx_toclist ltx_toclist_section">
+<li class="ltx_tocentry ltx_tocentry_subsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS1" title="In 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.1 </span>Data and Manual Labels</span></a></li>
+<li class="ltx_tocentry ltx_tocentry_subsection">
+<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS2" title="In 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.2 </span>Data Processing Pipeline</span></a>
+<ol class="ltx_toclist ltx_toclist_subsection">
+<li class="ltx_tocentry ltx_tocentry_subsubsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS2.SSS1" title="In 2.2 Data Processing Pipeline ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.2.1 </span>Structural MRI Processing</span></a></li>
+<li class="ltx_tocentry ltx_tocentry_subsubsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS2.SSS2" title="In 2.2 Data Processing Pipeline ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.2.2 </span>Diffusion MRI Processing</span></a></li>
+</ol>
+</li>
+<li class="ltx_tocentry ltx_tocentry_subsection">
+<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS3" title="In 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.3 </span>Thalamic Nuclei Segmentation</span></a>
+<ol class="ltx_toclist ltx_toclist_subsection">
+<li class="ltx_tocentry ltx_tocentry_subsubsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS3.SSS1" title="In 2.3 Thalamic Nuclei Segmentation ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.3.1 </span>Loss</span></a></li>
+<li class="ltx_tocentry ltx_tocentry_subsubsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS3.SSS2" title="In 2.3 Thalamic Nuclei Segmentation ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.3.2 </span>Implementation Details</span></a></li>
+</ol>
+</li>
+<li class="ltx_tocentry ltx_tocentry_subsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.SS4" title="In 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">2.4 </span>Labeling Schemes Unifying Protocol</span></a></li>
+</ol>
+</li>
+<li class="ltx_tocentry ltx_tocentry_section">
+<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3" title="In RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">3 </span>Experiments and Results</span></a>
+<ol class="ltx_toclist ltx_toclist_section">
+<li class="ltx_tocentry ltx_tocentry_subsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.SS1" title="In 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">3.1 </span>Comparison Against Ground Truth</span></a></li>
+<li class="ltx_tocentry ltx_tocentry_subsection"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.SS2" title="In 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">3.2 </span>Comparisons Against FreeSurfer and THOMAS Segmentation</span></a></li>
+</ol>
+</li>
+<li class="ltx_tocentry ltx_tocentry_section"><a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S4" title="In RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_title"><span class="ltx_tag ltx_tag_ref">4 </span>Conclusions and Discussions</span></a></li>
+</ol></nav>
+</nav>
+<div class="ltx_page_main">
+<div class="ltx_page_content">
+<article class="ltx_document ltx_authors_1line"><span class="ltx_note ltx_role_institutetext" id="id1"><sup class="ltx_note_mark">1</sup><span class="ltx_note_outer"><span class="ltx_note_content"><sup class="ltx_note_mark">1</sup><span class="ltx_note_type">institutetext: </span>
+Department of Electrical and Computer Engineering, Johns Hopkins University, Baltimore, MD 21218, USA
+<br class="ltx_break"/> </span></span></span><span class="ltx_note ltx_role_institutetext" id="id2"><sup class="ltx_note_mark">2</sup><span class="ltx_note_outer"><span class="ltx_note_content"><sup class="ltx_note_mark">2</sup><span class="ltx_note_type">institutetext: </span>Laboratory of Behavioral Neuroscience, National Institute on Aging, National Institutes of Health, Baltimore, MD 21224, USA
+<br class="ltx_break"/> </span></span></span><span class="ltx_note ltx_role_institutetext" id="id3"><sup class="ltx_note_mark">3</sup><span class="ltx_note_outer"><span class="ltx_note_content"><sup class="ltx_note_mark">3</sup><span class="ltx_note_type">institutetext: </span>Department of Neurology, Johns Hopkins School of Medicine, Baltimore, MD, 21287, USA
+<br class="ltx_break"/> </span></span></span><span class="ltx_note ltx_role_institutetext" id="id4"><sup class="ltx_note_mark">4</sup><span class="ltx_note_outer"><span class="ltx_note_content"><sup class="ltx_note_mark">4</sup><span class="ltx_note_type">institutetext: </span>Department of Diagnostic Radiology and Nuclear Medicine,
+University of Maryland School of Medicine, Baltimore, MD 21218, USA
+</span></span></span>
+<h1 class="ltx_title ltx_title_document">RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs</h1>
+<div class="ltx_authors">
+<span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">
+Anqi Feng
+</span><span class="ltx_author_notes">11 2 2</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Zhangxing Bian
+</span><span class="ltx_author_notes">11</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Blake E. Dewey
+</span><span class="ltx_author_notes">33</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Alexa Gail Colinco
+</span><span class="ltx_author_notes">44</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">
+<br class="ltx_break"/>Jiachen Zhuo
+</span><span class="ltx_author_notes">44</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Jerry L. Prince
+</span><span class="ltx_author_notes">11</span></span>
+</div>
+<div class="ltx_abstract">
+<h6 class="ltx_title ltx_title_abstract">Abstract</h6>
+<p class="ltx_p" id="id1.1">Accurate segmentation of thalamic nuclei is important for better understanding brain function and improving disease treatment.
+Traditional segmentation methods often rely on a single T1-weighted image, which has limited contrast in the thalamus.
+In this work, we introduce RATNUS, which uses synthetic T1-weighted images with many inversion times along with diffusion-derived features to enhance the visibility of nuclei within the thalamus. Using these features, a convolutional neural network is used to segment 13 thalamic nuclei.
+For comparison with other methods, we introduce a unified nuclei labeling scheme. Our results demonstrate an 87.19<math alttext="\%" class="ltx_Math" display="inline" id="id1.1.m1.1"><semantics id="id1.1.m1.1a"><mo id="id1.1.m1.1.1" xref="id1.1.m1.1.1.cmml">%</mo><annotation-xml encoding="MathML-Content" id="id1.1.m1.1b"><csymbol cd="latexml" id="id1.1.m1.1.1.cmml" xref="id1.1.m1.1.1">percent</csymbol></annotation-xml><annotation encoding="application/x-tex" id="id1.1.m1.1c">\%</annotation><annotation encoding="application/x-llamapun" id="id1.1.m1.1d">%</annotation></semantics></math> average true positive rate (TPR) against manual labeling. In comparison, FreeSurfer and THOMAS achieve TPRs of 64.25% and 57.64%, respectively, demonstrating the superiority of RATNUS in thalamic nuclei segmentation. The source code and pretrained models are available at: <a class="ltx_ref ltx_url ltx_font_typewriter" href="https://github.com/ANQIFENG/RATNUS" title="">https://github.com/ANQIFENG/RATNUS</a>.</p>
+</div>
+<section class="ltx_section" id="S1">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">1 </span>Introduction</h2>
+<div class="ltx_para" id="S1.p1">
+<p class="ltx_p" id="S1.p1.1">The thalamus is a vital brain structure located between the cortex and brain stem, composed of multiple functional clusters called nuclei <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib7" title="">7</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib19" title="">19</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib28" title="">28</a>]</cite>. These nuclei have significant relevance to diseases such as Parkinson’s diseases, Alzheimer’s disease, multiple sclerosis, and frontotemporal dementia <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib9" title="">9</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib5" title="">5</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib14" title="">14</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib4" title="">4</a>]</cite>, making their segmentation crucial for targeted research and the development of therapies. Despite this, many studies typically segment the thalamus as one entity in part because the exclusive use of standard T1-weighted and T2-weighted images lack the contrast necessary to distinguish the small nuclei within the thalamus <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib3" title="">3</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib10" title="">10</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib29" title="">29</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib31" title="">31</a>]</cite>.</p>
+</div>
+<div class="ltx_para" id="S1.p2">
+<p class="ltx_p" id="S1.p2.1">Existing methods that provide segmentations of certain thalamic nuclei include FreeSurfer <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib11" title="">11</a>]</cite> and THOMAS <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib22" title="">22</a>]</cite>. FreeSurfer uses a Bayesian segmentation approach with a probabilistic atlas of the human thalamus as prior knowledge; however, its use of only the Magnetization Prepared Rapid Gradient Echo (MPRAGE) sequence <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib16" title="">16</a>]</cite> limits the contrast between nuclei. THOMAS uses multi-atlas segmentation and label fusion techniques on high-contrast, white-matter-nulled MPRAGE scans, also known as Fast Gray Matter Acquisition T1 Inversion Recovery (FGATIR) <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib23" title="">23</a>]</cite>, collected at 7T to segment 12 thalamic nuclei. While it achieves good results on 7T images, its effectiveness on 3T scans has not been quantitatively validated. None of these methods use multiple T1-weighted images with different inversion times (multi-TI), which provide higher thalamus contrast not achievable by MPRAGE or FGATIR alone.</p>
+</div>
+<div class="ltx_para" id="S1.p3">
+<p class="ltx_p" id="S1.p3.1">Diffusion Magnetic resonance imaging (MRI) <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib2" title="">2</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib20" title="">20</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib21" title="">21</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib26" title="">26</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib25" title="">25</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib30" title="">30</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib32" title="">32</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib33" title="">33</a>]</cite> has been used for thalamic nuclei segmentation. One approach <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib21" title="">21</a>]</cite> develops a hierarchical random forest framework to parcellate the thalamus into 6 nuclei, utilizing inputs such as fractional anisotropy (FA), the Knutsson 5D vector and edge map, and connectivity with cortical regions. However, its manual labeling was based on FA and Knutsson edge maps, which does not align perfectly with labels derived from T1-weighted images. Two approaches <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib26" title="">26</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib25" title="">25</a>]</cite> extend the previous FreeSurfer method by incorporating the FA and principal eigenvector with MPRAGE images. The first approach <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib26" title="">26</a>]</cite> uses Bayesian segmentation but lacks a model for partial volume effects, leading to poor performance
+at resolutions worse than 1mm. The second approach <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib25" title="">25</a>]</cite>, based on a convolutional neural network (CNN), has not been quantitatively compared with ground truth for its segmentation of 23 histological labels. When evaluating its performance on a 10-label grouping, Dice scores were below 0.6, indicating limitations in their segmentation accuracy.</p>
+</div>
+<div class="ltx_para" id="S1.p4">
+<p class="ltx_p" id="S1.p4.1">In this paper, we present a new approach to thalamic nuclei segmentation, named RATNUS. Its innovation lies in the integration of multi-TI images and features derived from diffusion images, providing enhanced contrast for accurate thalamic nuclei segmentation.
+Our contributions are threefold:
+(1) We present a method to correctly synthesize multi-TI images from MPRAGE and FGATIR images.
+(2) We develop a CNN-based network to identify 13 distinct thalamic nuclei, trained using novel manual delineations.
+(3) We establish a protocol for unifying different labeling schemes across methods to facilitate comparison. RATNUS achieves superior performance compared to benchmark methods, demonstrating its outstanding capability in the segmentation of thalamic nuclei.</p>
+</div>
+</section>
+<section class="ltx_section" id="S2">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">2 </span>Methods</h2>
+<section class="ltx_subsection" id="S2.SS1">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">2.1 </span>Data and Manual Labels</h3>
+<div class="ltx_para" id="S2.SS1.p1">
+<p class="ltx_p" id="S2.SS1.p1.1">Our dataset is derived from a study on mild traumatic brain injury (MTBI), which was approved by the University of Maryland’s ethics review board. The datasest contains 24 subjects, including 14 healthy controls and 10 people with MTBI. Each participant underwent MRI, including MPRAGE, FGATIR, and diffusion sequences. The MPRAGE and FGATIR images were acquired using the same sequence protocol: an isotropic resolution of 1 mm, repetition time (TR): 4000 ms, echo time (TE): 3.37 ms, and inversion time (TI): MPRAGE 1400 ms and FGATIR 400 ms.
+Diffusion images were acquired with an isotropic resolution of 2mm, with 136 directions, at b-values of 0, 1000, and 2500, using an anterior-posterior (AP) phase-encoding direction with additional posterior-anterior (PA) b0 images for distortion correction. All data were collected using a 3T Siemens Prisma scanner.</p>
+</div>
+<figure class="ltx_figure" id="S2.F1"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="186" id="S2.F1.g1" src="x1.png" width="830"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 1: </span>(a) Our manual labels of thalamic nuclei are sparse.
+(b) Color-coded labeling scheme for thalamic nuclei according to the Morel atlas.</figcaption>
+</figure>
+<div class="ltx_para" id="S2.SS1.p2">
+<p class="ltx_p" id="S2.SS1.p2.1">Manual thalamic nuclei delineation was guided by the Morel Atlas <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib15" title="">15</a>]</cite>. Referencing both the T<sub class="ltx_sub" id="S2.SS1.p2.1.1"><span class="ltx_text ltx_font_italic" id="S2.SS1.p2.1.1.1">1</span></sub> map and multi-TI images, labels were assigned only to those voxels for which the rater had high confidence of correct label assignment. This led to sparse labels, ensuring high confidence in the labeled voxels but leaving many voxels unlabeled, particularly in boundaries between nuclei, as illustrated in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F1" title="Figure 1 ‣ 2.1 Data and Manual Labels ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">1</span></a>(a). Our study focuses on 13 nuclei (and nuclear groups): Anterior Nucleus (AN), Central Lateral (CL), Center Median (CM), Lateral Dorsal (LD), Lateral Posterior (LP), Mediodorsal (MD), Anterior Pulvinar (PuA), Inferior Pulvinar (PuI), Ventral Anterior (VA), Ventral Lateral Anterior (VLA), Ventral Lateral Posterior (VLP), Ventral Posterior Lateral (VPL), and Ventral Posterior Medial (VPM). The labeling scheme of these thalamic nuclei with color coding is shown in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F1" title="Figure 1 ‣ 2.1 Data and Manual Labels ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">1</span></a>(b).</p>
+</div>
+</section>
+<section class="ltx_subsection" id="S2.SS2">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">2.2 </span>Data Processing Pipeline</h3>
+<div class="ltx_para" id="S2.SS2.p1">
+<p class="ltx_p" id="S2.SS2.p1.1">We developed a pipeline to synthesize multi-TI images. We also generated comprehensive features from the diffusion images. These processed images and features greatly enhance the visibility of details within the thalamus and are concatenated together to form the input to the models.</p>
+</div>
+<section class="ltx_subsubsection" id="S2.SS2.SSS1">
+<h4 class="ltx_title ltx_title_subsubsection">
+<span class="ltx_tag ltx_tag_subsubsection">2.2.1 </span>Structural MRI Processing</h4>
+<div class="ltx_para" id="S2.SS2.SSS1.p1">
+<p class="ltx_p" id="S2.SS2.SSS1.p1.1">Our processing of MPRAGE and FGATIR images begins with a coarse-to-fine registration, using ANTS <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib1" title="">1</a>]</cite> for rigid registration specific to each subject. Initially, MPRAGE images are registered to the MNI space. This is followed by the registration of FGATIR images to their corresponding MPRAGE images, transforming both images to the same atlas space.</p>
+</div>
+<div class="ltx_para" id="S2.SS2.SSS1.p2">
+<p class="ltx_p" id="S2.SS2.SSS1.p2.2">Following registration, the MPRAGE and FGATIR images go through two processing steps: N4 Bias Field Correction <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib27" title="">27</a>]</cite> and White Matter Mean Normalization <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib18" title="">18</a>]</cite>. To accurately derive proton density (PD) and T<sub class="ltx_sub" id="S2.SS2.SSS1.p2.2.1"><span class="ltx_text ltx_font_italic" id="S2.SS2.SSS1.p2.2.1.1">1</span></sub> maps from the MPRAGE and FGATIR images, as described below, it is important to process these images together, as separate adjustments in brightness or contrast will introduce errors in computation of the PD and T<sub class="ltx_sub" id="S2.SS2.SSS1.p2.2.2"><span class="ltx_text ltx_font_italic" id="S2.SS2.SSS1.p2.2.2.1">1</span></sub> maps <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib24" title="">24</a>]</cite>. Consequently, we use a harmonic bias field computed as the geometric mean of the two N4 bias fields, found separately from the MPRAGE and FGATIR images, for uniform intensity normalization. We also create a white matter mask from the MPRAGE image using Fuzzy C-means clustering <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib18" title="">18</a>]</cite> and then adjust the two images with the same scaling factor, determined by the average white matter intensity within the MPRAGE image.</p>
+</div>
+<figure class="ltx_figure" id="S2.F2"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="234" id="S2.F2.g1" src="x2.png" width="830"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 2: </span>Different T1-weighted images. (a) MPRAGE and FGATIR images after registration, N4 bias field correction and white matter mean normalization. (b) PD and T<sub class="ltx_sub" id="S2.F2.4.1"><span class="ltx_text ltx_font_italic" id="S2.F2.4.1.1">1</span></sub> maps derived from MPRAGE and FGATIR images. (c) Example multi-TI images at TIs: 500 ms, 600 ms, 700 ms, and 800 ms. Thalamus regions are highlighted with yellow boxes and delineated with red contours.</figcaption>
+</figure>
+<div class="ltx_para" id="S2.SS2.SSS1.p3">
+<p class="ltx_p" id="S2.SS2.SSS1.p3.11">For a given voxel within a T1-weighted image, the signal intensity can be expressed as</p>
+<table class="ltx_equation ltx_eqn_table" id="S2.E1">
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math alttext="I^{(i)}=\mathrm{PD}^{(i)}[1-2e^{(-\mathrm{TI}/T_{1}^{(i)})}+e^{(-\mathrm{TR}/T%
+_{1}^{(i)})}]," class="ltx_Math" display="block" id="S2.E1.m1.7"><semantics id="S2.E1.m1.7a"><mrow id="S2.E1.m1.7.7.1" xref="S2.E1.m1.7.7.1.1.cmml"><mrow id="S2.E1.m1.7.7.1.1" xref="S2.E1.m1.7.7.1.1.cmml"><msup id="S2.E1.m1.7.7.1.1.3" xref="S2.E1.m1.7.7.1.1.3.cmml"><mi id="S2.E1.m1.7.7.1.1.3.2" xref="S2.E1.m1.7.7.1.1.3.2.cmml">I</mi><mrow id="S2.E1.m1.1.1.1.3" xref="S2.E1.m1.7.7.1.1.3.cmml"><mo id="S2.E1.m1.1.1.1.3.1" stretchy="false" xref="S2.E1.m1.7.7.1.1.3.cmml">(</mo><mi id="S2.E1.m1.1.1.1.1" xref="S2.E1.m1.1.1.1.1.cmml">i</mi><mo id="S2.E1.m1.1.1.1.3.2" stretchy="false" xref="S2.E1.m1.7.7.1.1.3.cmml">)</mo></mrow></msup><mo id="S2.E1.m1.7.7.1.1.2" xref="S2.E1.m1.7.7.1.1.2.cmml">=</mo><mrow id="S2.E1.m1.7.7.1.1.1" xref="S2.E1.m1.7.7.1.1.1.cmml"><msup id="S2.E1.m1.7.7.1.1.1.3" xref="S2.E1.m1.7.7.1.1.1.3.cmml"><mi id="S2.E1.m1.7.7.1.1.1.3.2" xref="S2.E1.m1.7.7.1.1.1.3.2.cmml">PD</mi><mrow id="S2.E1.m1.2.2.1.3" xref="S2.E1.m1.7.7.1.1.1.3.cmml"><mo id="S2.E1.m1.2.2.1.3.1" stretchy="false" xref="S2.E1.m1.7.7.1.1.1.3.cmml">(</mo><mi id="S2.E1.m1.2.2.1.1" xref="S2.E1.m1.2.2.1.1.cmml">i</mi><mo id="S2.E1.m1.2.2.1.3.2" stretchy="false" xref="S2.E1.m1.7.7.1.1.1.3.cmml">)</mo></mrow></msup><mo id="S2.E1.m1.7.7.1.1.1.2" xref="S2.E1.m1.7.7.1.1.1.2.cmml">⁢</mo><mrow id="S2.E1.m1.7.7.1.1.1.1.1" xref="S2.E1.m1.7.7.1.1.1.1.2.cmml"><mo id="S2.E1.m1.7.7.1.1.1.1.1.2" stretchy="false" xref="S2.E1.m1.7.7.1.1.1.1.2.1.cmml">[</mo><mrow id="S2.E1.m1.7.7.1.1.1.1.1.1" xref="S2.E1.m1.7.7.1.1.1.1.1.1.cmml"><mrow id="S2.E1.m1.7.7.1.1.1.1.1.1.2" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.cmml"><mn id="S2.E1.m1.7.7.1.1.1.1.1.1.2.2" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.2.cmml">1</mn><mo id="S2.E1.m1.7.7.1.1.1.1.1.1.2.1" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.1.cmml">−</mo><mrow id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.cmml"><mn id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.2" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.2.cmml">2</mn><mo id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.1" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.1.cmml">⁢</mo><msup id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.cmml"><mi id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.2" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.2.cmml">e</mi><mrow id="S2.E1.m1.4.4.2.2" xref="S2.E1.m1.4.4.2.2.1.cmml"><mo id="S2.E1.m1.4.4.2.2.2" stretchy="false" xref="S2.E1.m1.4.4.2.2.1.cmml">(</mo><mrow id="S2.E1.m1.4.4.2.2.1" xref="S2.E1.m1.4.4.2.2.1.cmml"><mo id="S2.E1.m1.4.4.2.2.1a" xref="S2.E1.m1.4.4.2.2.1.cmml">−</mo><mrow id="S2.E1.m1.4.4.2.2.1.2" xref="S2.E1.m1.4.4.2.2.1.2.cmml"><mi id="S2.E1.m1.4.4.2.2.1.2.2" xref="S2.E1.m1.4.4.2.2.1.2.2.cmml">TI</mi><mo id="S2.E1.m1.4.4.2.2.1.2.1" xref="S2.E1.m1.4.4.2.2.1.2.1.cmml">/</mo><msubsup id="S2.E1.m1.4.4.2.2.1.2.3" xref="S2.E1.m1.4.4.2.2.1.2.3.cmml"><mi id="S2.E1.m1.4.4.2.2.1.2.3.2.2" xref="S2.E1.m1.4.4.2.2.1.2.3.2.2.cmml">T</mi><mn id="S2.E1.m1.4.4.2.2.1.2.3.2.3" xref="S2.E1.m1.4.4.2.2.1.2.3.2.3.cmml">1</mn><mrow id="S2.E1.m1.3.3.1.1.1.3" xref="S2.E1.m1.4.4.2.2.1.2.3.cmml"><mo id="S2.E1.m1.3.3.1.1.1.3.1" stretchy="false" xref="S2.E1.m1.4.4.2.2.1.2.3.cmml">(</mo><mi id="S2.E1.m1.3.3.1.1.1.1" xref="S2.E1.m1.3.3.1.1.1.1.cmml">i</mi><mo id="S2.E1.m1.3.3.1.1.1.3.2" stretchy="false" xref="S2.E1.m1.4.4.2.2.1.2.3.cmml">)</mo></mrow></msubsup></mrow></mrow><mo id="S2.E1.m1.4.4.2.2.3" stretchy="false" xref="S2.E1.m1.4.4.2.2.1.cmml">)</mo></mrow></msup></mrow></mrow><mo id="S2.E1.m1.7.7.1.1.1.1.1.1.1" xref="S2.E1.m1.7.7.1.1.1.1.1.1.1.cmml">+</mo><msup id="S2.E1.m1.7.7.1.1.1.1.1.1.3" xref="S2.E1.m1.7.7.1.1.1.1.1.1.3.cmml"><mi id="S2.E1.m1.7.7.1.1.1.1.1.1.3.2" xref="S2.E1.m1.7.7.1.1.1.1.1.1.3.2.cmml">e</mi><mrow id="S2.E1.m1.6.6.2.2" xref="S2.E1.m1.6.6.2.2.1.cmml"><mo id="S2.E1.m1.6.6.2.2.2" stretchy="false" xref="S2.E1.m1.6.6.2.2.1.cmml">(</mo><mrow id="S2.E1.m1.6.6.2.2.1" xref="S2.E1.m1.6.6.2.2.1.cmml"><mo id="S2.E1.m1.6.6.2.2.1a" xref="S2.E1.m1.6.6.2.2.1.cmml">−</mo><mrow id="S2.E1.m1.6.6.2.2.1.2" xref="S2.E1.m1.6.6.2.2.1.2.cmml"><mi id="S2.E1.m1.6.6.2.2.1.2.2" xref="S2.E1.m1.6.6.2.2.1.2.2.cmml">TR</mi><mo id="S2.E1.m1.6.6.2.2.1.2.1" xref="S2.E1.m1.6.6.2.2.1.2.1.cmml">/</mo><msubsup id="S2.E1.m1.6.6.2.2.1.2.3" xref="S2.E1.m1.6.6.2.2.1.2.3.cmml"><mi id="S2.E1.m1.6.6.2.2.1.2.3.2.2" xref="S2.E1.m1.6.6.2.2.1.2.3.2.2.cmml">T</mi><mn id="S2.E1.m1.6.6.2.2.1.2.3.2.3" xref="S2.E1.m1.6.6.2.2.1.2.3.2.3.cmml">1</mn><mrow id="S2.E1.m1.5.5.1.1.1.3" xref="S2.E1.m1.6.6.2.2.1.2.3.cmml"><mo id="S2.E1.m1.5.5.1.1.1.3.1" stretchy="false" xref="S2.E1.m1.6.6.2.2.1.2.3.cmml">(</mo><mi id="S2.E1.m1.5.5.1.1.1.1" xref="S2.E1.m1.5.5.1.1.1.1.cmml">i</mi><mo id="S2.E1.m1.5.5.1.1.1.3.2" stretchy="false" xref="S2.E1.m1.6.6.2.2.1.2.3.cmml">)</mo></mrow></msubsup></mrow></mrow><mo id="S2.E1.m1.6.6.2.2.3" stretchy="false" xref="S2.E1.m1.6.6.2.2.1.cmml">)</mo></mrow></msup></mrow><mo id="S2.E1.m1.7.7.1.1.1.1.1.3" stretchy="false" xref="S2.E1.m1.7.7.1.1.1.1.2.1.cmml">]</mo></mrow></mrow></mrow><mo id="S2.E1.m1.7.7.1.2" xref="S2.E1.m1.7.7.1.1.cmml">,</mo></mrow><annotation-xml encoding="MathML-Content" id="S2.E1.m1.7b"><apply id="S2.E1.m1.7.7.1.1.cmml" xref="S2.E1.m1.7.7.1"><eq id="S2.E1.m1.7.7.1.1.2.cmml" xref="S2.E1.m1.7.7.1.1.2"></eq><apply id="S2.E1.m1.7.7.1.1.3.cmml" xref="S2.E1.m1.7.7.1.1.3"><csymbol cd="ambiguous" id="S2.E1.m1.7.7.1.1.3.1.cmml" xref="S2.E1.m1.7.7.1.1.3">superscript</csymbol><ci id="S2.E1.m1.7.7.1.1.3.2.cmml" xref="S2.E1.m1.7.7.1.1.3.2">𝐼</ci><ci id="S2.E1.m1.1.1.1.1.cmml" xref="S2.E1.m1.1.1.1.1">𝑖</ci></apply><apply id="S2.E1.m1.7.7.1.1.1.cmml" xref="S2.E1.m1.7.7.1.1.1"><times id="S2.E1.m1.7.7.1.1.1.2.cmml" xref="S2.E1.m1.7.7.1.1.1.2"></times><apply id="S2.E1.m1.7.7.1.1.1.3.cmml" xref="S2.E1.m1.7.7.1.1.1.3"><csymbol cd="ambiguous" id="S2.E1.m1.7.7.1.1.1.3.1.cmml" xref="S2.E1.m1.7.7.1.1.1.3">superscript</csymbol><ci id="S2.E1.m1.7.7.1.1.1.3.2.cmml" xref="S2.E1.m1.7.7.1.1.1.3.2">PD</ci><ci id="S2.E1.m1.2.2.1.1.cmml" xref="S2.E1.m1.2.2.1.1">𝑖</ci></apply><apply id="S2.E1.m1.7.7.1.1.1.1.2.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1"><csymbol cd="latexml" id="S2.E1.m1.7.7.1.1.1.1.2.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.2">delimited-[]</csymbol><apply id="S2.E1.m1.7.7.1.1.1.1.1.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1"><plus id="S2.E1.m1.7.7.1.1.1.1.1.1.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.1"></plus><apply id="S2.E1.m1.7.7.1.1.1.1.1.1.2.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2"><minus id="S2.E1.m1.7.7.1.1.1.1.1.1.2.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.1"></minus><cn id="S2.E1.m1.7.7.1.1.1.1.1.1.2.2.cmml" type="integer" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.2">1</cn><apply id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3"><times id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.1"></times><cn id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.2.cmml" type="integer" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.2">2</cn><apply id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3"><csymbol cd="ambiguous" id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3">superscript</csymbol><ci id="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.2.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.2.3.3.2">𝑒</ci><apply id="S2.E1.m1.4.4.2.2.1.cmml" xref="S2.E1.m1.4.4.2.2"><minus id="S2.E1.m1.4.4.2.2.1.1.cmml" xref="S2.E1.m1.4.4.2.2"></minus><apply id="S2.E1.m1.4.4.2.2.1.2.cmml" xref="S2.E1.m1.4.4.2.2.1.2"><divide id="S2.E1.m1.4.4.2.2.1.2.1.cmml" xref="S2.E1.m1.4.4.2.2.1.2.1"></divide><ci id="S2.E1.m1.4.4.2.2.1.2.2.cmml" xref="S2.E1.m1.4.4.2.2.1.2.2">TI</ci><apply id="S2.E1.m1.4.4.2.2.1.2.3.cmml" xref="S2.E1.m1.4.4.2.2.1.2.3"><csymbol cd="ambiguous" id="S2.E1.m1.4.4.2.2.1.2.3.1.cmml" xref="S2.E1.m1.4.4.2.2.1.2.3">superscript</csymbol><apply id="S2.E1.m1.4.4.2.2.1.2.3.2.cmml" xref="S2.E1.m1.4.4.2.2.1.2.3"><csymbol cd="ambiguous" id="S2.E1.m1.4.4.2.2.1.2.3.2.1.cmml" xref="S2.E1.m1.4.4.2.2.1.2.3">subscript</csymbol><ci id="S2.E1.m1.4.4.2.2.1.2.3.2.2.cmml" xref="S2.E1.m1.4.4.2.2.1.2.3.2.2">𝑇</ci><cn id="S2.E1.m1.4.4.2.2.1.2.3.2.3.cmml" type="integer" xref="S2.E1.m1.4.4.2.2.1.2.3.2.3">1</cn></apply><ci id="S2.E1.m1.3.3.1.1.1.1.cmml" xref="S2.E1.m1.3.3.1.1.1.1">𝑖</ci></apply></apply></apply></apply></apply></apply><apply id="S2.E1.m1.7.7.1.1.1.1.1.1.3.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.3"><csymbol cd="ambiguous" id="S2.E1.m1.7.7.1.1.1.1.1.1.3.1.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.3">superscript</csymbol><ci id="S2.E1.m1.7.7.1.1.1.1.1.1.3.2.cmml" xref="S2.E1.m1.7.7.1.1.1.1.1.1.3.2">𝑒</ci><apply id="S2.E1.m1.6.6.2.2.1.cmml" xref="S2.E1.m1.6.6.2.2"><minus id="S2.E1.m1.6.6.2.2.1.1.cmml" xref="S2.E1.m1.6.6.2.2"></minus><apply id="S2.E1.m1.6.6.2.2.1.2.cmml" xref="S2.E1.m1.6.6.2.2.1.2"><divide id="S2.E1.m1.6.6.2.2.1.2.1.cmml" xref="S2.E1.m1.6.6.2.2.1.2.1"></divide><ci id="S2.E1.m1.6.6.2.2.1.2.2.cmml" xref="S2.E1.m1.6.6.2.2.1.2.2">TR</ci><apply id="S2.E1.m1.6.6.2.2.1.2.3.cmml" xref="S2.E1.m1.6.6.2.2.1.2.3"><csymbol cd="ambiguous" id="S2.E1.m1.6.6.2.2.1.2.3.1.cmml" xref="S2.E1.m1.6.6.2.2.1.2.3">superscript</csymbol><apply id="S2.E1.m1.6.6.2.2.1.2.3.2.cmml" xref="S2.E1.m1.6.6.2.2.1.2.3"><csymbol cd="ambiguous" id="S2.E1.m1.6.6.2.2.1.2.3.2.1.cmml" xref="S2.E1.m1.6.6.2.2.1.2.3">subscript</csymbol><ci id="S2.E1.m1.6.6.2.2.1.2.3.2.2.cmml" xref="S2.E1.m1.6.6.2.2.1.2.3.2.2">𝑇</ci><cn id="S2.E1.m1.6.6.2.2.1.2.3.2.3.cmml" type="integer" xref="S2.E1.m1.6.6.2.2.1.2.3.2.3">1</cn></apply><ci id="S2.E1.m1.5.5.1.1.1.1.cmml" xref="S2.E1.m1.5.5.1.1.1.1">𝑖</ci></apply></apply></apply></apply></apply></apply></apply></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.E1.m1.7c">I^{(i)}=\mathrm{PD}^{(i)}[1-2e^{(-\mathrm{TI}/T_{1}^{(i)})}+e^{(-\mathrm{TR}/T%
+_{1}^{(i)})}],</annotation><annotation encoding="application/x-llamapun" id="S2.E1.m1.7d">italic_I start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT = roman_PD start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT [ 1 - 2 italic_e start_POSTSUPERSCRIPT ( - roman_TI / italic_T start_POSTSUBSCRIPT 1 end_POSTSUBSCRIPT start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT ) end_POSTSUPERSCRIPT + italic_e start_POSTSUPERSCRIPT ( - roman_TR / italic_T start_POSTSUBSCRIPT 1 end_POSTSUBSCRIPT start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT ) end_POSTSUPERSCRIPT ] ,</annotation></semantics></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+<td class="ltx_eqn_cell ltx_eqn_eqno ltx_align_middle ltx_align_right" rowspan="1"><span class="ltx_tag ltx_tag_equation ltx_align_right">(1)</span></td>
+</tr></tbody>
+</table>
+<p class="ltx_p" id="S2.SS2.SSS1.p3.10">where <math alttext="I^{(i)}" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.1.m1.1"><semantics id="S2.SS2.SSS1.p3.1.m1.1a"><msup id="S2.SS2.SSS1.p3.1.m1.1.2" xref="S2.SS2.SSS1.p3.1.m1.1.2.cmml"><mi id="S2.SS2.SSS1.p3.1.m1.1.2.2" xref="S2.SS2.SSS1.p3.1.m1.1.2.2.cmml">I</mi><mrow id="S2.SS2.SSS1.p3.1.m1.1.1.1.3" xref="S2.SS2.SSS1.p3.1.m1.1.2.cmml"><mo id="S2.SS2.SSS1.p3.1.m1.1.1.1.3.1" stretchy="false" xref="S2.SS2.SSS1.p3.1.m1.1.2.cmml">(</mo><mi id="S2.SS2.SSS1.p3.1.m1.1.1.1.1" xref="S2.SS2.SSS1.p3.1.m1.1.1.1.1.cmml">i</mi><mo id="S2.SS2.SSS1.p3.1.m1.1.1.1.3.2" stretchy="false" xref="S2.SS2.SSS1.p3.1.m1.1.2.cmml">)</mo></mrow></msup><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.1.m1.1b"><apply id="S2.SS2.SSS1.p3.1.m1.1.2.cmml" xref="S2.SS2.SSS1.p3.1.m1.1.2"><csymbol cd="ambiguous" id="S2.SS2.SSS1.p3.1.m1.1.2.1.cmml" xref="S2.SS2.SSS1.p3.1.m1.1.2">superscript</csymbol><ci id="S2.SS2.SSS1.p3.1.m1.1.2.2.cmml" xref="S2.SS2.SSS1.p3.1.m1.1.2.2">𝐼</ci><ci id="S2.SS2.SSS1.p3.1.m1.1.1.1.1.cmml" xref="S2.SS2.SSS1.p3.1.m1.1.1.1.1">𝑖</ci></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.1.m1.1c">I^{(i)}</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.1.m1.1d">italic_I start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT</annotation></semantics></math> denotes the image intensity for the <math alttext="i" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.2.m2.1"><semantics id="S2.SS2.SSS1.p3.2.m2.1a"><mi id="S2.SS2.SSS1.p3.2.m2.1.1" xref="S2.SS2.SSS1.p3.2.m2.1.1.cmml">i</mi><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.2.m2.1b"><ci id="S2.SS2.SSS1.p3.2.m2.1.1.cmml" xref="S2.SS2.SSS1.p3.2.m2.1.1">𝑖</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.2.m2.1c">i</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.2.m2.1d">italic_i</annotation></semantics></math>-th voxel, <math alttext="\mathrm{PD}^{(i)}" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.3.m3.1"><semantics id="S2.SS2.SSS1.p3.3.m3.1a"><msup id="S2.SS2.SSS1.p3.3.m3.1.2" xref="S2.SS2.SSS1.p3.3.m3.1.2.cmml"><mi id="S2.SS2.SSS1.p3.3.m3.1.2.2" xref="S2.SS2.SSS1.p3.3.m3.1.2.2.cmml">PD</mi><mrow id="S2.SS2.SSS1.p3.3.m3.1.1.1.3" xref="S2.SS2.SSS1.p3.3.m3.1.2.cmml"><mo id="S2.SS2.SSS1.p3.3.m3.1.1.1.3.1" stretchy="false" xref="S2.SS2.SSS1.p3.3.m3.1.2.cmml">(</mo><mi id="S2.SS2.SSS1.p3.3.m3.1.1.1.1" xref="S2.SS2.SSS1.p3.3.m3.1.1.1.1.cmml">i</mi><mo id="S2.SS2.SSS1.p3.3.m3.1.1.1.3.2" stretchy="false" xref="S2.SS2.SSS1.p3.3.m3.1.2.cmml">)</mo></mrow></msup><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.3.m3.1b"><apply id="S2.SS2.SSS1.p3.3.m3.1.2.cmml" xref="S2.SS2.SSS1.p3.3.m3.1.2"><csymbol cd="ambiguous" id="S2.SS2.SSS1.p3.3.m3.1.2.1.cmml" xref="S2.SS2.SSS1.p3.3.m3.1.2">superscript</csymbol><ci id="S2.SS2.SSS1.p3.3.m3.1.2.2.cmml" xref="S2.SS2.SSS1.p3.3.m3.1.2.2">PD</ci><ci id="S2.SS2.SSS1.p3.3.m3.1.1.1.1.cmml" xref="S2.SS2.SSS1.p3.3.m3.1.1.1.1">𝑖</ci></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.3.m3.1c">\mathrm{PD}^{(i)}</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.3.m3.1d">roman_PD start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT</annotation></semantics></math> the proton density map value for the <math alttext="i" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.4.m4.1"><semantics id="S2.SS2.SSS1.p3.4.m4.1a"><mi id="S2.SS2.SSS1.p3.4.m4.1.1" xref="S2.SS2.SSS1.p3.4.m4.1.1.cmml">i</mi><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.4.m4.1b"><ci id="S2.SS2.SSS1.p3.4.m4.1.1.cmml" xref="S2.SS2.SSS1.p3.4.m4.1.1">𝑖</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.4.m4.1c">i</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.4.m4.1d">italic_i</annotation></semantics></math>-th voxel, <math alttext="T_{1}^{(i)}" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.5.m5.1"><semantics id="S2.SS2.SSS1.p3.5.m5.1a"><msubsup id="S2.SS2.SSS1.p3.5.m5.1.2" xref="S2.SS2.SSS1.p3.5.m5.1.2.cmml"><mi id="S2.SS2.SSS1.p3.5.m5.1.2.2.2" xref="S2.SS2.SSS1.p3.5.m5.1.2.2.2.cmml">T</mi><mn id="S2.SS2.SSS1.p3.5.m5.1.2.2.3" xref="S2.SS2.SSS1.p3.5.m5.1.2.2.3.cmml">1</mn><mrow id="S2.SS2.SSS1.p3.5.m5.1.1.1.3" xref="S2.SS2.SSS1.p3.5.m5.1.2.cmml"><mo id="S2.SS2.SSS1.p3.5.m5.1.1.1.3.1" stretchy="false" xref="S2.SS2.SSS1.p3.5.m5.1.2.cmml">(</mo><mi id="S2.SS2.SSS1.p3.5.m5.1.1.1.1" xref="S2.SS2.SSS1.p3.5.m5.1.1.1.1.cmml">i</mi><mo id="S2.SS2.SSS1.p3.5.m5.1.1.1.3.2" stretchy="false" xref="S2.SS2.SSS1.p3.5.m5.1.2.cmml">)</mo></mrow></msubsup><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.5.m5.1b"><apply id="S2.SS2.SSS1.p3.5.m5.1.2.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.2"><csymbol cd="ambiguous" id="S2.SS2.SSS1.p3.5.m5.1.2.1.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.2">superscript</csymbol><apply id="S2.SS2.SSS1.p3.5.m5.1.2.2.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.2"><csymbol cd="ambiguous" id="S2.SS2.SSS1.p3.5.m5.1.2.2.1.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.2">subscript</csymbol><ci id="S2.SS2.SSS1.p3.5.m5.1.2.2.2.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.2.2.2">𝑇</ci><cn id="S2.SS2.SSS1.p3.5.m5.1.2.2.3.cmml" type="integer" xref="S2.SS2.SSS1.p3.5.m5.1.2.2.3">1</cn></apply><ci id="S2.SS2.SSS1.p3.5.m5.1.1.1.1.cmml" xref="S2.SS2.SSS1.p3.5.m5.1.1.1.1">𝑖</ci></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.5.m5.1c">T_{1}^{(i)}</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.5.m5.1d">italic_T start_POSTSUBSCRIPT 1 end_POSTSUBSCRIPT start_POSTSUPERSCRIPT ( italic_i ) end_POSTSUPERSCRIPT</annotation></semantics></math> the <math alttext="T_{1}" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.6.m6.1"><semantics id="S2.SS2.SSS1.p3.6.m6.1a"><msub id="S2.SS2.SSS1.p3.6.m6.1.1" xref="S2.SS2.SSS1.p3.6.m6.1.1.cmml"><mi id="S2.SS2.SSS1.p3.6.m6.1.1.2" xref="S2.SS2.SSS1.p3.6.m6.1.1.2.cmml">T</mi><mn id="S2.SS2.SSS1.p3.6.m6.1.1.3" xref="S2.SS2.SSS1.p3.6.m6.1.1.3.cmml">1</mn></msub><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.6.m6.1b"><apply id="S2.SS2.SSS1.p3.6.m6.1.1.cmml" xref="S2.SS2.SSS1.p3.6.m6.1.1"><csymbol cd="ambiguous" id="S2.SS2.SSS1.p3.6.m6.1.1.1.cmml" xref="S2.SS2.SSS1.p3.6.m6.1.1">subscript</csymbol><ci id="S2.SS2.SSS1.p3.6.m6.1.1.2.cmml" xref="S2.SS2.SSS1.p3.6.m6.1.1.2">𝑇</ci><cn id="S2.SS2.SSS1.p3.6.m6.1.1.3.cmml" type="integer" xref="S2.SS2.SSS1.p3.6.m6.1.1.3">1</cn></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.6.m6.1c">T_{1}</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.6.m6.1d">italic_T start_POSTSUBSCRIPT 1 end_POSTSUBSCRIPT</annotation></semantics></math> map value for the <math alttext="i" class="ltx_Math" display="inline" id="S2.SS2.SSS1.p3.7.m7.1"><semantics id="S2.SS2.SSS1.p3.7.m7.1a"><mi id="S2.SS2.SSS1.p3.7.m7.1.1" xref="S2.SS2.SSS1.p3.7.m7.1.1.cmml">i</mi><annotation-xml encoding="MathML-Content" id="S2.SS2.SSS1.p3.7.m7.1b"><ci id="S2.SS2.SSS1.p3.7.m7.1.1.cmml" xref="S2.SS2.SSS1.p3.7.m7.1.1">𝑖</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS2.SSS1.p3.7.m7.1c">i</annotation><annotation encoding="application/x-llamapun" id="S2.SS2.SSS1.p3.7.m7.1d">italic_i</annotation></semantics></math>-th voxel, TI the inversion time, and TR the repetition time.
+As the MPRAGE and FGATIR images were acquired in identical fashion except for their different TIs, we are able to write two distinct equations based on Equation <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.E1" title="In 2.2.1 Structural MRI Processing ‣ 2.2 Data Processing Pipeline ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">1</span></a> for each image and then solve for the PD and T<sub class="ltx_sub" id="S2.SS2.SSS1.p3.10.1">1</sub> maps using nonlinear least squares.
+We then proceed to synthesize a series of multi-TI images by keeping PD and T<sub class="ltx_sub" id="S2.SS2.SSS1.p3.10.2">1</sub> values constant and systematically varying the TI value.
+Specifically, we varied TI from 400 to 1400 ms in increments of 20 ms, resulting in a set of 51 images, revealing contrast between different nuclei in different images.
+Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F2" title="Figure 2 ‣ 2.2.1 Structural MRI Processing ‣ 2.2 Data Processing Pipeline ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">2</span></a> shows examples of MPRAGE and FGATIR images after processing, corresponding PD and T<sub class="ltx_sub" id="S2.SS2.SSS1.p3.10.3"><span class="ltx_text ltx_font_italic" id="S2.SS2.SSS1.p3.10.3.1">1</span></sub> maps, and some computed multi-TI images.</p>
+</div>
+</section>
+<section class="ltx_subsubsection" id="S2.SS2.SSS2">
+<h4 class="ltx_title ltx_title_subsubsection">
+<span class="ltx_tag ltx_tag_subsubsection">2.2.2 </span>Diffusion MRI Processing</h4>
+<div class="ltx_para" id="S2.SS2.SSS2.p1">
+<p class="ltx_p" id="S2.SS2.SSS2.p1.1">We processed our diffusion MRI data using the Tortoise software <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib17" title="">17</a>]</cite>, starting with the DIFFPREP module for denoising, motion, and distortion corrections, followed by DR-BUDDI module for EPI distortion correction leveraging opposite phase encoding directions. These two steps also registered the diffusion data to their corresponding T2-weighted images in MNI space. We then used the DIFFCALC module to perform tensor fitting and calculate key metrics, including axial diffusivity (AD), fractional anisotropy (FA), radial diffusivity (RD), Trace, Eigenvalues, and Eigenvectors, along with the three Westin measures (WS, WP, WL).
+Following this, we applied the Knutsson mapping to convert the principal eigenvector into a 5-dimensional (5D) vector <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib12" title="">12</a>, <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib21" title="">21</a>]</cite>.
+Moreover, we generated an edge map based on these orientations, serving as a visual representation of the changes in direction of the principal eigenvectors. Using the Knutsson 5D vector and the Knutsson edge map helps to better define the boundaries and reveal more subtle details within the thalamus, surpassing the conventional eigenvector depictions.</p>
+</div>
+</section>
+</section>
+<section class="ltx_subsection" id="S2.SS3">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">2.3 </span>Thalamic Nuclei Segmentation</h3>
+<div class="ltx_para" id="S2.SS3.p1">
+<p class="ltx_p" id="S2.SS3.p1.1">Our work focuses on segmenting 13 distinct nuclei (and nuclear groups) within the thalamus. We implemented a two-step approach, with two networks each built upon a 5-level 3D U-Net <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib6" title="">6</a>]</cite>.
+The first network identifies the region of interest (ROI) and the second delineates the ROI into 13 nuclei classes, as illustrated in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F3" title="Figure 3 ‣ 2.3.1 Loss ‣ 2.3 Thalamic Nuclei Segmentation ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">3</span></a>.
+For both models, the input consists of a 68-channel image per subject, derived from the processing pipeline described in Section 2.2, as shown in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F3" title="Figure 3 ‣ 2.3.1 Loss ‣ 2.3 Thalamic Nuclei Segmentation ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">3</span></a>(a).
+Volumes are center-cropped to <math alttext="96\times 96\times 96" class="ltx_Math" display="inline" id="S2.SS3.p1.1.m1.1"><semantics id="S2.SS3.p1.1.m1.1a"><mrow id="S2.SS3.p1.1.m1.1.1" xref="S2.SS3.p1.1.m1.1.1.cmml"><mn id="S2.SS3.p1.1.m1.1.1.2" xref="S2.SS3.p1.1.m1.1.1.2.cmml">96</mn><mo id="S2.SS3.p1.1.m1.1.1.1" lspace="0.222em" rspace="0.222em" xref="S2.SS3.p1.1.m1.1.1.1.cmml">×</mo><mn id="S2.SS3.p1.1.m1.1.1.3" xref="S2.SS3.p1.1.m1.1.1.3.cmml">96</mn><mo id="S2.SS3.p1.1.m1.1.1.1a" lspace="0.222em" rspace="0.222em" xref="S2.SS3.p1.1.m1.1.1.1.cmml">×</mo><mn id="S2.SS3.p1.1.m1.1.1.4" xref="S2.SS3.p1.1.m1.1.1.4.cmml">96</mn></mrow><annotation-xml encoding="MathML-Content" id="S2.SS3.p1.1.m1.1b"><apply id="S2.SS3.p1.1.m1.1.1.cmml" xref="S2.SS3.p1.1.m1.1.1"><times id="S2.SS3.p1.1.m1.1.1.1.cmml" xref="S2.SS3.p1.1.m1.1.1.1"></times><cn id="S2.SS3.p1.1.m1.1.1.2.cmml" type="integer" xref="S2.SS3.p1.1.m1.1.1.2">96</cn><cn id="S2.SS3.p1.1.m1.1.1.3.cmml" type="integer" xref="S2.SS3.p1.1.m1.1.1.3">96</cn><cn id="S2.SS3.p1.1.m1.1.1.4.cmml" type="integer" xref="S2.SS3.p1.1.m1.1.1.4">96</cn></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.p1.1.m1.1c">96\times 96\times 96</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.p1.1.m1.1d">96 × 96 × 96</annotation></semantics></math> voxels (specified in MNI coordinates), which always includes the entire thalamus.</p>
+</div>
+<div class="ltx_para" id="S2.SS3.p2">
+<p class="ltx_p" id="S2.SS3.p2.1">The first model, the ROI model, generates foreground masks that identify the areas of interest for the thalamic nuclei we aim to segment.
+Before training, we convert the nuclei labels into a binary format to create a binary ground truth.
+Given our sparse manual labels, we used the paint tool in the 3D Slicer Segmentation Editor to fill the holes within the binary ground truth without altering its overall external shape, as depicted in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F3" title="Figure 3 ‣ 2.3.1 Loss ‣ 2.3 Thalamic Nuclei Segmentation ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">3</span></a>(b).
+The second model, the Nuclei model, segments the entire data into 13 classes, with each voxel being classified into one of the thalamic nuclei.
+The last step is to multiply the foreground mask from the ROI model with the nuclei mask from the Nuclei model to generate the 13 thalamic nuclei predictions.</p>
+</div>
+<section class="ltx_subsubsection" id="S2.SS3.SSS1">
+<h4 class="ltx_title ltx_title_subsubsection">
+<span class="ltx_tag ltx_tag_subsubsection">2.3.1 </span>Loss</h4>
+<div class="ltx_para" id="S2.SS3.SSS1.p1">
+<p class="ltx_p" id="S2.SS3.SSS1.p1.1">We trained the ROI model using Dice Loss <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib13" title="">13</a>]</cite>. When training the Nuclei model, we aim to minimize the Dice Loss for the 13 nuclei classes.
+However, given the sparse ground truth, where the rater only labeled voxels with high confidence, leaving many voxels in the thalamus unlabeled, we applied a masking technique during the Dice Loss calculation. Specifically, we multiplied both the numerator and denominator of the Dice Loss by a ground truth mask (where labeled voxels are 1 and unlabeled voxels are 0) to ensure that only labeled voxels contributed to the loss calculation, thereby excluding the influence of unlabeled voxels. This naturally leads to the maximization of the true positive rate. The loss function for the Nuclei model is then formed as:</p>
+</div>
+<div class="ltx_para" id="S2.SS3.SSS1.p2">
+<table class="ltx_equation ltx_eqn_table" id="S2.E2">
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math alttext="\mathcal{L}_{\mathrm{Nuclei}}=1-\frac{1}{13}\sum_{c=1}^{13}\frac{\sum_{i}T_{c,%
+i}P_{c,i}+\varepsilon}{\sum_{i}T_{c,i}+\varepsilon}," class="ltx_Math" display="block" id="S2.E2.m1.7"><semantics id="S2.E2.m1.7a"><mrow id="S2.E2.m1.7.7.1" xref="S2.E2.m1.7.7.1.1.cmml"><mrow id="S2.E2.m1.7.7.1.1" xref="S2.E2.m1.7.7.1.1.cmml"><msub id="S2.E2.m1.7.7.1.1.2" xref="S2.E2.m1.7.7.1.1.2.cmml"><mi class="ltx_font_mathcaligraphic" id="S2.E2.m1.7.7.1.1.2.2" xref="S2.E2.m1.7.7.1.1.2.2.cmml">ℒ</mi><mi id="S2.E2.m1.7.7.1.1.2.3" xref="S2.E2.m1.7.7.1.1.2.3.cmml">Nuclei</mi></msub><mo id="S2.E2.m1.7.7.1.1.1" xref="S2.E2.m1.7.7.1.1.1.cmml">=</mo><mrow id="S2.E2.m1.7.7.1.1.3" xref="S2.E2.m1.7.7.1.1.3.cmml"><mn id="S2.E2.m1.7.7.1.1.3.2" xref="S2.E2.m1.7.7.1.1.3.2.cmml">1</mn><mo id="S2.E2.m1.7.7.1.1.3.1" xref="S2.E2.m1.7.7.1.1.3.1.cmml">−</mo><mrow id="S2.E2.m1.7.7.1.1.3.3" xref="S2.E2.m1.7.7.1.1.3.3.cmml"><mfrac id="S2.E2.m1.7.7.1.1.3.3.2" xref="S2.E2.m1.7.7.1.1.3.3.2.cmml"><mn id="S2.E2.m1.7.7.1.1.3.3.2.2" xref="S2.E2.m1.7.7.1.1.3.3.2.2.cmml">1</mn><mn id="S2.E2.m1.7.7.1.1.3.3.2.3" xref="S2.E2.m1.7.7.1.1.3.3.2.3.cmml">13</mn></mfrac><mo id="S2.E2.m1.7.7.1.1.3.3.1" xref="S2.E2.m1.7.7.1.1.3.3.1.cmml">⁢</mo><mrow id="S2.E2.m1.7.7.1.1.3.3.3" xref="S2.E2.m1.7.7.1.1.3.3.3.cmml"><munderover id="S2.E2.m1.7.7.1.1.3.3.3.1" xref="S2.E2.m1.7.7.1.1.3.3.3.1.cmml"><mo id="S2.E2.m1.7.7.1.1.3.3.3.1.2.2" movablelimits="false" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.2.cmml">∑</mo><mrow id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.cmml"><mi id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.2" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.2.cmml">c</mi><mo id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.1" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.1.cmml">=</mo><mn id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.3" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.3.cmml">1</mn></mrow><mn id="S2.E2.m1.7.7.1.1.3.3.3.1.3" xref="S2.E2.m1.7.7.1.1.3.3.3.1.3.cmml">13</mn></munderover><mfrac id="S2.E2.m1.6.6" xref="S2.E2.m1.6.6.cmml"><mrow id="S2.E2.m1.4.4.4" xref="S2.E2.m1.4.4.4.cmml"><mrow id="S2.E2.m1.4.4.4.6" xref="S2.E2.m1.4.4.4.6.cmml"><msub id="S2.E2.m1.4.4.4.6.1" xref="S2.E2.m1.4.4.4.6.1.cmml"><mo id="S2.E2.m1.4.4.4.6.1.2" xref="S2.E2.m1.4.4.4.6.1.2.cmml">∑</mo><mi id="S2.E2.m1.4.4.4.6.1.3" xref="S2.E2.m1.4.4.4.6.1.3.cmml">i</mi></msub><mrow id="S2.E2.m1.4.4.4.6.2" xref="S2.E2.m1.4.4.4.6.2.cmml"><msub id="S2.E2.m1.4.4.4.6.2.2" xref="S2.E2.m1.4.4.4.6.2.2.cmml"><mi id="S2.E2.m1.4.4.4.6.2.2.2" xref="S2.E2.m1.4.4.4.6.2.2.2.cmml">T</mi><mrow id="S2.E2.m1.2.2.2.2.2.4" xref="S2.E2.m1.2.2.2.2.2.3.cmml"><mi id="S2.E2.m1.1.1.1.1.1.1" xref="S2.E2.m1.1.1.1.1.1.1.cmml">c</mi><mo id="S2.E2.m1.2.2.2.2.2.4.1" xref="S2.E2.m1.2.2.2.2.2.3.cmml">,</mo><mi id="S2.E2.m1.2.2.2.2.2.2" xref="S2.E2.m1.2.2.2.2.2.2.cmml">i</mi></mrow></msub><mo id="S2.E2.m1.4.4.4.6.2.1" xref="S2.E2.m1.4.4.4.6.2.1.cmml">⁢</mo><msub id="S2.E2.m1.4.4.4.6.2.3" xref="S2.E2.m1.4.4.4.6.2.3.cmml"><mi id="S2.E2.m1.4.4.4.6.2.3.2" xref="S2.E2.m1.4.4.4.6.2.3.2.cmml">P</mi><mrow id="S2.E2.m1.4.4.4.4.2.4" xref="S2.E2.m1.4.4.4.4.2.3.cmml"><mi id="S2.E2.m1.3.3.3.3.1.1" xref="S2.E2.m1.3.3.3.3.1.1.cmml">c</mi><mo id="S2.E2.m1.4.4.4.4.2.4.1" xref="S2.E2.m1.4.4.4.4.2.3.cmml">,</mo><mi id="S2.E2.m1.4.4.4.4.2.2" xref="S2.E2.m1.4.4.4.4.2.2.cmml">i</mi></mrow></msub></mrow></mrow><mo id="S2.E2.m1.4.4.4.5" xref="S2.E2.m1.4.4.4.5.cmml">+</mo><mi id="S2.E2.m1.4.4.4.7" xref="S2.E2.m1.4.4.4.7.cmml">ε</mi></mrow><mrow id="S2.E2.m1.6.6.6" xref="S2.E2.m1.6.6.6.cmml"><mrow id="S2.E2.m1.6.6.6.4" xref="S2.E2.m1.6.6.6.4.cmml"><msub id="S2.E2.m1.6.6.6.4.1" xref="S2.E2.m1.6.6.6.4.1.cmml"><mo id="S2.E2.m1.6.6.6.4.1.2" xref="S2.E2.m1.6.6.6.4.1.2.cmml">∑</mo><mi id="S2.E2.m1.6.6.6.4.1.3" xref="S2.E2.m1.6.6.6.4.1.3.cmml">i</mi></msub><msub id="S2.E2.m1.6.6.6.4.2" xref="S2.E2.m1.6.6.6.4.2.cmml"><mi id="S2.E2.m1.6.6.6.4.2.2" xref="S2.E2.m1.6.6.6.4.2.2.cmml">T</mi><mrow id="S2.E2.m1.6.6.6.2.2.4" xref="S2.E2.m1.6.6.6.2.2.3.cmml"><mi id="S2.E2.m1.5.5.5.1.1.1" xref="S2.E2.m1.5.5.5.1.1.1.cmml">c</mi><mo id="S2.E2.m1.6.6.6.2.2.4.1" xref="S2.E2.m1.6.6.6.2.2.3.cmml">,</mo><mi id="S2.E2.m1.6.6.6.2.2.2" xref="S2.E2.m1.6.6.6.2.2.2.cmml">i</mi></mrow></msub></mrow><mo id="S2.E2.m1.6.6.6.3" xref="S2.E2.m1.6.6.6.3.cmml">+</mo><mi id="S2.E2.m1.6.6.6.5" xref="S2.E2.m1.6.6.6.5.cmml">ε</mi></mrow></mfrac></mrow></mrow></mrow></mrow><mo id="S2.E2.m1.7.7.1.2" xref="S2.E2.m1.7.7.1.1.cmml">,</mo></mrow><annotation-xml encoding="MathML-Content" id="S2.E2.m1.7b"><apply id="S2.E2.m1.7.7.1.1.cmml" xref="S2.E2.m1.7.7.1"><eq id="S2.E2.m1.7.7.1.1.1.cmml" xref="S2.E2.m1.7.7.1.1.1"></eq><apply id="S2.E2.m1.7.7.1.1.2.cmml" xref="S2.E2.m1.7.7.1.1.2"><csymbol cd="ambiguous" id="S2.E2.m1.7.7.1.1.2.1.cmml" xref="S2.E2.m1.7.7.1.1.2">subscript</csymbol><ci id="S2.E2.m1.7.7.1.1.2.2.cmml" xref="S2.E2.m1.7.7.1.1.2.2">ℒ</ci><ci id="S2.E2.m1.7.7.1.1.2.3.cmml" xref="S2.E2.m1.7.7.1.1.2.3">Nuclei</ci></apply><apply id="S2.E2.m1.7.7.1.1.3.cmml" xref="S2.E2.m1.7.7.1.1.3"><minus id="S2.E2.m1.7.7.1.1.3.1.cmml" xref="S2.E2.m1.7.7.1.1.3.1"></minus><cn id="S2.E2.m1.7.7.1.1.3.2.cmml" type="integer" xref="S2.E2.m1.7.7.1.1.3.2">1</cn><apply id="S2.E2.m1.7.7.1.1.3.3.cmml" xref="S2.E2.m1.7.7.1.1.3.3"><times id="S2.E2.m1.7.7.1.1.3.3.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.1"></times><apply id="S2.E2.m1.7.7.1.1.3.3.2.cmml" xref="S2.E2.m1.7.7.1.1.3.3.2"><divide id="S2.E2.m1.7.7.1.1.3.3.2.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.2"></divide><cn id="S2.E2.m1.7.7.1.1.3.3.2.2.cmml" type="integer" xref="S2.E2.m1.7.7.1.1.3.3.2.2">1</cn><cn id="S2.E2.m1.7.7.1.1.3.3.2.3.cmml" type="integer" xref="S2.E2.m1.7.7.1.1.3.3.2.3">13</cn></apply><apply id="S2.E2.m1.7.7.1.1.3.3.3.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3"><apply id="S2.E2.m1.7.7.1.1.3.3.3.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1"><csymbol cd="ambiguous" id="S2.E2.m1.7.7.1.1.3.3.3.1.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1">superscript</csymbol><apply id="S2.E2.m1.7.7.1.1.3.3.3.1.2.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1"><csymbol cd="ambiguous" id="S2.E2.m1.7.7.1.1.3.3.3.1.2.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1">subscript</csymbol><sum id="S2.E2.m1.7.7.1.1.3.3.3.1.2.2.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.2"></sum><apply id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3"><eq id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.1.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.1"></eq><ci id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.2.cmml" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.2">𝑐</ci><cn id="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.3.cmml" type="integer" xref="S2.E2.m1.7.7.1.1.3.3.3.1.2.3.3">1</cn></apply></apply><cn id="S2.E2.m1.7.7.1.1.3.3.3.1.3.cmml" type="integer" xref="S2.E2.m1.7.7.1.1.3.3.3.1.3">13</cn></apply><apply id="S2.E2.m1.6.6.cmml" xref="S2.E2.m1.6.6"><divide id="S2.E2.m1.6.6.7.cmml" xref="S2.E2.m1.6.6"></divide><apply id="S2.E2.m1.4.4.4.cmml" xref="S2.E2.m1.4.4.4"><plus id="S2.E2.m1.4.4.4.5.cmml" xref="S2.E2.m1.4.4.4.5"></plus><apply id="S2.E2.m1.4.4.4.6.cmml" xref="S2.E2.m1.4.4.4.6"><apply id="S2.E2.m1.4.4.4.6.1.cmml" xref="S2.E2.m1.4.4.4.6.1"><csymbol cd="ambiguous" id="S2.E2.m1.4.4.4.6.1.1.cmml" xref="S2.E2.m1.4.4.4.6.1">subscript</csymbol><sum id="S2.E2.m1.4.4.4.6.1.2.cmml" xref="S2.E2.m1.4.4.4.6.1.2"></sum><ci id="S2.E2.m1.4.4.4.6.1.3.cmml" xref="S2.E2.m1.4.4.4.6.1.3">𝑖</ci></apply><apply id="S2.E2.m1.4.4.4.6.2.cmml" xref="S2.E2.m1.4.4.4.6.2"><times id="S2.E2.m1.4.4.4.6.2.1.cmml" xref="S2.E2.m1.4.4.4.6.2.1"></times><apply id="S2.E2.m1.4.4.4.6.2.2.cmml" xref="S2.E2.m1.4.4.4.6.2.2"><csymbol cd="ambiguous" id="S2.E2.m1.4.4.4.6.2.2.1.cmml" xref="S2.E2.m1.4.4.4.6.2.2">subscript</csymbol><ci id="S2.E2.m1.4.4.4.6.2.2.2.cmml" xref="S2.E2.m1.4.4.4.6.2.2.2">𝑇</ci><list id="S2.E2.m1.2.2.2.2.2.3.cmml" xref="S2.E2.m1.2.2.2.2.2.4"><ci id="S2.E2.m1.1.1.1.1.1.1.cmml" xref="S2.E2.m1.1.1.1.1.1.1">𝑐</ci><ci id="S2.E2.m1.2.2.2.2.2.2.cmml" xref="S2.E2.m1.2.2.2.2.2.2">𝑖</ci></list></apply><apply id="S2.E2.m1.4.4.4.6.2.3.cmml" xref="S2.E2.m1.4.4.4.6.2.3"><csymbol cd="ambiguous" id="S2.E2.m1.4.4.4.6.2.3.1.cmml" xref="S2.E2.m1.4.4.4.6.2.3">subscript</csymbol><ci id="S2.E2.m1.4.4.4.6.2.3.2.cmml" xref="S2.E2.m1.4.4.4.6.2.3.2">𝑃</ci><list id="S2.E2.m1.4.4.4.4.2.3.cmml" xref="S2.E2.m1.4.4.4.4.2.4"><ci id="S2.E2.m1.3.3.3.3.1.1.cmml" xref="S2.E2.m1.3.3.3.3.1.1">𝑐</ci><ci id="S2.E2.m1.4.4.4.4.2.2.cmml" xref="S2.E2.m1.4.4.4.4.2.2">𝑖</ci></list></apply></apply></apply><ci id="S2.E2.m1.4.4.4.7.cmml" xref="S2.E2.m1.4.4.4.7">𝜀</ci></apply><apply id="S2.E2.m1.6.6.6.cmml" xref="S2.E2.m1.6.6.6"><plus id="S2.E2.m1.6.6.6.3.cmml" xref="S2.E2.m1.6.6.6.3"></plus><apply id="S2.E2.m1.6.6.6.4.cmml" xref="S2.E2.m1.6.6.6.4"><apply id="S2.E2.m1.6.6.6.4.1.cmml" xref="S2.E2.m1.6.6.6.4.1"><csymbol cd="ambiguous" id="S2.E2.m1.6.6.6.4.1.1.cmml" xref="S2.E2.m1.6.6.6.4.1">subscript</csymbol><sum id="S2.E2.m1.6.6.6.4.1.2.cmml" xref="S2.E2.m1.6.6.6.4.1.2"></sum><ci id="S2.E2.m1.6.6.6.4.1.3.cmml" xref="S2.E2.m1.6.6.6.4.1.3">𝑖</ci></apply><apply id="S2.E2.m1.6.6.6.4.2.cmml" xref="S2.E2.m1.6.6.6.4.2"><csymbol cd="ambiguous" id="S2.E2.m1.6.6.6.4.2.1.cmml" xref="S2.E2.m1.6.6.6.4.2">subscript</csymbol><ci id="S2.E2.m1.6.6.6.4.2.2.cmml" xref="S2.E2.m1.6.6.6.4.2.2">𝑇</ci><list id="S2.E2.m1.6.6.6.2.2.3.cmml" xref="S2.E2.m1.6.6.6.2.2.4"><ci id="S2.E2.m1.5.5.5.1.1.1.cmml" xref="S2.E2.m1.5.5.5.1.1.1">𝑐</ci><ci id="S2.E2.m1.6.6.6.2.2.2.cmml" xref="S2.E2.m1.6.6.6.2.2.2">𝑖</ci></list></apply></apply><ci id="S2.E2.m1.6.6.6.5.cmml" xref="S2.E2.m1.6.6.6.5">𝜀</ci></apply></apply></apply></apply></apply></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.E2.m1.7c">\mathcal{L}_{\mathrm{Nuclei}}=1-\frac{1}{13}\sum_{c=1}^{13}\frac{\sum_{i}T_{c,%
+i}P_{c,i}+\varepsilon}{\sum_{i}T_{c,i}+\varepsilon},</annotation><annotation encoding="application/x-llamapun" id="S2.E2.m1.7d">caligraphic_L start_POSTSUBSCRIPT roman_Nuclei end_POSTSUBSCRIPT = 1 - divide start_ARG 1 end_ARG start_ARG 13 end_ARG ∑ start_POSTSUBSCRIPT italic_c = 1 end_POSTSUBSCRIPT start_POSTSUPERSCRIPT 13 end_POSTSUPERSCRIPT divide start_ARG ∑ start_POSTSUBSCRIPT italic_i end_POSTSUBSCRIPT italic_T start_POSTSUBSCRIPT italic_c , italic_i end_POSTSUBSCRIPT italic_P start_POSTSUBSCRIPT italic_c , italic_i end_POSTSUBSCRIPT + italic_ε end_ARG start_ARG ∑ start_POSTSUBSCRIPT italic_i end_POSTSUBSCRIPT italic_T start_POSTSUBSCRIPT italic_c , italic_i end_POSTSUBSCRIPT + italic_ε end_ARG ,</annotation></semantics></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+<td class="ltx_eqn_cell ltx_eqn_eqno ltx_align_middle ltx_align_right" rowspan="1"><span class="ltx_tag ltx_tag_equation ltx_align_right">(2)</span></td>
+</tr></tbody>
+</table>
+<p class="ltx_p" id="S2.SS3.SSS1.p2.7">where <math alttext="T_{c,i}" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.1.m1.2"><semantics id="S2.SS3.SSS1.p2.1.m1.2a"><msub id="S2.SS3.SSS1.p2.1.m1.2.3" xref="S2.SS3.SSS1.p2.1.m1.2.3.cmml"><mi id="S2.SS3.SSS1.p2.1.m1.2.3.2" xref="S2.SS3.SSS1.p2.1.m1.2.3.2.cmml">T</mi><mrow id="S2.SS3.SSS1.p2.1.m1.2.2.2.4" xref="S2.SS3.SSS1.p2.1.m1.2.2.2.3.cmml"><mi id="S2.SS3.SSS1.p2.1.m1.1.1.1.1" xref="S2.SS3.SSS1.p2.1.m1.1.1.1.1.cmml">c</mi><mo id="S2.SS3.SSS1.p2.1.m1.2.2.2.4.1" xref="S2.SS3.SSS1.p2.1.m1.2.2.2.3.cmml">,</mo><mi id="S2.SS3.SSS1.p2.1.m1.2.2.2.2" xref="S2.SS3.SSS1.p2.1.m1.2.2.2.2.cmml">i</mi></mrow></msub><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.1.m1.2b"><apply id="S2.SS3.SSS1.p2.1.m1.2.3.cmml" xref="S2.SS3.SSS1.p2.1.m1.2.3"><csymbol cd="ambiguous" id="S2.SS3.SSS1.p2.1.m1.2.3.1.cmml" xref="S2.SS3.SSS1.p2.1.m1.2.3">subscript</csymbol><ci id="S2.SS3.SSS1.p2.1.m1.2.3.2.cmml" xref="S2.SS3.SSS1.p2.1.m1.2.3.2">𝑇</ci><list id="S2.SS3.SSS1.p2.1.m1.2.2.2.3.cmml" xref="S2.SS3.SSS1.p2.1.m1.2.2.2.4"><ci id="S2.SS3.SSS1.p2.1.m1.1.1.1.1.cmml" xref="S2.SS3.SSS1.p2.1.m1.1.1.1.1">𝑐</ci><ci id="S2.SS3.SSS1.p2.1.m1.2.2.2.2.cmml" xref="S2.SS3.SSS1.p2.1.m1.2.2.2.2">𝑖</ci></list></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.1.m1.2c">T_{c,i}</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.1.m1.2d">italic_T start_POSTSUBSCRIPT italic_c , italic_i end_POSTSUBSCRIPT</annotation></semantics></math> denotes the true label for class <math alttext="c" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.2.m2.1"><semantics id="S2.SS3.SSS1.p2.2.m2.1a"><mi id="S2.SS3.SSS1.p2.2.m2.1.1" xref="S2.SS3.SSS1.p2.2.m2.1.1.cmml">c</mi><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.2.m2.1b"><ci id="S2.SS3.SSS1.p2.2.m2.1.1.cmml" xref="S2.SS3.SSS1.p2.2.m2.1.1">𝑐</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.2.m2.1c">c</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.2.m2.1d">italic_c</annotation></semantics></math> at voxel <math alttext="i" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.3.m3.1"><semantics id="S2.SS3.SSS1.p2.3.m3.1a"><mi id="S2.SS3.SSS1.p2.3.m3.1.1" xref="S2.SS3.SSS1.p2.3.m3.1.1.cmml">i</mi><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.3.m3.1b"><ci id="S2.SS3.SSS1.p2.3.m3.1.1.cmml" xref="S2.SS3.SSS1.p2.3.m3.1.1">𝑖</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.3.m3.1c">i</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.3.m3.1d">italic_i</annotation></semantics></math>, <math alttext="P_{c,i}" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.4.m4.2"><semantics id="S2.SS3.SSS1.p2.4.m4.2a"><msub id="S2.SS3.SSS1.p2.4.m4.2.3" xref="S2.SS3.SSS1.p2.4.m4.2.3.cmml"><mi id="S2.SS3.SSS1.p2.4.m4.2.3.2" xref="S2.SS3.SSS1.p2.4.m4.2.3.2.cmml">P</mi><mrow id="S2.SS3.SSS1.p2.4.m4.2.2.2.4" xref="S2.SS3.SSS1.p2.4.m4.2.2.2.3.cmml"><mi id="S2.SS3.SSS1.p2.4.m4.1.1.1.1" xref="S2.SS3.SSS1.p2.4.m4.1.1.1.1.cmml">c</mi><mo id="S2.SS3.SSS1.p2.4.m4.2.2.2.4.1" xref="S2.SS3.SSS1.p2.4.m4.2.2.2.3.cmml">,</mo><mi id="S2.SS3.SSS1.p2.4.m4.2.2.2.2" xref="S2.SS3.SSS1.p2.4.m4.2.2.2.2.cmml">i</mi></mrow></msub><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.4.m4.2b"><apply id="S2.SS3.SSS1.p2.4.m4.2.3.cmml" xref="S2.SS3.SSS1.p2.4.m4.2.3"><csymbol cd="ambiguous" id="S2.SS3.SSS1.p2.4.m4.2.3.1.cmml" xref="S2.SS3.SSS1.p2.4.m4.2.3">subscript</csymbol><ci id="S2.SS3.SSS1.p2.4.m4.2.3.2.cmml" xref="S2.SS3.SSS1.p2.4.m4.2.3.2">𝑃</ci><list id="S2.SS3.SSS1.p2.4.m4.2.2.2.3.cmml" xref="S2.SS3.SSS1.p2.4.m4.2.2.2.4"><ci id="S2.SS3.SSS1.p2.4.m4.1.1.1.1.cmml" xref="S2.SS3.SSS1.p2.4.m4.1.1.1.1">𝑐</ci><ci id="S2.SS3.SSS1.p2.4.m4.2.2.2.2.cmml" xref="S2.SS3.SSS1.p2.4.m4.2.2.2.2">𝑖</ci></list></apply></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.4.m4.2c">P_{c,i}</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.4.m4.2d">italic_P start_POSTSUBSCRIPT italic_c , italic_i end_POSTSUBSCRIPT</annotation></semantics></math> is the predicted probability for class <math alttext="c" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.5.m5.1"><semantics id="S2.SS3.SSS1.p2.5.m5.1a"><mi id="S2.SS3.SSS1.p2.5.m5.1.1" xref="S2.SS3.SSS1.p2.5.m5.1.1.cmml">c</mi><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.5.m5.1b"><ci id="S2.SS3.SSS1.p2.5.m5.1.1.cmml" xref="S2.SS3.SSS1.p2.5.m5.1.1">𝑐</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.5.m5.1c">c</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.5.m5.1d">italic_c</annotation></semantics></math> at voxel <math alttext="i" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.6.m6.1"><semantics id="S2.SS3.SSS1.p2.6.m6.1a"><mi id="S2.SS3.SSS1.p2.6.m6.1.1" xref="S2.SS3.SSS1.p2.6.m6.1.1.cmml">i</mi><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.6.m6.1b"><ci id="S2.SS3.SSS1.p2.6.m6.1.1.cmml" xref="S2.SS3.SSS1.p2.6.m6.1.1">𝑖</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.6.m6.1c">i</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.6.m6.1d">italic_i</annotation></semantics></math>, and <math alttext="\varepsilon" class="ltx_Math" display="inline" id="S2.SS3.SSS1.p2.7.m7.1"><semantics id="S2.SS3.SSS1.p2.7.m7.1a"><mi id="S2.SS3.SSS1.p2.7.m7.1.1" xref="S2.SS3.SSS1.p2.7.m7.1.1.cmml">ε</mi><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS1.p2.7.m7.1b"><ci id="S2.SS3.SSS1.p2.7.m7.1.1.cmml" xref="S2.SS3.SSS1.p2.7.m7.1.1">𝜀</ci></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS1.p2.7.m7.1c">\varepsilon</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS1.p2.7.m7.1d">italic_ε</annotation></semantics></math> is a smoothing factor set to 1e-6.</p>
+</div>
+<figure class="ltx_figure" id="S2.F3"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="533" id="S2.F3.g1" src="x3.png" width="813"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 3: </span>Overview of the thalamic nuclei segmentation framework. (a) The processing for the structural (sMRI) and diffusion MRI (dMRI), leading to a combined 68-channel network input. (b) The generation of the foreground mask (ground truth of the ROI model) using the thalamic nuclei labels (ground truth of the Nuclei model). (c) The network framework, consists of the ROI model and the Nuclei model, both built upon a 5-level 3D U-Net. The final segmentation is produced by multiplying the foreground mask from the ROI model with the nuclei mask from the Nuclei model.</figcaption>
+</figure>
+</section>
+<section class="ltx_subsubsection" id="S2.SS3.SSS2">
+<h4 class="ltx_title ltx_title_subsubsection">
+<span class="ltx_tag ltx_tag_subsubsection">2.3.2 </span>Implementation Details</h4>
+<div class="ltx_para" id="S2.SS3.SSS2.p1">
+<p class="ltx_p" id="S2.SS3.SSS2.p1.1">We performed an 8-fold cross-validation on 24 subjects with a training, validation, testing split ratio of 19:2:3, ensuring that all subjects were included in the testing process once. Both models are 3D U-Nets with 5 levels, trained using the Adam optimizer with a weight decay of 1e-4, and an initial learning rates of 1e-3, reduced by 20<math alttext="\%" class="ltx_Math" display="inline" id="S2.SS3.SSS2.p1.1.m1.1"><semantics id="S2.SS3.SSS2.p1.1.m1.1a"><mo id="S2.SS3.SSS2.p1.1.m1.1.1" xref="S2.SS3.SSS2.p1.1.m1.1.1.cmml">%</mo><annotation-xml encoding="MathML-Content" id="S2.SS3.SSS2.p1.1.m1.1b"><csymbol cd="latexml" id="S2.SS3.SSS2.p1.1.m1.1.1.cmml" xref="S2.SS3.SSS2.p1.1.m1.1.1">percent</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S2.SS3.SSS2.p1.1.m1.1c">\%</annotation><annotation encoding="application/x-llamapun" id="S2.SS3.SSS2.p1.1.m1.1d">%</annotation></semantics></math> if the validation loss does not improve over 5 epochs. We employed Leaky ReLU activation and Batch Normalization across all convolutional blocks. The random seed was set to 1234. The ROI model was trained using a sigmoid activation in the final layer, with a batch size of 4 and stopped training if the validation loss does not decrease within 10 epochs. The Nuclei model was trained using a softmax activation in the final layer, with a batch size of 1, and the same stopping criterion as the ROI model.</p>
+</div>
+</section>
+</section>
+<section class="ltx_subsection" id="S2.SS4">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">2.4 </span>Labeling Schemes Unifying Protocol</h3>
+<div class="ltx_para" id="S2.SS4.p1">
+<p class="ltx_p" id="S2.SS4.p1.1">We compared RATNUS to FreeSurfer <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib11" title="">11</a>]</cite> and THOMAS <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib22" title="">22</a>]</cite>, two popular approaches for thalamic nuclei segmentation. Since each method uses a unique set of rules for labeling thalamic nuclei, we used the Morel atlas <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib15" title="">15</a>]</cite> as a structural guide to propose a unified labeling scheme for comparison. After reviewing correspondences between the schemes, we formed the following seven main categories: Anterior group, Medial group, Midline group, Ventral Anterior group, Ventral Posterior group, Ventral Lateral group, and Posterior group.
+Nuclei that do not have a corresponding match—e.g., the MTT is labeled in the THOMAS atlas but is not represented in either our atlas or the FreeSurfer atlas, and the Lsg is labeled in FreeSurfer but is missing from ours and the THOMAS atlas—were marked as distinct classifications. The grouping and color-coding scheme is shown in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F4" title="Figure 4 ‣ 2.4 Labeling Schemes Unifying Protocol ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">4</span></a>.</p>
+</div>
+<figure class="ltx_figure" id="S2.F4"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_square" height="767" id="S2.F4.g1" src="x4.png" width="639"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 4: </span>An exhaustive mapping of thalamic nuclei classes between RATNUS, and those defined by THOMAS and FreeSurfer. The first column lists the major categories derived from our grouping strategy, each of which corresponds to the merging of several nuclei in the second, third and, forth column. All major categories and individual instances are assigned a unique color for clear differentiation. Abbreviations for THOMAS and FreeSurfer nuclei are carefully extracted from <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib22" title="">22</a>]</cite> and <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib11" title="">11</a>]</cite>.</figcaption>
+</figure>
+</section>
+</section>
+<section class="ltx_section" id="S3">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">3 </span>Experiments and Results</h2>
+<div class="ltx_para" id="S3.p1">
+<p class="ltx_p" id="S3.p1.1">In this section, we evaluate the performance of the RATNUS model. We first compare RATNUS’ segmentation results with ground truth labels to measure accuracy. Then, we benchmark RATNUS against FreeSurfer<cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib11" title="">11</a>]</cite> and THOMAS <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib22" title="">22</a>]</cite> to highlight its advantages.
+As our ground truth labels are sparse, where the rater only labeled voxels with high confidence, leaving many voxels in the thalamus unlabeled, using Dice Score as the evaluation metric could be inappropriate, since it may count predictions as incorrect if they match the nuclei class but lack corresponding ground truth labels.
+Therefore, we adopt the TPR as the evaluation metric for the following experiments. Additionally, as mentioned in the implementation details, we performed an 8-fold cross-validation on 24 subjects. This ensures that each subject is included in the testing process once, and the results presented below are the average and standard deviation calculated across all 24 subjects.</p>
+</div>
+<section class="ltx_subsection" id="S3.SS1">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">3.1 </span>Comparison Against Ground Truth</h3>
+<div class="ltx_para" id="S3.SS1.p1">
+<p class="ltx_p" id="S3.SS1.p1.1">We evaluated the RATNUS’s segmentation results by comparing them with ground truth labels using TPR. The quantitative results, summarized in Table <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.T1" title="Table 1 ‣ 3.1 Comparison Against Ground Truth ‣ 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">1</span></a>, illustrates RATNUS’s consistently high TPR across all thalamic nuclei. Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.F5" title="Figure 5 ‣ 3.1 Comparison Against Ground Truth ‣ 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">5</span></a>, provides a visual comparison, showing close alignments between our model’s predictions and the ground truth, demonstrating RATNUS’s capability in accurate thalamic nuclei segmentation.</p>
+</div>
+<figure class="ltx_figure" id="S3.F5"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="436" id="S3.F5.g1" src="x5.png" width="664"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 5: </span>Comparisons between model’s predictions and ground truth labels. From left to right, each column shows the FGATIR scans, the ground truth, and our model predictions. The provided color codes is consistent with Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F1" title="Figure 1 ‣ 2.1 Data and Manual Labels ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">1</span></a>.</figcaption>
+</figure>
+<figure class="ltx_table" id="S3.T1">
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_table">Table 1: </span>TPRs for 13 thalamic nuclei, shown in percentages. “Average” indicates the volume-weighted mean across all nuclei.</figcaption>
+<div class="ltx_inline-block ltx_align_center ltx_transformed_outer" id="S3.T1.14" style="width:411.9pt;height:58.9pt;vertical-align:-0.0pt;"><span class="ltx_transformed_inner" style="transform:translate(-45.8pt,6.5pt) scale(0.818237046193865,0.818237046193865) ;">
+<table class="ltx_tabular ltx_align_middle" id="S3.T1.14.14">
+<tbody class="ltx_tbody">
+<tr class="ltx_tr" id="S3.T1.14.14.15.1">
+<td class="ltx_td ltx_align_center ltx_border_l ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.1">AN</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.2">CM</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.3">LD</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.4">LP</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.5">MD</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.6">PuA</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.7">PuI</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.8">VA</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.9">VLa</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.10">VLp</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.11">VPL</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.12">VPM</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.13">CL</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.15.1.14">Average</td>
+</tr>
+<tr class="ltx_tr" id="S3.T1.14.14.16.2">
+<td class="ltx_td ltx_align_center ltx_border_l ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.1">86.32</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.2">80.65</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.3">80.75</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.4">85.30</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.5">91.08</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.6">61.91</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.7">94.36</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.8">91.79</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.9">79.43</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.10">88.10</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.11">83.16</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.12">75.60</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.13">68.43</td>
+<td class="ltx_td ltx_align_center ltx_border_r ltx_border_t" id="S3.T1.14.14.16.2.14">87.19</td>
+</tr>
+<tr class="ltx_tr" id="S3.T1.14.14.14">
+<td class="ltx_td ltx_align_center ltx_border_l ltx_border_r" id="S3.T1.1.1.1.1"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.1.1.1.1.m1.1"><semantics id="S3.T1.1.1.1.1.m1.1a"><mo id="S3.T1.1.1.1.1.m1.1.1" xref="S3.T1.1.1.1.1.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.1.1.1.1.m1.1b"><csymbol cd="latexml" id="S3.T1.1.1.1.1.m1.1.1.cmml" xref="S3.T1.1.1.1.1.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.1.1.1.1.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.1.1.1.1.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.2.2.2.2"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.2.2.2.2.m1.1"><semantics id="S3.T1.2.2.2.2.m1.1a"><mo id="S3.T1.2.2.2.2.m1.1.1" xref="S3.T1.2.2.2.2.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.2.2.2.2.m1.1b"><csymbol cd="latexml" id="S3.T1.2.2.2.2.m1.1.1.cmml" xref="S3.T1.2.2.2.2.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.2.2.2.2.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.2.2.2.2.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.3.3.3.3"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.3.3.3.3.m1.1"><semantics id="S3.T1.3.3.3.3.m1.1a"><mo id="S3.T1.3.3.3.3.m1.1.1" xref="S3.T1.3.3.3.3.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.3.3.3.3.m1.1b"><csymbol cd="latexml" id="S3.T1.3.3.3.3.m1.1.1.cmml" xref="S3.T1.3.3.3.3.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.3.3.3.3.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.3.3.3.3.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.4.4.4.4"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.4.4.4.4.m1.1"><semantics id="S3.T1.4.4.4.4.m1.1a"><mo id="S3.T1.4.4.4.4.m1.1.1" xref="S3.T1.4.4.4.4.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.4.4.4.4.m1.1b"><csymbol cd="latexml" id="S3.T1.4.4.4.4.m1.1.1.cmml" xref="S3.T1.4.4.4.4.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.4.4.4.4.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.4.4.4.4.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.5.5.5.5"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.5.5.5.5.m1.1"><semantics id="S3.T1.5.5.5.5.m1.1a"><mo id="S3.T1.5.5.5.5.m1.1.1" xref="S3.T1.5.5.5.5.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.5.5.5.5.m1.1b"><csymbol cd="latexml" id="S3.T1.5.5.5.5.m1.1.1.cmml" xref="S3.T1.5.5.5.5.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.5.5.5.5.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.5.5.5.5.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.6.6.6.6"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.6.6.6.6.m1.1"><semantics id="S3.T1.6.6.6.6.m1.1a"><mo id="S3.T1.6.6.6.6.m1.1.1" xref="S3.T1.6.6.6.6.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.6.6.6.6.m1.1b"><csymbol cd="latexml" id="S3.T1.6.6.6.6.m1.1.1.cmml" xref="S3.T1.6.6.6.6.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.6.6.6.6.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.6.6.6.6.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.7.7.7.7"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.7.7.7.7.m1.1"><semantics id="S3.T1.7.7.7.7.m1.1a"><mo id="S3.T1.7.7.7.7.m1.1.1" xref="S3.T1.7.7.7.7.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.7.7.7.7.m1.1b"><csymbol cd="latexml" id="S3.T1.7.7.7.7.m1.1.1.cmml" xref="S3.T1.7.7.7.7.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.7.7.7.7.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.7.7.7.7.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.8.8.8.8"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.8.8.8.8.m1.1"><semantics id="S3.T1.8.8.8.8.m1.1a"><mo id="S3.T1.8.8.8.8.m1.1.1" xref="S3.T1.8.8.8.8.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.8.8.8.8.m1.1b"><csymbol cd="latexml" id="S3.T1.8.8.8.8.m1.1.1.cmml" xref="S3.T1.8.8.8.8.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.8.8.8.8.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.8.8.8.8.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.9.9.9.9"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.9.9.9.9.m1.1"><semantics id="S3.T1.9.9.9.9.m1.1a"><mo id="S3.T1.9.9.9.9.m1.1.1" xref="S3.T1.9.9.9.9.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.9.9.9.9.m1.1b"><csymbol cd="latexml" id="S3.T1.9.9.9.9.m1.1.1.cmml" xref="S3.T1.9.9.9.9.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.9.9.9.9.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.9.9.9.9.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.10.10.10.10"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.10.10.10.10.m1.1"><semantics id="S3.T1.10.10.10.10.m1.1a"><mo id="S3.T1.10.10.10.10.m1.1.1" xref="S3.T1.10.10.10.10.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.10.10.10.10.m1.1b"><csymbol cd="latexml" id="S3.T1.10.10.10.10.m1.1.1.cmml" xref="S3.T1.10.10.10.10.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.10.10.10.10.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.10.10.10.10.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.11.11.11.11"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.11.11.11.11.m1.1"><semantics id="S3.T1.11.11.11.11.m1.1a"><mo id="S3.T1.11.11.11.11.m1.1.1" xref="S3.T1.11.11.11.11.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.11.11.11.11.m1.1b"><csymbol cd="latexml" id="S3.T1.11.11.11.11.m1.1.1.cmml" xref="S3.T1.11.11.11.11.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.11.11.11.11.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.11.11.11.11.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.12.12.12.12"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.12.12.12.12.m1.1"><semantics id="S3.T1.12.12.12.12.m1.1a"><mo id="S3.T1.12.12.12.12.m1.1.1" xref="S3.T1.12.12.12.12.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.12.12.12.12.m1.1b"><csymbol cd="latexml" id="S3.T1.12.12.12.12.m1.1.1.cmml" xref="S3.T1.12.12.12.12.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.12.12.12.12.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.12.12.12.12.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.13.13.13.13"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.13.13.13.13.m1.1"><semantics id="S3.T1.13.13.13.13.m1.1a"><mo id="S3.T1.13.13.13.13.m1.1.1" xref="S3.T1.13.13.13.13.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.13.13.13.13.m1.1b"><csymbol cd="latexml" id="S3.T1.13.13.13.13.m1.1.1.cmml" xref="S3.T1.13.13.13.13.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.13.13.13.13.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.13.13.13.13.m1.1d">±</annotation></semantics></math></td>
+<td class="ltx_td ltx_align_center ltx_border_r" id="S3.T1.14.14.14.14"><math alttext="\pm" class="ltx_Math" display="inline" id="S3.T1.14.14.14.14.m1.1"><semantics id="S3.T1.14.14.14.14.m1.1a"><mo id="S3.T1.14.14.14.14.m1.1.1" xref="S3.T1.14.14.14.14.m1.1.1.cmml">±</mo><annotation-xml encoding="MathML-Content" id="S3.T1.14.14.14.14.m1.1b"><csymbol cd="latexml" id="S3.T1.14.14.14.14.m1.1.1.cmml" xref="S3.T1.14.14.14.14.m1.1.1">plus-or-minus</csymbol></annotation-xml><annotation encoding="application/x-tex" id="S3.T1.14.14.14.14.m1.1c">\pm</annotation><annotation encoding="application/x-llamapun" id="S3.T1.14.14.14.14.m1.1d">±</annotation></semantics></math></td>
+</tr>
+<tr class="ltx_tr" id="S3.T1.14.14.17.3">
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_l ltx_border_r" id="S3.T1.14.14.17.3.1">1.58</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.2">5.10</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.3">4.06</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.4">3.53</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.5">1.31</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.6">7.82</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.7">0.92</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.8">2.21</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.9">4.77</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.10">1.93</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.11">3.64</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.12">7.98</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.13">2.53</td>
+<td class="ltx_td ltx_align_center ltx_border_b ltx_border_r" id="S3.T1.14.14.17.3.14">1.47</td>
+</tr>
+</tbody>
+</table>
+</span></div>
+</figure>
+</section>
+<section class="ltx_subsection" id="S3.SS2">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">3.2 </span>Comparisons Against FreeSurfer and THOMAS Segmentation</h3>
+<div class="ltx_para" id="S3.SS2.p1">
+<p class="ltx_p" id="S3.SS2.p1.1">We compared our model’s predictions with those of FreeSurfer and THOMAS after unifying them to a common ground using the protocol described in Section 2.4. The quantitative comparison focuses only on seven main groups and excludes unique labels and background.
+Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.F6" title="Figure 6 ‣ 3.2 Comparisons Against FreeSurfer and THOMAS Segmentation ‣ 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">6</span></a> shows that RATNUS consistently achieves higher TPR in all major thalamic groups, with an average TPR of 75.80%, greatly surpassing THOMAS at 57.64% and FreeSurfer at 64.25%.
+Qualitatively, as shown in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S3.F7" title="Figure 7 ‣ 3.2 Comparisons Against FreeSurfer and THOMAS Segmentation ‣ 3 Experiments and Results ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">7</span></a>, RATNUS’s predictions are more contiguous with fewer misclassified voxels and better adherence to the boundary of the thalamus, whereas FreeSurfer appears to over-segment (highlighted by the yellow arrow), and THOMAS tends to under-segment (highlighted by the red arrows) the thalamus.</p>
+</div>
+<figure class="ltx_figure" id="S3.F6"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="263" id="S3.F6.g1" src="x6.png" width="830"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 6: </span>Boxplot showing RATNUS’s TPR compared with FreeSurfer and THOMAS. The horizontal axis lists major thalamic groups from Anterior to Posterior, with “Average” showing the volume-weighted mean of all the groups.</figcaption>
+</figure>
+<figure class="ltx_figure" id="S3.F7"><img alt="Refer to caption" class="ltx_graphics ltx_centering ltx_img_landscape" height="359" id="S3.F7.g1" src="x7.png" width="830"/>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 7: </span>Comparative visualization of our model predictions against FreeSurfer and THOMAS across seven major thalamic regions. Unique instances, such as MGN, are also included. Color codes for each thalamic group are provided in Fig. <a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#S2.F4" title="Figure 4 ‣ 2.4 Labeling Schemes Unifying Protocol ‣ 2 Methods ‣ RATNUS: Rapid, Automatic Thalamic Nuclei Segmentation using Multimodal MRI inputs"><span class="ltx_text ltx_ref_tag">4</span></a>.</figcaption>
+</figure>
+</section>
+</section>
+<section class="ltx_section" id="S4">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">4 </span>Conclusions and Discussions</h2>
+<div class="ltx_para" id="S4.p1">
+<p class="ltx_p" id="S4.p1.1">We propose RATNUS, a method that segments 13 thalamic nuclei within a CNN framework using the combination of multi-TI images and diffusion-derived features, which provide enhanced contrast within the thalamus. It achieves superior performance over FreeSurfer and THOMAS, demonstrating RATNUS’s potential for precise thalamic nuclei segmentation.</p>
+</div>
+<div class="ltx_para" id="S4.p2">
+<p class="ltx_p" id="S4.p2.1">Our method has some limitations. First, the approach benefits greatly from multimodal data, particularly multi-TI images, which provide detailed information about thalamic nuclei.
+These multi-TI images require both MPRAGE and FGATIR sequences to generate. If either MPRAGE or FGATIR is unavailable, the multi-TI images cannot be produced, and the method cannot utilize the valuable information they provide.
+Second, we compared our method to FreeSurfer and THOMAS, both of which use different labeling schemes. To ensure fairness, we proposed a unifying protocol based on the Morel atlas to standardize these schemes.
+However, since our model was trained using our specific labels and tested on the same distribution, it is more likely to perform better than THOMAS and FreeSurfer, introducing some bias despite our unifying efforts.
+Third, delineating thalamic nuclei is difficult and costly due to their small size and low contrast.
+As a result, in this work, we only trained and tested models using 24 pairs of data and thalamic nuclei labels.
+Although this is comparable to the 28 delineations used to develop THOMAS, it is still somewhat limited for training deep learning models, potentially restricting model’s generalization ability and robustness.
+</p>
+</div>
+<div class="ltx_para" id="S4.p3">
+<p class="ltx_p" id="S4.p3.1">To address these limitations, our future work will focus on several key areas.
+First, in order to eliminate the dependence on FGATIR, we plan to develop a network to synthesize multi-TI images from alternative multi-contrast imaging data, similar to <cite class="ltx_cite ltx_citemacro_cite">[<a class="ltx_ref" href="https://arxiv.org/html/2409.06897v1#bib.bib8" title="">8</a>]</cite>.
+Second, we plan to perform out-of-distribution tests to evaluate the generalization capabilities of FreeSurfer, THOMAS, and RATNUS.
+Third, we plan to implement semi-supervised training techniques to leverage a larger amount of data which does not have ground truth labels.</p>
+</div>
+</section>
+<section class="ltx_section" id="Sx1">
+<h2 class="ltx_title ltx_title_section">Acknowledgments</h2>
+<div class="ltx_para" id="Sx1.p1">
+<p class="ltx_p" id="Sx1.p1.1">This work was supported in part by the Intramural Research Program of the National Institutes of Health (NIH), National Institute on Aging.
+It is also supported in part by the NIH through the National Institute of Neurological Disorders and Stroke grant R01-NS105503 (PIs: Zhuo &amp; Prince).</p>
+</div>
+</section>
+<section class="ltx_bibliography" id="bib">
+<h2 class="ltx_title ltx_title_bibliography">References</h2>
+<ul class="ltx_biblist">
+<li class="ltx_bibitem" id="bib.bib1">
+<span class="ltx_tag ltx_tag_bibitem">[1]</span>
+<span class="ltx_bibblock">
+Avants, B.B., Tustison, N., Song, G.: Advanced normalization tools (ANTS). Insight j <span class="ltx_text ltx_font_bold" id="bib.bib1.1.1">2</span>(365), 1–35 (2009)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib2">
+<span class="ltx_tag ltx_tag_bibitem">[2]</span>
+<span class="ltx_bibblock">
+Battistella, G., et al.: Robust thalamic nuclei segmentation method based on local diffusion magnetic resonance properties. Brain Structure and Function <span class="ltx_text ltx_font_bold" id="bib.bib2.1.1">222</span>, 2203–2216 (2017)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib3">
+<span class="ltx_tag ltx_tag_bibitem">[3]</span>
+<span class="ltx_bibblock">
+Billot, B., et al.: SynthSeg: Segmentation of brain MRI scans of any contrast and resolution without retraining. Medical Image Analysis <span class="ltx_text ltx_font_bold" id="bib.bib3.1.1">86</span>, 102789 (2023)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib4">
+<span class="ltx_tag ltx_tag_bibitem">[4]</span>
+<span class="ltx_bibblock">
+Bocchetta, M., et al.: Thalamic nuclei in frontotemporal dementia: Mediodorsal nucleus involvement is universal but pulvinar atrophy is unique to C9orf72. Human Brain Mapping <span class="ltx_text ltx_font_bold" id="bib.bib4.1.1">41</span>(4), 1006–1016 (2020)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib5">
+<span class="ltx_tag ltx_tag_bibitem">[5]</span>
+<span class="ltx_bibblock">
+Braak, H., Braak, E.: Alzheimer’s disease affects limbic nuclei of the thalamus. Acta neuropathologica <span class="ltx_text ltx_font_bold" id="bib.bib5.1.1">81</span>(3), 261–268 (1991)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib6">
+<span class="ltx_tag ltx_tag_bibitem">[6]</span>
+<span class="ltx_bibblock">
+Çiçek, Ö., et al.: 3D U-Net: learning dense volumetric segmentation from sparse annotation. In: Medical Image Computing and Computer-Assisted Intervention–MICCAI 2016: 19th International Conference, Athens, Greece, October 17-21, 2016, Proceedings, Part II 19. pp. 424–432. Springer (2016)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib7">
+<span class="ltx_tag ltx_tag_bibitem">[7]</span>
+<span class="ltx_bibblock">
+Fama, R., Sullivan, E.V.: Thalamic structures and associated cognitive functions: Relations with age and aging. Neuroscience &amp; Biobehavioral Reviews <span class="ltx_text ltx_font_bold" id="bib.bib7.1.1">54</span>, 29–37 (2015)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib8">
+<span class="ltx_tag ltx_tag_bibitem">[8]</span>
+<span class="ltx_bibblock">
+Hays, S.P., et al.: Revisiting registration-based image synthesis: A focus on unsupervised MR image synthesis. In: Proceedings of SPIE Medical Imaging (SPIE-MI 2024), San Diego, CA, February 18 – 22, 2024. vol. 12926, pp. 257–265 (2024)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib9">
+<span class="ltx_tag ltx_tag_bibitem">[9]</span>
+<span class="ltx_bibblock">
+Henderson, J., Carpenter, K., Cartwright, H., Halliday, G.: Loss of thalamic intralaminar nuclei in progressive supranuclear palsy and Parkinson’s disease: Clinical and therapeutic implications. Brain <span class="ltx_text ltx_font_bold" id="bib.bib9.1.1">123</span>(7), 1410–1421 (2000)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib10">
+<span class="ltx_tag ltx_tag_bibitem">[10]</span>
+<span class="ltx_bibblock">
+Huo, Y., et al.: 3D whole brain segmentation using spatially localized atlas network tiles. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib10.1.1">194</span>, 105–119 (2019)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib11">
+<span class="ltx_tag ltx_tag_bibitem">[11]</span>
+<span class="ltx_bibblock">
+Iglesias, J.E., et al.: A probabilistic atlas of the human thalamic nuclei combining ex vivo MRI and histology. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib11.1.1">183</span>, 314–326 (2018)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib12">
+<span class="ltx_tag ltx_tag_bibitem">[12]</span>
+<span class="ltx_bibblock">
+Knutsson, H.: Producing a Continuous and Distance Preserving 5-D Vector Representation of 3-D Orientation. In: IEEE Computer Society Workshop on Computer Architecture for Pattern Analysis and Image Database Management. pp. 175–182 (1985)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib13">
+<span class="ltx_tag ltx_tag_bibitem">[13]</span>
+<span class="ltx_bibblock">
+Milletari, F., Navab, N., Ahmadi, S.A.: V-Net: Fully convolutional neural networks for volumetric medical image segmentation. In: 2016 Fourth International Conference on 3D Vision (3DV). pp. 565–571. IEEE (2016)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib14">
+<span class="ltx_tag ltx_tag_bibitem">[14]</span>
+<span class="ltx_bibblock">
+Minagar, A., et al.: The thalamus and multiple sclerosis: modern views on pathologic, imaging, and clinical aspects. Neurology <span class="ltx_text ltx_font_bold" id="bib.bib14.1.1">80</span>(2), 210–219 (2013)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib15">
+<span class="ltx_tag ltx_tag_bibitem">[15]</span>
+<span class="ltx_bibblock">
+Morel, A.: Stereotactic atlas of the human thalamus and basal ganglia. CRC Press (2007)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib16">
+<span class="ltx_tag ltx_tag_bibitem">[16]</span>
+<span class="ltx_bibblock">
+Mugler III, J.P., Brookeman, J.R.: Three-dimensional magnetization-prepared rapid gradient-echo imaging (3D MPRAGE). Magnetic Resonance in Medicine <span class="ltx_text ltx_font_bold" id="bib.bib16.1.1">15</span>(1), 152–157 (1990)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib17">
+<span class="ltx_tag ltx_tag_bibitem">[17]</span>
+<span class="ltx_bibblock">
+Pierpaoli, C., et al.: TORTOISE: an integrated software package for processing of diffusion MRI data. In: ISMRM 18th Annual Meeting. vol. 1597. Stockholm (2010)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib18">
+<span class="ltx_tag ltx_tag_bibitem">[18]</span>
+<span class="ltx_bibblock">
+Reinhold, J.C., et al.: Evaluating the impact of intensity normalization on MR image synthesis. In: Medical Imaging 2019: Image Processing. vol. 10949, pp. 890–898. SPIE (2019)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib19">
+<span class="ltx_tag ltx_tag_bibitem">[19]</span>
+<span class="ltx_bibblock">
+Sherman, S.M., Guillery, R.W.: Exploring the thalamus. Elsevier (2001)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib20">
+<span class="ltx_tag ltx_tag_bibitem">[20]</span>
+<span class="ltx_bibblock">
+Stough, J.V., et al.: Thalamic Parcellation from Multi-Modal Data using Random Forest Learning. In: 10<math alttext="{}^{\mbox{\tiny{th}}}" class="ltx_Math" display="inline" id="bib.bib20.1.m1.1"><semantics id="bib.bib20.1.m1.1a"><msup id="bib.bib20.1.m1.1.1" xref="bib.bib20.1.m1.1.1.cmml"><mi id="bib.bib20.1.m1.1.1a" xref="bib.bib20.1.m1.1.1.cmml"></mi><mtext id="bib.bib20.1.m1.1.1.1" mathsize="71%" xref="bib.bib20.1.m1.1.1.1a.cmml">th</mtext></msup><annotation-xml encoding="MathML-Content" id="bib.bib20.1.m1.1b"><apply id="bib.bib20.1.m1.1.1.cmml" xref="bib.bib20.1.m1.1.1"><ci id="bib.bib20.1.m1.1.1.1a.cmml" xref="bib.bib20.1.m1.1.1.1"><mtext id="bib.bib20.1.m1.1.1.1.cmml" mathsize="50%" xref="bib.bib20.1.m1.1.1.1">th</mtext></ci></apply></annotation-xml><annotation encoding="application/x-tex" id="bib.bib20.1.m1.1c">{}^{\mbox{\tiny{th}}}</annotation><annotation encoding="application/x-llamapun" id="bib.bib20.1.m1.1d">start_FLOATSUPERSCRIPT th end_FLOATSUPERSCRIPT</annotation></semantics></math> International Symposium on Biomedical Imaging (ISBI 2013). pp. 852–855 (2013)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib21">
+<span class="ltx_tag ltx_tag_bibitem">[21]</span>
+<span class="ltx_bibblock">
+Stough, J.V., et al.: Automatic method for thalamus parcellation using multi-modal feature classification. In: Medical Image Computing and Computer-Assisted Intervention–MICCAI 2014. vol. 8675, pp. 169–176. Springer (2014)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib22">
+<span class="ltx_tag ltx_tag_bibitem">[22]</span>
+<span class="ltx_bibblock">
+Su, J.H., et al.: Thalamus optimized multi atlas segmentation (THOMAS): fast, fully automated segmentation of thalamic nuclei from structural MRI. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib22.1.1">194</span>, 272–282 (2019)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib23">
+<span class="ltx_tag ltx_tag_bibitem">[23]</span>
+<span class="ltx_bibblock">
+Sudhyadhom, A., et al.: A high re solution and high contrast MRI for differentiation of subcortical structures for DBS targeting: the Fast Gray Matter Acquisition T1 Inversion Recovery (FGATIR). NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib23.1.1">47</span>, T44–T52 (2009)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib24">
+<span class="ltx_tag ltx_tag_bibitem">[24]</span>
+<span class="ltx_bibblock">
+Tohidi, P., et al.: Joint synthesis of WMn MPRAGE and parameter maps using deep learning and an imaging equation. In: Medical Imaging 2023: Image Processing. vol. 12464, pp. 558–564. SPIE (2023)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib25">
+<span class="ltx_tag ltx_tag_bibitem">[25]</span>
+<span class="ltx_bibblock">
+Tregidgo, H.F., Soskic, S., Olchanyi, M.D., et al.: Domain-agnostic segmentation of thalamic nuclei from joint structural and diffusion MRI. arXiv preprint arXiv:2305.03413 (2023)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib26">
+<span class="ltx_tag ltx_tag_bibitem">[26]</span>
+<span class="ltx_bibblock">
+Tregidgo, H.F., et al.: Accurate Bayesian segmentation of thalamic nuclei using diffusion MRI and an improved histological atlas. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib26.1.1">274</span>, 120129 (2023)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib27">
+<span class="ltx_tag ltx_tag_bibitem">[27]</span>
+<span class="ltx_bibblock">
+Tustison, N.J., et al.: N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging <span class="ltx_text ltx_font_bold" id="bib.bib27.1.1">29</span>(6), 1310–1320 (2010)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib28">
+<span class="ltx_tag ltx_tag_bibitem">[28]</span>
+<span class="ltx_bibblock">
+Van Der Werf, Y.D., et al.: Contributions of thalamic nuclei to declarative memory functioning. Cortex <span class="ltx_text ltx_font_bold" id="bib.bib28.1.1">39</span>(4-5), 1047–1062 (2003)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib29">
+<span class="ltx_tag ltx_tag_bibitem">[29]</span>
+<span class="ltx_bibblock">
+Wachinger, C., Reuter, M., Klein, T.: DeepNAT: Deep convolutional neural network for segmenting neuroanatomy. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib29.1.1">170</span>, 434–445 (2018)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib30">
+<span class="ltx_tag ltx_tag_bibitem">[30]</span>
+<span class="ltx_bibblock">
+Wiegell, M.R., Tuch, D.S., Larsson, H.B., Wedeen, V.J.: Automatic segmentation of thalamic nuclei from diffusion tensor magnetic resonance imaging. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib30.1.1">19</span>(2), 391–401 (2003)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib31">
+<span class="ltx_tag ltx_tag_bibitem">[31]</span>
+<span class="ltx_bibblock">
+Woolrich, M.W., et al.: Temporal autocorrelation in univariate linear modeling of FMRI data. NeuroImage <span class="ltx_text ltx_font_bold" id="bib.bib31.1.1">14</span>(6), 1370–1386 (2001)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib32">
+<span class="ltx_tag ltx_tag_bibitem">[32]</span>
+<span class="ltx_bibblock">
+Yan, C., et al.: Segmenting thalamic nuclei from manifold projections of multi-contrast MRI. In: Proceedings of SPIE Medical Imaging (SPIE-MI 2023), San Diego, CA, February 19 – 23, 2023. vol. 12464, pp. 727–734 (2023)
+
+</span>
+</li>
+<li class="ltx_bibitem" id="bib.bib33">
+<span class="ltx_tag ltx_tag_bibitem">[33]</span>
+<span class="ltx_bibblock">
+Ziyan, U., Tuch, D., Westin, C.F.: Segmentation of thalamic nuclei from DTI using spectral clustering. In: Medical Image Computing and Computer-Assisted Intervention–MICCAI 2006: 9th International Conference, Copenhagen, Denmark, October 1-6, 2006. Proceedings, Part II 9. pp. 807–814. Springer (2006)
+
+</span>
+</li>
+</ul>
+</section>
+</article>
+</div>
+<footer class="ltx_page_footer">
+<div class="ltx_page_logo">Generated  on Tue Sep 10 22:37:27 2024 by <a class="ltx_LaTeXML_logo" href="http://dlmf.nist.gov/LaTeXML/"><span style="letter-spacing:-0.2em; margin-right:0.1em;">L<span class="ltx_font_smallcaps" style="position:relative; bottom:2.2pt;">a</span>T<span class="ltx_font_smallcaps" style="font-size:120%;position:relative; bottom:-0.2ex;">e</span></span><span style="font-size:90%; position:relative; bottom:-0.2ex;">XML</span><img alt="Mascot Sammy" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAsAAAAOCAYAAAD5YeaVAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9wKExQZLWTEaOUAAAAddEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIFRoZSBHSU1Q72QlbgAAAdpJREFUKM9tkL+L2nAARz9fPZNCKFapUn8kyI0e4iRHSR1Kb8ng0lJw6FYHFwv2LwhOpcWxTjeUunYqOmqd6hEoRDhtDWdA8ApRYsSUCDHNt5ul13vz4w0vWCgUnnEc975arX6ORqN3VqtVZbfbTQC4uEHANM3jSqXymFI6yWazP2KxWAXAL9zCUa1Wy2tXVxheKA9YNoR8Pt+aTqe4FVVVvz05O6MBhqUIBGk8Hn8HAOVy+T+XLJfLS4ZhTiRJgqIoVBRFIoric47jPnmeB1mW/9rr9ZpSSn3Lsmir1fJZlqWlUonKsvwWwD8ymc/nXwVBeLjf7xEKhdBut9Hr9WgmkyGEkJwsy5eHG5vN5g0AKIoCAEgkEkin0wQAfN9/cXPdheu6P33fBwB4ngcAcByHJpPJl+fn54mD3Gg0NrquXxeLRQAAwzAYj8cwTZPwPH9/sVg8PXweDAauqqr2cDjEer1GJBLBZDJBs9mE4zjwfZ85lAGg2+06hmGgXq+j3+/DsixYlgVN03a9Xu8jgCNCyIegIAgx13Vfd7vdu+FweG8YRkjXdWy329+dTgeSJD3ieZ7RNO0VAXAPwDEAO5VKndi2fWrb9jWl9Esul6PZbDY9Go1OZ7PZ9z/lyuD3OozU2wAAAABJRU5ErkJggg=="/></a>
+</div></footer>
+</div>
+</body>
+</html>

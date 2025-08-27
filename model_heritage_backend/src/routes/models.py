@@ -12,7 +12,7 @@ from src.services.sync_service import sync_service
 models_bp = Blueprint('models', __name__)
 
 UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth'}
+ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth', 'html'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS

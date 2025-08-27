@@ -102,7 +102,7 @@ export default function AddModelPage() {
         <CardHeader>
           <CardTitle>Model Upload</CardTitle>
           <CardDescription>
-            Supported formats: .safetensors, .pt, .bin, .pth
+            Supported formats: .safetensors, .pt, .bin, .pth, 
           </CardDescription>
         </CardHeader>
         
@@ -115,7 +115,7 @@ export default function AddModelPage() {
                 <input
                   id="file"
                   type="file"
-                  accept=".safetensors,.pt,.bin,.pth"
+                  accept=".safetensors,.pt,.bin,.pth,.html"
                   onChange={handleFileChange}
                   className="hidden"
                 />
