@@ -9,3 +9,5 @@ model_heritage_frontend/dist
 model_heritage_backend/src/__pycache__
 model_heritage_backend/src/*/__pycache__
 model_heritage_backend/src/database/app.db
+
+node_modules
