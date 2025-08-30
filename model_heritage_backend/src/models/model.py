@@ -10,6 +10,13 @@ class Model(db.Model):
     description = db.Column(db.Text)
     file_path = db.Column(db.String(500), nullable=False)
     checksum = db.Column(db.String(64), nullable=False)  # SHA-256
+
+    # NEW: URI (o path relativo) dei pesi salvati
+    weights_uri = db.Column(db.String(500), nullable=True)  # es: "weights/<modelid>_nome.ext"
+    # (Opzionali futuri – se/quando vorrai aggiungerli, decommenta)
+    # weights_format = db.Column(db.String(16))
+    # weights_size_bytes = db.Column(db.BigInteger)
+    # weights_hash = db.Column(db.String(71))  # es: "sha256:<hex>"
     
     # Weight signature fields
     total_parameters = db.Column(db.Integer)
@@ -37,10 +44,14 @@ class Model(db.Model):
             'total_parameters': self.total_parameters,
             'layer_count': self.layer_count,
             'structural_hash': self.structural_hash,
+            # 'weights_format': self.weights_format if hasattr(self, 'weights_format') else None,
+            # 'weights_size_bytes': self.weights_size_bytes if hasattr(self, 'weights_size_bytes') else None,
+            # 'weights_hash': self.weights_hash if hasattr(self, 'weights_hash') else None,
             'family_id': self.family_id,
             'parent_id': self.parent_id,
             'confidence_score': self.confidence_score,
             'status': self.status,
+            'weights_uri': self.weights_uri,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'processed_at': self.processed_at.isoformat() if self.processed_at else None
         }

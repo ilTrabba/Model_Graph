@@ -96,7 +96,8 @@ class Neo4jService:
                     m.structural_hash = $structural_hash,
                     m.status = $status,
                     m.color = $color,
-                    m.family_id = $family_id
+                    m.family_id = $family_id,
+                    m.weights_uri=$weights_uri
                 RETURN m
                 """
                 
@@ -114,7 +115,8 @@ class Neo4jService:
                     'structural_hash': model_data.get('structural_hash', ''),
                     'status': model_data.get('status', 'processing'),
                     'color': family_color,
-                    'family_id': model_data.get('family_id')
+                    'family_id': model_data.get('family_id'),
+                    'weights_uri': model_data.get('weights_uri')
                 })
                 
             return True

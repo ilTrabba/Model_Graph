@@ -11,7 +11,7 @@ from src.services.sync_service import sync_service
 
 models_bp = Blueprint('models', __name__)
 
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = 'weights'
 ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth', 'html'}
 
 def allowed_file(filename):
@@ -70,7 +70,20 @@ def assign_to_family_stub(signature):
     return family_id
 
 def find_parent_stub(model, family_id):
-    """Stub implementation for parent finding within family"""
+    """Find parent model using MoTHer algorithm with fallback to parameter similarity"""
+    try:
+        # Import here to avoid circular imports and handle missing dependencies gracefully
+        from src.algorithms.mother_algorithm import find_model_parent_mother
+        return find_model_parent_mother(model, family_id)
+    except ImportError as e:
+        current_app.logger.warning(f"MoTHer dependencies not available, using fallback: {e}")
+        return _fallback_parameter_similarity(model, family_id)
+    except Exception as e:
+        current_app.logger.error(f"MoTHer algorithm failed, using fallback: {e}")
+        return _fallback_parameter_similarity(model, family_id)
+
+def _fallback_parameter_similarity(model, family_id):
+    """Fallback implementation using parameter count similarity"""
     # Simple heuristic: find model in same family with similar parameter count
     family_models = Model.query.filter_by(family_id=family_id, status='ok').all()
     
@@ -162,7 +175,7 @@ def upload_model():
         
         # Extract weight signature
         signature = extract_weight_signature_stub(file_path)
-        
+
         # Create model record
         model = Model(
             id=model_id,
@@ -173,7 +186,8 @@ def upload_model():
             total_parameters=signature['total_parameters'],
             layer_count=signature['layer_count'],
             structural_hash=signature['structural_hash'],
-            status='processing'
+            status='processing',
+            weights_uri='weights/'+filename
         )
         
         db.session.add(model)
