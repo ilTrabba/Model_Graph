@@ -11,7 +11,7 @@ from src.services.sync_service import sync_service
 
 models_bp = Blueprint('models', __name__)
 
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = 'weights'
 ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth', 'html'}
 
 def allowed_file(filename):
@@ -175,7 +175,7 @@ def upload_model():
         
         # Extract weight signature
         signature = extract_weight_signature_stub(file_path)
-        
+
         # Create model record
         model = Model(
             id=model_id,
@@ -186,7 +186,8 @@ def upload_model():
             total_parameters=signature['total_parameters'],
             layer_count=signature['layer_count'],
             structural_hash=signature['structural_hash'],
-            status='processing'
+            status='processing',
+            weights_uri='weights/'+filename
         )
         
         db.session.add(model)
