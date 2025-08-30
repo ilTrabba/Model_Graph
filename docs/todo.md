@@ -8,5 +8,5 @@
 7. login sulla piattaforma (al momento solo admin)
 8. eliminazione di un modello dal sistema (MoTher rilanciato sulla famiglia, tranne se elimino una foglia)
 9. filtro/i sulla ricerca (alfabetica, task?{inserire task nella form}, ecc).
-
+10. aggiunta campi nella form
 
