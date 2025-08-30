@@ -70,7 +70,20 @@ def assign_to_family_stub(signature):
     return family_id
 
 def find_parent_stub(model, family_id):
-    """Stub implementation for parent finding within family"""
+    """Find parent model using MoTHer algorithm with fallback to parameter similarity"""
+    try:
+        # Import here to avoid circular imports and handle missing dependencies gracefully
+        from src.algorithms.mother_algorithm import find_model_parent_mother
+        return find_model_parent_mother(model, family_id)
+    except ImportError as e:
+        current_app.logger.warning(f"MoTHer dependencies not available, using fallback: {e}")
+        return _fallback_parameter_similarity(model, family_id)
+    except Exception as e:
+        current_app.logger.error(f"MoTHer algorithm failed, using fallback: {e}")
+        return _fallback_parameter_similarity(model, family_id)
+
+def _fallback_parameter_similarity(model, family_id):
+    """Fallback implementation using parameter count similarity"""
     # Simple heuristic: find model in same family with similar parameter count
     family_models = Model.query.filter_by(family_id=family_id, status='ok').all()
     
