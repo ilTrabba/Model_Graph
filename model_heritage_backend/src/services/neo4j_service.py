@@ -773,10 +773,10 @@ class Neo4jService:
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
-                MATCH (m:Model)
+                OPTIONAL MATCH (m:Model)
                 WITH count(m) as total_models, 
                      sum(CASE WHEN m.status = 'processing' THEN 1 ELSE 0 END) as processing_models
-                MATCH (f:Family)
+                OPTIONAL MATCH (f:Family)
                 RETURN total_models, count(f) as total_families, processing_models
                 """
                 

@@ -7,7 +7,6 @@ export default function GraphPage() {
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchGraphStatus = async () => {
@@ -44,36 +43,6 @@ export default function GraphPage() {
     }
   };
 
-  const syncGraphData = async () => {
-    setSyncing(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/graph/sync`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ clear_existing: false })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        alert(`Sync successful: ${data.message}`);
-        fetchGraphData();
-        fetchGraphStatus();
-      } else {
-        setError(data.error || 'Sync failed');
-      }
-    } catch (err) {
-      console.error('Failed to sync graph data:', err);
-      setError('Failed to sync graph data');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   useEffect(() => {
     fetchGraphStatus();
     fetchGraphData();
@@ -103,8 +72,8 @@ export default function GraphPage() {
             </div>
           </div>
           <div>
-            <div className="font-medium text-gray-600">SQLite Models</div>
-            <div className="text-gray-900">{status.sqlite_models || 0}</div>
+            <div className="font-medium text-gray-600">Total Models</div>
+            <div className="text-gray-900">{status.total_models || 0}</div>
           </div>
           <div>
             <div className="font-medium text-gray-600">Graph Nodes</div>
@@ -130,15 +99,6 @@ export default function GraphPage() {
         >
           {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
           Refresh Graph
-        </button>
-        
-        <button
-          onClick={syncGraphData}
-          disabled={syncing || !status?.neo4j_connected}
-          className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-        >
-          {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-          Sync Data
         </button>
       </div>
       
@@ -180,7 +140,7 @@ export default function GraphPage() {
         <div className="text-center py-12 text-gray-500">
           <Network className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <p>No graph data available</p>
-          <p className="text-sm mt-2">Try syncing data from SQLite to Neo4j</p>
+          <p className="text-sm mt-2">Upload some models to see the graph visualization</p>
         </div>
       ) : (
         <div className="space-y-4">
