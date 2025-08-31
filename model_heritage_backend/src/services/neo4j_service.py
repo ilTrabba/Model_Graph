@@ -403,6 +403,455 @@ class Neo4jService:
             logger.error(f"Failed to get family subgraph: {e}")
             return {'nodes': [], 'edges': [], 'error': str(e)}
 
+    # ===========================================
+    # CRUD Operations for Model-only Architecture
+    # ===========================================
+    
+    def create_model(self, model_data: Dict[str, Any]) -> bool:
+        """Create a new Model node with all required properties"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                CREATE (m:Model {
+                    id: $id,
+                    name: $name,
+                    description: $description,
+                    file_path: $file_path,
+                    checksum: $checksum,
+                    weights_uri: $weights_uri,
+                    total_parameters: $total_parameters,
+                    layer_count: $layer_count,
+                    structural_hash: $structural_hash,
+                    family_id: $family_id,
+                    parent_id: $parent_id,
+                    confidence_score: $confidence_score,
+                    status: $status,
+                    created_at: $created_at,
+                    processed_at: $processed_at,
+                    weights_size_MB: $weights_size_MB,
+                    embedding: $embedding,
+                    color: $color
+                })
+                RETURN m
+                """
+                
+                # Calculate file size in MB (rough estimate)
+                weights_size_mb = (model_data.get('total_parameters', 0) * 4) / (1024 * 1024)
+                
+                session.run(query, {
+                    'id': model_data['id'],
+                    'name': model_data['name'],
+                    'description': model_data.get('description', ''),
+                    'file_path': model_data['file_path'],
+                    'checksum': model_data['checksum'],
+                    'weights_uri': model_data.get('weights_uri', ''),
+                    'total_parameters': model_data.get('total_parameters', 0),
+                    'layer_count': model_data.get('layer_count', 0),
+                    'structural_hash': model_data.get('structural_hash', ''),
+                    'family_id': model_data.get('family_id'),
+                    'parent_id': model_data.get('parent_id'),
+                    'confidence_score': model_data.get('confidence_score'),
+                    'status': model_data.get('status', 'processing'),
+                    'created_at': model_data.get('created_at', ''),
+                    'processed_at': model_data.get('processed_at'),
+                    'weights_size_MB': weights_size_mb,
+                    'embedding': [0.0],  # Placeholder
+                    'color': model_data.get('color', 'gray')
+                })
+                
+                # Create relationships if family_id is provided
+                if model_data.get('family_id'):
+                    self.create_belongs_to_relationship(model_data['id'], model_data['family_id'])
+                
+                # Create parent-child relationship if parent_id is provided
+                if model_data.get('parent_id'):
+                    self.create_parent_child_relationship(
+                        model_data['parent_id'], 
+                        model_data['id'], 
+                        model_data.get('confidence_score', 0.0)
+                    )
+                
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create model: {e}")
+            return False
+    
+    def get_model_by_id(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """Get a model by its ID"""
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model {id: $model_id})
+                RETURN properties(m) as model
+                """
+                
+                result = session.run(query, {'model_id': model_id})
+                record = result.single()
+                
+                if record:
+                    return dict(record['model'])
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get model {model_id}: {e}")
+            return None
+    
+    def get_model_by_checksum(self, checksum: str) -> Optional[Dict[str, Any]]:
+        """Get a model by its checksum (for duplicate detection)"""
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model {checksum: $checksum})
+                RETURN properties(m) as model
+                """
+                
+                result = session.run(query, {'checksum': checksum})
+                record = result.single()
+                
+                if record:
+                    return dict(record['model'])
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get model by checksum: {e}")
+            return None
+    
+    def update_model(self, model_id: str, updates: Dict[str, Any]) -> bool:
+        """Update a model with the provided data"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                # Build dynamic SET clause
+                set_clauses = []
+                params = {'model_id': model_id}
+                
+                for key, value in updates.items():
+                    if key != 'id':  # Don't allow ID updates
+                        set_clauses.append(f"m.{key} = ${key}")
+                        params[key] = value
+                
+                if not set_clauses:
+                    return True  # Nothing to update
+                
+                query = f"""
+                MATCH (m:Model {{id: $model_id}})
+                SET {', '.join(set_clauses)}
+                RETURN m
+                """
+                
+                result = session.run(query, params)
+                return result.single() is not None
+                
+        except Exception as e:
+            logger.error(f"Failed to update model {model_id}: {e}")
+            return False
+    
+    def delete_model(self, model_id: str) -> bool:
+        """Delete a model and all its relationships"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model {id: $model_id})
+                DETACH DELETE m
+                """
+                
+                session.run(query, {'model_id': model_id})
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to delete model {model_id}: {e}")
+            return False
+    
+    def get_all_models(self, search: str = None) -> List[Dict[str, Any]]:
+        """Get all models with optional search filter"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                if search:
+                    query = """
+                    MATCH (m:Model)
+                    WHERE toLower(m.name) CONTAINS toLower($search)
+                    RETURN properties(m) as model
+                    ORDER BY m.name
+                    """
+                    params = {'search': search}
+                else:
+                    query = """
+                    MATCH (m:Model)
+                    RETURN properties(m) as model
+                    ORDER BY m.name
+                    """
+                    params = {}
+                
+                result = session.run(query, params)
+                return [dict(record['model']) for record in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get models: {e}")
+            return []
+    
+    def get_model_lineage(self, model_id: str) -> Dict[str, Any]:
+        """Get parent and children for a model"""
+        if not self.driver:
+            return {'parent': None, 'children': []}
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model {id: $model_id})
+                OPTIONAL MATCH (m)-[:IS_CHILD_OF]->(parent:Model)
+                OPTIONAL MATCH (child:Model)-[:IS_CHILD_OF]->(m)
+                RETURN 
+                    properties(parent) as parent,
+                    collect(properties(child)) as children
+                """
+                
+                result = session.run(query, {'model_id': model_id})
+                record = result.single()
+                
+                if record:
+                    return {
+                        'parent': dict(record['parent']) if record['parent'] else None,
+                        'children': [dict(child) for child in record['children'] if child]
+                    }
+                return {'parent': None, 'children': []}
+                
+        except Exception as e:
+            logger.error(f"Failed to get model lineage: {e}")
+            return {'parent': None, 'children': []}
+    
+    def create_family(self, family_data: Dict[str, Any]) -> bool:
+        """Create a new Family node"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                CREATE (f:Family {
+                    id: $id,
+                    structural_pattern_hash: $structural_pattern_hash,
+                    member_count: $member_count,
+                    avg_intra_distance: $avg_intra_distance,
+                    created_at: $created_at,
+                    updated_at: $updated_at,
+                    color: 'black'
+                })
+                RETURN f
+                """
+                
+                session.run(query, {
+                    'id': family_data['id'],
+                    'structural_pattern_hash': family_data.get('structural_pattern_hash', ''),
+                    'member_count': family_data.get('member_count', 0),
+                    'avg_intra_distance': family_data.get('avg_intra_distance'),
+                    'created_at': family_data.get('created_at', ''),
+                    'updated_at': family_data.get('updated_at', '')
+                })
+                
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create family: {e}")
+            return False
+    
+    def get_family_by_id(self, family_id: str) -> Optional[Dict[str, Any]]:
+        """Get a family by its ID"""
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (f:Family {id: $family_id})
+                RETURN properties(f) as family
+                """
+                
+                result = session.run(query, {'family_id': family_id})
+                record = result.single()
+                
+                if record:
+                    return dict(record['family'])
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get family {family_id}: {e}")
+            return None
+    
+    def get_all_families(self) -> List[Dict[str, Any]]:
+        """Get all families"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (f:Family)
+                RETURN properties(f) as family
+                ORDER BY f.created_at DESC
+                """
+                
+                result = session.run(query)
+                return [dict(record['family']) for record in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get families: {e}")
+            return []
+    
+    def update_family(self, family_id: str, updates: Dict[str, Any]) -> bool:
+        """Update a family with the provided data"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                # Build dynamic SET clause
+                set_clauses = []
+                params = {'family_id': family_id}
+                
+                for key, value in updates.items():
+                    if key != 'id':  # Don't allow ID updates
+                        set_clauses.append(f"f.{key} = ${key}")
+                        params[key] = value
+                
+                if not set_clauses:
+                    return True  # Nothing to update
+                
+                query = f"""
+                MATCH (f:Family {{id: $family_id}})
+                SET {', '.join(set_clauses)}
+                RETURN f
+                """
+                
+                result = session.run(query, params)
+                return result.single() is not None
+                
+        except Exception as e:
+            logger.error(f"Failed to update family {family_id}: {e}")
+            return False
+    
+    def get_family_models(self, family_id: str) -> List[Dict[str, Any]]:
+        """Get all models in a family"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model)-[:BELONGS_TO]->(f:Family {id: $family_id})
+                RETURN properties(m) as model
+                ORDER BY m.created_at
+                """
+                
+                result = session.run(query, {'family_id': family_id})
+                return [dict(record['model']) for record in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get family models: {e}")
+            return []
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get system statistics"""
+        if not self.driver:
+            return {'total_models': 0, 'total_families': 0, 'processing_models': 0}
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model)
+                WITH count(m) as total_models, 
+                     sum(CASE WHEN m.status = 'processing' THEN 1 ELSE 0 END) as processing_models
+                MATCH (f:Family)
+                RETURN total_models, count(f) as total_families, processing_models
+                """
+                
+                result = session.run(query)
+                record = result.single()
+                
+                if record:
+                    return {
+                        'total_models': record['total_models'] or 0,
+                        'total_families': record['total_families'] or 0,
+                        'processing_models': record['processing_models'] or 0
+                    }
+                return {'total_models': 0, 'total_families': 0, 'processing_models': 0}
+                
+        except Exception as e:
+            logger.error(f"Failed to get stats: {e}")
+            return {'total_models': 0, 'total_families': 0, 'processing_models': 0}
+    
+    def get_models_by_family_and_status(self, family_id: str, status: str) -> List[Dict[str, Any]]:
+        """Get models by family ID and status (for similarity matching)"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model)
+                WHERE m.family_id = $family_id AND m.status = $status
+                RETURN properties(m) as model
+                """
+                
+                result = session.run(query, {'family_id': family_id, 'status': status})
+                return [dict(record['model']) for record in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get models by family and status: {e}")
+            return []
+    
+    def get_graph_status(self) -> Dict[str, Any]:
+        """Get graph database status with node and edge counts"""
+        if not self.driver:
+            return {
+                'neo4j_connected': False,
+                'neo4j_nodes': 0,
+                'neo4j_edges': 0,
+                'error': 'Neo4j not connected'
+            }
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                # Get node count
+                nodes_query = "MATCH (n) RETURN count(n) as node_count"
+                nodes_result = session.run(nodes_query)
+                node_count = nodes_result.single()['node_count']
+                
+                # Get edge count
+                edges_query = "MATCH ()-[r]->() RETURN count(r) as edge_count"
+                edges_result = session.run(edges_query)
+                edge_count = edges_result.single()['edge_count']
+                
+                return {
+                    'neo4j_connected': True,
+                    'neo4j_nodes': node_count,
+                    'neo4j_edges': edge_count
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get graph status: {e}")
+            return {
+                'neo4j_connected': False,
+                'neo4j_nodes': 0,
+                'neo4j_edges': 0,
+                'error': str(e)
+            }
+
 
 # Global instance
 neo4j_service = Neo4jService()
