@@ -42,8 +42,39 @@ def extract_weight_signature_stub(file_path):
     
     return signature
 
-def assign_to_family_stub(signature):
-    """Stub implementation for family assignment"""
+def assign_to_family_and_find_parent(model):
+    """Use the new clustering system for family assignment and parent finding"""
+    try:
+        # Import clustering system (with graceful fallback if dependencies missing)
+        from src.clustering.model_management import ModelManagementSystem
+        
+        # Initialize the management system
+        mgmt_system = ModelManagementSystem()
+        
+        # Process the model through the complete pipeline
+        result = mgmt_system.process_new_model(model)
+        
+        if result.get('status') == 'success':
+            return result.get('family_id'), result.get('parent_id'), result.get('parent_confidence', 0.0)
+        else:
+            current_app.logger.error(f"Clustering system failed: {result.get('error')}")
+            # Fallback to stub implementation
+            return _fallback_family_assignment(model)
+            
+    except ImportError as e:
+        current_app.logger.warning(f"Clustering system not available, using fallback: {e}")
+        return _fallback_family_assignment(model)
+    except Exception as e:
+        current_app.logger.error(f"Clustering system failed, using fallback: {e}")
+        return _fallback_family_assignment(model)
+
+def _fallback_family_assignment(model):
+    """Fallback family assignment using simple parameter-based rules"""
+    signature = {
+        'total_parameters': model.total_parameters,
+        'structural_hash': model.structural_hash
+    }
+    
     # Simple family assignment based on parameter count ranges
     param_count = signature['total_parameters']
     
@@ -67,20 +98,15 @@ def assign_to_family_stub(signature):
     family.member_count += 1
     family.updated_at = datetime.utcnow()
     
-    return family_id
-
-def find_parent_stub(model, family_id):
-    """Find parent model using MoTHer algorithm with fallback to parameter similarity"""
+    # Try to find parent using original MoTHer algorithm
     try:
-        # Import here to avoid circular imports and handle missing dependencies gracefully
         from src.algorithms.mother_algorithm import find_model_parent_mother
-        return find_model_parent_mother(model, family_id)
-    except ImportError as e:
-        current_app.logger.warning(f"MoTHer dependencies not available, using fallback: {e}")
-        return _fallback_parameter_similarity(model, family_id)
+        parent_id, confidence = find_model_parent_mother(model, family_id)
+        return family_id, parent_id, confidence
     except Exception as e:
-        current_app.logger.error(f"MoTHer algorithm failed, using fallback: {e}")
-        return _fallback_parameter_similarity(model, family_id)
+        current_app.logger.error(f"MoTHer algorithm failed: {e}")
+        parent_id, confidence = _fallback_parameter_similarity(model, family_id)
+        return family_id, parent_id, confidence
 
 def _fallback_parameter_similarity(model, family_id):
     """Fallback implementation using parameter count similarity"""
@@ -193,19 +219,19 @@ def upload_model():
         db.session.add(model)
         db.session.commit()
         
-        # Assign to family
-        family_id = assign_to_family_stub(signature)
-        model.family_id = family_id
+        # Use new clustering system for family assignment and parent finding
+        family_id, parent_id, confidence = assign_to_family_and_find_parent(model)
         
-        # Find parent
-        parent_id, confidence = find_parent_stub(model, family_id)
+        # Update model with results
+        model.family_id = family_id
         if parent_id:
             model.parent_id = parent_id
             model.confidence_score = confidence
         
-        # Mark as processed
-        model.status = 'ok'
-        model.processed_at = datetime.utcnow()
+        # Mark as processed (clustering system may have already done this)
+        if model.status != 'ok':
+            model.status = 'ok'
+            model.processed_at = datetime.utcnow()
         
         db.session.commit()
         
@@ -269,4 +295,148 @@ def get_stats():
         'total_families': total_families,
         'processing_models': processing_models
     })
+
+# New clustering API endpoints
+
+@models_bp.route('/clustering/recluster', methods=['POST'])
+def recluster_all():
+    """Perform complete reclustering of all models"""
+    try:
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.recluster_all_models()
+        
+        if result.get('status') == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': 'Reclustering completed successfully',
+                'families_created': result.get('families_created', 0),
+                'trees_rebuilt': result.get('trees_rebuilt', 0),
+                'total_updates': result.get('total_relationship_updates', 0)
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'error': result.get('error', 'Unknown error during reclustering')
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Reclustering failed: {e}")
+        return jsonify({'error': f'Reclustering failed: {str(e)}'}), 500
+
+@models_bp.route('/families/<family_id>/tree/rebuild', methods=['POST'])
+def rebuild_family_tree(family_id):
+    """Rebuild genealogical tree for a specific family"""
+    try:
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.rebuild_family_tree(family_id)
+        
+        if result.get('status') == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': f'Tree rebuilt for family {family_id}',
+                'models_updated': result.get('models_updated', 0),
+                'tree_valid': result.get('tree_valid', False),
+                'tree_statistics': result.get('tree_statistics', {})
+            })
+        elif result.get('status') == 'skipped':
+            return jsonify({
+                'status': 'skipped',
+                'message': result.get('reason', 'Tree rebuild skipped')
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'error': result.get('error', 'Unknown error during tree rebuild')
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Tree rebuild failed for family {family_id}: {e}")
+        return jsonify({'error': f'Tree rebuild failed: {str(e)}'}), 500
+
+@models_bp.route('/families/<family_id>/genealogy', methods=['GET'])
+def get_family_genealogy(family_id):
+    """Get complete genealogy information for a family"""
+    try:
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.get_family_genealogy(family_id)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 404
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Failed to get genealogy for family {family_id}: {e}")
+        return jsonify({'error': f'Failed to get genealogy: {str(e)}'}), 500
+
+@models_bp.route('/models/<model_id>/lineage', methods=['GET'])
+def get_model_lineage(model_id):
+    """Get complete lineage information for a specific model"""
+    try:
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.get_model_lineage(model_id)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 404
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Failed to get lineage for model {model_id}: {e}")
+        return jsonify({'error': f'Failed to get lineage: {str(e)}'}), 500
+
+@models_bp.route('/clustering/statistics', methods=['GET'])
+def get_clustering_statistics():
+    """Get comprehensive clustering system statistics"""
+    try:
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.get_system_statistics()
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Failed to get clustering statistics: {e}")
+        return jsonify({'error': f'Failed to get statistics: {str(e)}'}), 500
+
+@models_bp.route('/models/<model_id>/reprocess', methods=['POST'])
+def reprocess_model(model_id):
+    """Reprocess a model through the clustering pipeline"""
+    try:
+        model = Model.query.get_or_404(model_id)
+        
+        from src.clustering.model_management import ModelManagementSystem
+        
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.process_new_model(model)
+        
+        if result.get('status') == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': f'Model {model_id} reprocessed successfully',
+                'family_id': result.get('family_id'),
+                'parent_id': result.get('parent_id'),
+                'confidence': result.get('parent_confidence', 0.0)
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'error': result.get('error', 'Unknown error during reprocessing')
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Reprocessing failed for model {model_id}: {e}")
+        return jsonify({'error': f'Reprocessing failed: {str(e)}'}), 500
 
