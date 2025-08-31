@@ -6,8 +6,8 @@ import uuid
 from datetime import datetime
 import json
 
-from src.models.model import db, Model, Family
-from src.services.sync_service import sync_service
+from src.models.model import Model, Family, ModelProxy, FamilyProxy
+from src.services.neo4j_service import neo4j_service
 
 models_bp = Blueprint('models', __name__)
 
@@ -71,8 +71,8 @@ def assign_to_family_and_find_parent(model):
 def _fallback_family_assignment(model):
     """Fallback family assignment using simple parameter-based rules"""
     signature = {
-        'total_parameters': model.total_parameters,
-        'structural_hash': model.structural_hash
+        'total_parameters': model.get('total_parameters', 0),
+        'structural_hash': model.get('structural_hash', '')
     }
     
     # Simple family assignment based on parameter count ranges
@@ -88,15 +88,23 @@ def _fallback_family_assignment(model):
     # Check if family exists, create if not
     family = Family.query.filter_by(id=family_id).first()
     if not family:
-        family = Family(
-            id=family_id,
-            structural_pattern_hash=signature['structural_hash'],
-            member_count=0
-        )
-        db.session.add(family)
+        family_data = {
+            'id': family_id,
+            'structural_pattern_hash': signature['structural_hash'],
+            'member_count': 0,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        neo4j_service.create_family(family_data)
     
-    family.member_count += 1
-    family.updated_at = datetime.utcnow()
+    # Update family member count
+    family_data = neo4j_service.get_family_by_id(family_id)
+    if family_data:
+        member_count = family_data.get('member_count', 0) + 1
+        neo4j_service.update_family(family_id, {
+            'member_count': member_count,
+            'updated_at': datetime.utcnow().isoformat()
+        })
     
     # Try to find parent using original MoTHer algorithm
     try:
@@ -120,16 +128,18 @@ def _fallback_parameter_similarity(model, family_id):
     closest_model = None
     min_diff = float('inf')
     
+    model_params = model.get('total_parameters', 0)
+    
     for candidate in family_models:
-        if candidate.id != model.id:
-            diff = abs(candidate.total_parameters - model.total_parameters)
+        if candidate.id != model.get('id'):
+            diff = abs(candidate.total_parameters - model_params)
             if diff < min_diff:
                 min_diff = diff
                 closest_model = candidate
     
     if closest_model:
         # Mock confidence based on parameter similarity
-        max_params = max(model.total_parameters, closest_model.total_parameters)
+        max_params = max(model_params, closest_model.total_parameters)
         confidence = 1.0 - (min_diff / max_params) if max_params > 0 else 0.0
         confidence = max(0.1, min(0.9, confidence))  # Clamp between 0.1 and 0.9
         
@@ -202,63 +212,62 @@ def upload_model():
         # Extract weight signature
         signature = extract_weight_signature_stub(file_path)
 
-        # Create model record
-        model = Model(
-            id=model_id,
-            name=name,
-            description=description,
-            file_path=file_path,
-            checksum=checksum,
-            total_parameters=signature['total_parameters'],
-            layer_count=signature['layer_count'],
-            structural_hash=signature['structural_hash'],
-            status='processing',
-            weights_uri='weights/'+filename
-        )
-        
-        db.session.add(model)
-        db.session.commit()
+        # Create model data
+        model_data = {
+            'id': model_id,
+            'name': name,
+            'description': description,
+            'file_path': file_path,
+            'checksum': checksum,
+            'total_parameters': signature['total_parameters'],
+            'layer_count': signature['layer_count'],
+            'structural_hash': signature['structural_hash'],
+            'status': 'processing',
+            'weights_uri': 'weights/'+filename,
+            'created_at': datetime.utcnow().isoformat()
+        }
         
         # Use new clustering system for family assignment and parent finding
-        family_id, parent_id, confidence = assign_to_family_and_find_parent(model)
+        family_id, parent_id, confidence = assign_to_family_and_find_parent(model_data)
         
         # Update model with results
-        model.family_id = family_id
+        model_data['family_id'] = family_id
         if parent_id:
-            model.parent_id = parent_id
-            model.confidence_score = confidence
+            model_data['parent_id'] = parent_id
+            model_data['confidence_score'] = confidence
         
         # Mark as processed (clustering system may have already done this)
-        if model.status != 'ok':
-            model.status = 'ok'
-            model.processed_at = datetime.utcnow()
+        model_data['status'] = 'ok'
+        model_data['processed_at'] = datetime.utcnow().isoformat()
         
-        db.session.commit()
-        
-        # Sync to Neo4j if connected
-        try:
-            sync_service.sync_single_model(model_id)
-        except Exception as e:
-            # Log the error but don't fail the upload
-            print(f"Failed to sync model to Neo4j: {e}")
-        
-        return jsonify({
-            'model_id': model_id,
-            'status': 'ok',
-            'message': 'Model uploaded and processed successfully',
-            'model': model.to_dict()
-        }), 201
+        # Create model in Neo4j
+        if neo4j_service.create_model(model_data):
+            # Get the created model for response
+            created_model = neo4j_service.get_model_by_id(model_id)
+            model_proxy = ModelProxy(created_model) if created_model else None
+            
+            return jsonify({
+                'model_id': model_id,
+                'status': 'ok',
+                'message': 'Model uploaded and processed successfully',
+                'model': model_proxy.to_dict() if model_proxy else model_data
+            }), 201
+        else:
+            # Clean up on error
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            return jsonify({'error': 'Failed to create model in database'}), 500
         
     except Exception as e:
         # Clean up on error
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Remove model record if created
-        model = Model.query.get(model_id)
-        if model:
-            db.session.delete(model)
-            db.session.commit()
+        # Remove model from Neo4j if created
+        try:
+            neo4j_service.delete_model(model_id)
+        except:
+            pass  # Ignore cleanup errors
         
         return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
@@ -415,12 +424,14 @@ def get_clustering_statistics():
 def reprocess_model(model_id):
     """Reprocess a model through the clustering pipeline"""
     try:
-        model = Model.query.get_or_404(model_id)
+        model_data = neo4j_service.get_model_by_id(model_id)
+        if not model_data:
+            return jsonify({'error': 'Model not found'}), 404
         
         from src.clustering.model_management import ModelManagementSystem
         
         mgmt_system = ModelManagementSystem()
-        result = mgmt_system.process_new_model(model)
+        result = mgmt_system.process_new_model(model_data)
         
         if result.get('status') == 'success':
             return jsonify({
