@@ -12,7 +12,7 @@ import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
-from src.models.model import Model, Family, db
+from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
 from .tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
@@ -61,7 +61,7 @@ class ModelManagementSystem:
         
         logger.info("Initialized ModelManagementSystem with components")
     
-    def process_new_model(self, model: Model) -> Dict[str, Any]:
+    def process_new_model(self, model_proxy) -> Dict[str, Any]:
         """
         Complete processing pipeline for a new model.
         
@@ -69,54 +69,60 @@ class ModelManagementSystem:
         1. Family assignment (existing or new)
         2. Parent finding within family
         3. Tree reconstruction for family
-        4. Database updates
+        4. Neo4j updates
         
         Args:
-            model: Model to process
+            model_proxy: ModelProxy object with model data
             
         Returns:
             Dictionary with processing results
         """
         try:
-            logger.info(f"Starting complete processing for model {model.id}")
+            model_id = model_proxy.id
+            logger.info(f"Starting complete processing for model {model_id}")
             
             # Step 1: Assign to family
-            family_id, family_confidence = self.family_clustering.assign_model_to_family(model)
+            family_id, family_confidence = self.family_clustering.assign_model_to_family(model_proxy)
             
             # Update model with family assignment
-            model.family_id = family_id
-            db.session.commit()
+            neo4j_service.update_model(model_id, {'family_id': family_id})
             
-            logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
+            logger.info(f"Assigned model {model_id} to family {family_id} with confidence {family_confidence:.3f}")
             
             # Step 2: Find parent within family
-            parent_id, parent_confidence = self.find_model_parent(model, family_id)
+            parent_id, parent_confidence = self.find_model_parent(model_proxy, family_id)
             
             # Update model with parent assignment
             if parent_id:
-                model.parent_id = parent_id
-                model.confidence_score = parent_confidence
-                db.session.commit()
-                logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
+                updates = {
+                    'parent_id': parent_id,
+                    'confidence_score': parent_confidence
+                }
+                neo4j_service.update_model(model_id, updates)
+                # Create relationship
+                neo4j_service.create_parent_child_relationship(parent_id, model_id, parent_confidence)
+                logger.info(f"Found parent {parent_id} for model {model_id} with confidence {parent_confidence:.3f}")
             else:
-                model.parent_id = None
-                model.confidence_score = 0.0
-                db.session.commit()
-                logger.info(f"Model {model.id} assigned as root in family {family_id}")
+                neo4j_service.update_model(model_id, {
+                    'parent_id': None,
+                    'confidence_score': 0.0
+                })
+                logger.info(f"Model {model_id} assigned as root in family {family_id}")
             
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
             
             # Step 4: Mark as processed
-            model.status = 'ok'
-            model.processed_at = datetime.utcnow()
-            db.session.commit()
+            neo4j_service.update_model(model_id, {
+                'status': 'ok',
+                'processed_at': datetime.utcnow().isoformat()
+            })
             
             # Step 5: Get family tree for context
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
             
             return {
-                'model_id': model.id,
+                'model_id': model_id,
                 'family_id': family_id,
                 'family_confidence': family_confidence,
                 'parent_id': parent_id,
@@ -127,56 +133,62 @@ class ModelManagementSystem:
             }
             
         except Exception as e:
-            logger.error(f"Error processing model {model.id}: {e}")
+            logger.error(f"Error processing model {model_id}: {e}")
             
             # Mark model as error state
-            model.status = 'error'
-            model.processed_at = datetime.utcnow()
-            db.session.commit()
+            neo4j_service.update_model(model_id, {
+                'status': 'error',
+                'processed_at': datetime.utcnow().isoformat()
+            })
             
             return {
-                'model_id': model.id,
+                'model_id': model_id,
                 'status': 'error',
                 'error': str(e)
             }
     
     def find_model_parent(self, 
-                         model: Model, 
+                         model_proxy, 
                          family_id: Optional[str] = None) -> Tuple[Optional[str], float]:
         """
         Find the most likely parent for a model within its family.
         
         Args:
-            model: Model to find parent for
+            model_proxy: ModelProxy object with model data
             family_id: Family ID (will use model's family if None)
             
         Returns:
             Tuple of (parent_model_id, confidence_score)
         """
         try:
-            target_family_id = family_id or model.family_id
+            target_family_id = family_id or model_proxy.family_id
             if not target_family_id:
-                logger.warning(f"Model {model.id} has no family assigned")
+                logger.warning(f"Model {model_proxy.id} has no family assigned")
                 return None, 0.0
             
             # Get other models in the family
-            family_models = Model.query.filter(
-                Model.family_id == target_family_id,
-                Model.id != model.id,
-                Model.status == 'ok'
-            ).all()
+            family_models_data = neo4j_service.get_family_models(target_family_id)
             
-            if not family_models:
-                logger.info(f"Model {model.id} is the only model in family {target_family_id}")
+            # Filter out the current model and only keep OK status models
+            family_models_data = [
+                m for m in family_models_data 
+                if m.get('id') != model_proxy.id and m.get('status') == 'ok'
+            ]
+            
+            if not family_models_data:
+                logger.info(f"Model {model_proxy.id} is the only model in family {target_family_id}")
                 return None, 0.0
             
             # Use tree builder to find parent
-            parent_id, confidence = self.tree_builder.find_model_parent(model, family_models)
+            # Convert to proxy objects for tree builder
+            from src.models.model import ModelProxy
+            family_proxies = [ModelProxy(**m) for m in family_models_data]
+            parent_id, confidence = self.tree_builder.find_model_parent(model_proxy, family_proxies)
             
             return parent_id, confidence
             
         except Exception as e:
-            logger.error(f"Error finding parent for model {model.id}: {e}")
+            logger.error(f"Error finding parent for model {model_proxy.id}: {e}")
             return None, 0.0
     
     def rebuild_family_tree(self, family_id: str) -> Dict[str, Any]:
