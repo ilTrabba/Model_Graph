@@ -8,8 +8,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.config import Config
-from src.models.user import db
-from src.models.model import Model, Family
 from src.routes.user import user_bp
 from src.routes.models import models_bp
 from src.routes.graph import graph_bp
@@ -30,12 +28,8 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(models_bp, url_prefix='/api')
 app.register_blueprint(graph_bp, url_prefix='/api')
 
-# Initialize database
-db.init_app(app)
+# Initialize Neo4j constraints (no SQLAlchemy needed)
 with app.app_context():
-    db.create_all()
-    
-    # Initialize Neo4j constraints
     try:
         if neo4j_service.is_connected():
             neo4j_service.create_constraints()

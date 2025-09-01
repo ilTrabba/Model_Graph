@@ -6,8 +6,8 @@ import uuid
 from datetime import datetime
 import json
 
-from src.models.model import db, Model, Family
-from src.services.sync_service import sync_service
+from src.models.model import ModelProxy, FamilyProxy
+from src.services.neo4j_service import neo4j_service
 
 models_bp = Blueprint('models', __name__)
 
@@ -42,7 +42,7 @@ def extract_weight_signature_stub(file_path):
     
     return signature
 
-def assign_to_family_and_find_parent(model):
+def assign_to_family_and_find_parent(model_data):
     """Use the new clustering system for family assignment and parent finding"""
     try:
         # Import clustering system (with graceful fallback if dependencies missing)
@@ -51,33 +51,32 @@ def assign_to_family_and_find_parent(model):
         # Initialize the management system
         mgmt_system = ModelManagementSystem()
         
+        # Create a proxy object for compatibility with clustering system
+        model_proxy = ModelProxy(**model_data)
+        
         # Process the model through the complete pipeline
-        result = mgmt_system.process_new_model(model)
+        result = mgmt_system.process_new_model(model_proxy)
         
         if result.get('status') == 'success':
             return result.get('family_id'), result.get('parent_id'), result.get('parent_confidence', 0.0)
         else:
             current_app.logger.error(f"Clustering system failed: {result.get('error')}")
             # Fallback to stub implementation
-            return _fallback_family_assignment(model)
+            return _fallback_family_assignment(model_data)
             
     except ImportError as e:
         current_app.logger.warning(f"Clustering system not available, using fallback: {e}")
-        return _fallback_family_assignment(model)
+        return _fallback_family_assignment(model_data)
     except Exception as e:
         current_app.logger.error(f"Clustering system failed, using fallback: {e}")
-        return _fallback_family_assignment(model)
+        return _fallback_family_assignment(model_data)
 
-def _fallback_family_assignment(model):
+def _fallback_family_assignment(model_data):
     """Fallback family assignment using simple parameter-based rules"""
-    signature = {
-        'total_parameters': model.total_parameters,
-        'structural_hash': model.structural_hash
-    }
+    param_count = model_data.get('total_parameters', 0)
+    structural_hash = model_data.get('structural_hash', '')
     
     # Simple family assignment based on parameter count ranges
-    param_count = signature['total_parameters']
-    
     if param_count < 1000000:  # < 1M params
         family_id = "small_models"
     elif param_count < 100000000:  # < 100M params
@@ -86,54 +85,72 @@ def _fallback_family_assignment(model):
         family_id = "large_models"
     
     # Check if family exists, create if not
-    family = Family.query.filter_by(id=family_id).first()
-    if not family:
-        family = Family(
-            id=family_id,
-            structural_pattern_hash=signature['structural_hash'],
-            member_count=0
-        )
-        db.session.add(family)
+    families = neo4j_service.get_all_families()
+    family_exists = any(f.get('id') == family_id for f in families)
     
-    family.member_count += 1
-    family.updated_at = datetime.utcnow()
+    if not family_exists:
+        family_data = {
+            'id': family_id,
+            'structural_pattern_hash': structural_hash,
+            'member_count': 0,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        neo4j_service.create_family(family_data)
+    
+    # Update family member count (this is a simplified approach)
+    family_models = neo4j_service.get_family_models(family_id)
+    new_member_count = len(family_models) + 1
+    
+    family_update = {
+        'id': family_id,
+        'member_count': new_member_count,
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    neo4j_service.create_or_update_family(family_update)
     
     # Try to find parent using original MoTHer algorithm
     try:
         from src.algorithms.mother_algorithm import find_model_parent_mother
-        parent_id, confidence = find_model_parent_mother(model, family_id)
+        model_proxy = ModelProxy(**model_data)
+        parent_id, confidence = find_model_parent_mother(model_proxy, family_id)
         return family_id, parent_id, confidence
     except Exception as e:
         current_app.logger.error(f"MoTHer algorithm failed: {e}")
-        parent_id, confidence = _fallback_parameter_similarity(model, family_id)
+        parent_id, confidence = _fallback_parameter_similarity(model_data, family_id)
         return family_id, parent_id, confidence
 
-def _fallback_parameter_similarity(model, family_id):
+def _fallback_parameter_similarity(model_data, family_id):
     """Fallback implementation using parameter count similarity"""
     # Simple heuristic: find model in same family with similar parameter count
-    family_models = Model.query.filter_by(family_id=family_id, status='ok').all()
+    family_models = neo4j_service.get_family_models(family_id)
     
-    if not family_models:
+    # Filter only OK status models
+    ok_models = [m for m in family_models if m.get('status') == 'ok']
+    
+    if not ok_models:
         return None, 0.0
     
     # Find closest by parameter count
     closest_model = None
     min_diff = float('inf')
+    model_params = model_data.get('total_parameters', 0)
     
-    for candidate in family_models:
-        if candidate.id != model.id:
-            diff = abs(candidate.total_parameters - model.total_parameters)
+    for candidate in ok_models:
+        if candidate.get('id') != model_data.get('id'):
+            candidate_params = candidate.get('total_parameters', 0)
+            diff = abs(candidate_params - model_params)
             if diff < min_diff:
                 min_diff = diff
                 closest_model = candidate
     
     if closest_model:
         # Mock confidence based on parameter similarity
-        max_params = max(model.total_parameters, closest_model.total_parameters)
+        max_params = max(model_params, closest_model.get('total_parameters', 0))
         confidence = 1.0 - (min_diff / max_params) if max_params > 0 else 0.0
         confidence = max(0.1, min(0.9, confidence))  # Clamp between 0.1 and 0.9
         
-        return closest_model.id, confidence
+        return closest_model.get('id'), confidence
     
     return None, 0.0
 
@@ -142,24 +159,24 @@ def list_models():
     """List all models with optional search"""
     search = request.args.get('search', '').strip()
     
-    query = Model.query
-    if search:
-        query = query.filter(Model.name.contains(search))
-    
-    models = query.order_by(Model.name).all()
+    models_data = neo4j_service.get_all_models(search=search or None)
+    models_data.sort(key=lambda m: (m.get('name') or '').lower())
     
     return jsonify({
-        'models': [model.to_dict() for model in models],
-        'total': len(models)
+        'models': models_data,
+        'total': len(models_data)
     })
 
 @models_bp.route('/models/<model_id>', methods=['GET'])
 def get_model(model_id):
     """Get specific model with lineage"""
-    model = Model.query.get_or_404(model_id)
+    model_data = neo4j_service.get_model_by_id(model_id)
+    if not model_data:
+        return jsonify({'error': 'Model not found'}), 404
     
-    model_data = model.to_dict()
-    model_data['lineage'] = model.get_lineage()
+    # Get lineage
+    lineage = neo4j_service.get_model_lineage(model_id)
+    model_data['lineage'] = lineage
     
     return jsonify(model_data)
 
@@ -194,59 +211,67 @@ def upload_model():
         checksum = calculate_file_checksum(file_path)
         
         # Check for duplicate
-        existing = Model.query.filter_by(checksum=checksum).first()
+        existing = neo4j_service.get_model_by_checksum(checksum)
         if existing:
             os.remove(file_path)  # Clean up duplicate file
-            return jsonify({'error': 'Model already exists', 'existing_id': existing.id}), 409
+            return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
         # Extract weight signature
         signature = extract_weight_signature_stub(file_path)
 
         # Create model record
-        model = Model(
-            id=model_id,
-            name=name,
-            description=description,
-            file_path=file_path,
-            checksum=checksum,
-            total_parameters=signature['total_parameters'],
-            layer_count=signature['layer_count'],
-            structural_hash=signature['structural_hash'],
-            status='processing',
-            weights_uri='weights/'+filename
-        )
+        model_data = {
+            'id': model_id,
+            'name': name,
+            'description': description,
+            'file_path': file_path,
+            'checksum': checksum,
+            'total_parameters': signature['total_parameters'],
+            'layer_count': signature['layer_count'],
+            'structural_hash': signature['structural_hash'],
+            'status': 'processing',
+            'weights_uri': 'weights/' + filename,
+            'created_at': datetime.utcnow().isoformat()
+        }
         
-        db.session.add(model)
-        db.session.commit()
+        # Save to Neo4j
+        if not neo4j_service.upsert_model(model_data):
+            raise Exception("Failed to save model to Neo4j")
         
         # Use new clustering system for family assignment and parent finding
-        family_id, parent_id, confidence = assign_to_family_and_find_parent(model)
+        family_id, parent_id, confidence = assign_to_family_and_find_parent(model_data)
         
         # Update model with results
-        model.family_id = family_id
+        model_updates = {
+            'family_id': family_id,
+            'status': 'ok',
+            'processed_at': datetime.utcnow().isoformat()
+        }
+        
         if parent_id:
-            model.parent_id = parent_id
-            model.confidence_score = confidence
+            model_updates['parent_id'] = parent_id
+            model_updates['confidence_score'] = confidence
         
-        # Mark as processed (clustering system may have already done this)
-        if model.status != 'ok':
-            model.status = 'ok'
-            model.processed_at = datetime.utcnow()
+        # Update the model in Neo4j
+        if not neo4j_service.update_model(model_id, model_updates):
+            raise Exception("Failed to update model in Neo4j")
         
-        db.session.commit()
+        # Create family relationship if family was assigned
+        if family_id:
+            neo4j_service.create_belongs_to_relationship(model_id, family_id)
         
-        # Sync to Neo4j if connected
-        try:
-            sync_service.sync_single_model(model_id)
-        except Exception as e:
-            # Log the error but don't fail the upload
-            print(f"Failed to sync model to Neo4j: {e}")
+        # Create parent-child relationship if parent was found
+        if parent_id:
+            neo4j_service.create_parent_child_relationship(parent_id, model_id, confidence)
+        
+        # Get final model data for response
+        final_model_data = neo4j_service.get_model_by_id(model_id)
         
         return jsonify({
             'model_id': model_id,
             'status': 'ok',
             'message': 'Model uploaded and processed successfully',
-            'model': model.to_dict()
+            'model': final_model_data
         }), 201
         
     except Exception as e:
@@ -254,47 +279,49 @@ def upload_model():
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Remove model record if created
-        model = Model.query.get(model_id)
-        if model:
-            db.session.delete(model)
-            db.session.commit()
+        # Remove model record if created in Neo4j
+        # Note: In a production system, you might want more sophisticated cleanup
+        current_app.logger.error(f"Model upload failed for {model_id}: {e}")
         
         return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 @models_bp.route('/families', methods=['GET'])
 def list_families():
     """List all families"""
-    families = Family.query.order_by(Family.created_at.desc()).all()
+    families_data = neo4j_service.get_all_families()
     
     return jsonify({
-        'families': [family.to_dict() for family in families],
-        'total': len(families)
+        'families': families_data,
+        'total': len(families_data)
     })
 
 @models_bp.route('/families/<family_id>/models', methods=['GET'])
 def get_family_models(family_id):
     """Get all models in a family"""
-    family = Family.query.get_or_404(family_id)
-    models = Model.query.filter_by(family_id=family_id).order_by(Model.created_at).all()
+    # Get family data
+    families = neo4j_service.get_all_families()
+    family_data = None
+    for f in families:
+        if f.get('id') == family_id:
+            family_data = f
+            break
+    
+    if not family_data:
+        return jsonify({'error': 'Family not found'}), 404
+    
+    # Get models in family
+    models_data = neo4j_service.get_family_models(family_id)
     
     return jsonify({
-        'family': family.to_dict(),
-        'models': [model.to_dict() for model in models]
+        'family': family_data,
+        'models': models_data
     })
 
 @models_bp.route('/stats', methods=['GET'])
 def get_stats():
     """Get system statistics"""
-    total_models = Model.query.count()
-    total_families = Family.query.count()
-    processing_models = Model.query.filter_by(status='processing').count()
-    
-    return jsonify({
-        'total_models': total_models,
-        'total_families': total_families,
-        'processing_models': processing_models
-    })
+    stats = neo4j_service.get_stats()
+    return jsonify(stats)
 
 # New clustering API endpoints
 
@@ -415,12 +442,15 @@ def get_clustering_statistics():
 def reprocess_model(model_id):
     """Reprocess a model through the clustering pipeline"""
     try:
-        model = Model.query.get_or_404(model_id)
+        model_data = neo4j_service.get_model_by_id(model_id)
+        if not model_data:
+            return jsonify({'error': 'Model not found'}), 404
         
         from src.clustering.model_management import ModelManagementSystem
         
         mgmt_system = ModelManagementSystem()
-        result = mgmt_system.process_new_model(model)
+        model_proxy = ModelProxy(**model_data)
+        result = mgmt_system.process_new_model(model_proxy)
         
         if result.get('status') == 'success':
             return jsonify({
