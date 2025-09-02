@@ -170,8 +170,9 @@ class ModelManagementSystem:
                 logger.info(f"Model {model.id} is the only model in family {target_family_id}")
                 return None, 0.0
             
-            # Use tree builder to find parent
-            parent_id, confidence = self.tree_builder.find_model_parent(model, family_models)
+            # Use mother algorithm directly for parent finding
+            from src.algorithms.mother_algorithm import find_model_parent_mother
+            parent_id, confidence = find_model_parent_mother(model, target_family_id)
             
             return parent_id, confidence
             

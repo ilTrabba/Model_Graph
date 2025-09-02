@@ -337,18 +337,22 @@ class Neo4jService:
             logger.error(f"Failed to create/update family node: {e}")
             return False
     
-    def create_or_update_family_centroid(self, family_id: str) -> bool:
-        """Create or update a FamilyCentroid node (always white color)"""
+    def create_or_update_family_centroid(self, family_id: str, centroid_embedding: Optional[List[float]] = None) -> bool:
+        """Create or update a FamilyCentroid node with actual centroid data"""
         if not self.driver:
             return False
         
         try:
+            # Use provided embedding or placeholder
+            embedding = centroid_embedding if centroid_embedding is not None else [0.0]
+            
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
                 MERGE (c:FamilyCentroid {id: $id})
                 SET c.family_id = $family_id,
                     c.embedding = $embedding,
-                    c.color = 'white'
+                    c.color = 'white',
+                    c.updated_at = datetime()
                 RETURN c
                 """
                 
@@ -356,9 +360,10 @@ class Neo4jService:
                 session.run(query, {
                     'id': centroid_id,
                     'family_id': family_id,
-                    'embedding': [0.0]  # Placeholder embedding
+                    'embedding': embedding
                 })
                 
+            logger.info(f"Updated Neo4j centroid for family {family_id} with embedding size {len(embedding)}")
             return True
         except Exception as e:
             logger.error(f"Failed to create/update family centroid: {e}")

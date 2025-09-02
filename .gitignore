@@ -17,3 +17,4 @@ model_heritage_backend/uploads/*.safetensors
 node_modules
 
 model_heritage_backend/weights
+weights/

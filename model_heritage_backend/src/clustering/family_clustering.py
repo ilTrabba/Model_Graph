@@ -9,6 +9,7 @@ import logging
 import numpy as np
 import torch
 import uuid
+import os
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from enum import Enum
@@ -57,7 +58,122 @@ class FamilyClusteringSystem:
         self.min_family_size = min_family_size
         self.clustering_method = clustering_method
         
+        # Centroid storage configuration
+        self.centroids_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'weights', 'centroids')
+        os.makedirs(self.centroids_dir, exist_ok=True)
+        
         logger.info(f"Initialized FamilyClusteringSystem with threshold: {family_threshold}")
+        logger.info(f"Centroids directory: {self.centroids_dir}")
+    
+    def get_centroid_file_path(self, family_id: str) -> str:
+        """Get the file path for a family's centroid file."""
+        return os.path.join(self.centroids_dir, f"family_{family_id}.pt")
+    
+    def save_family_centroid(self, family_id: str, centroid: Dict[str, Any]) -> bool:
+        """
+        Save family centroid to file.
+        
+        Args:
+            family_id: ID of the family
+            centroid: Dictionary containing centroid weights
+            
+        Returns:
+            True if successfully saved, False otherwise
+        """
+        try:
+            if not centroid:
+                logger.warning(f"Cannot save empty centroid for family {family_id}")
+                return False
+            
+            centroid_path = self.get_centroid_file_path(family_id)
+            
+            # Add metadata to the centroid
+            centroid_with_metadata = {
+                'family_id': family_id,
+                'weights': centroid,
+                'created_at': datetime.utcnow().isoformat(),
+                'version': '1.0'
+            }
+            
+            torch.save(centroid_with_metadata, centroid_path)
+            logger.info(f"Saved centroid for family {family_id} to {centroid_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving centroid for family {family_id}: {e}")
+            return False
+    
+    def load_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load family centroid from file.
+        
+        Args:
+            family_id: ID of the family
+            
+        Returns:
+            Dictionary containing centroid weights or None if not found
+        """
+        try:
+            centroid_path = self.get_centroid_file_path(family_id)
+            
+            if not os.path.exists(centroid_path):
+                logger.debug(f"No centroid file found for family {family_id}")
+                return None
+            
+            centroid_data = torch.load(centroid_path, map_location='cpu')
+            
+            # Handle both new format (with metadata) and old format (direct weights)
+            if isinstance(centroid_data, dict) and 'weights' in centroid_data:
+                logger.info(f"Loaded centroid for family {family_id} from {centroid_path}")
+                return centroid_data['weights']
+            else:
+                # Assume it's the old format - direct weights
+                logger.info(f"Loaded legacy centroid for family {family_id} from {centroid_path}")
+                return centroid_data
+                
+        except Exception as e:
+            logger.error(f"Error loading centroid for family {family_id}: {e}")
+            return None
+    
+    def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
+        """
+        Convert centroid weights to a single embedding vector for Neo4j.
+        
+        Args:
+            centroid: Dictionary containing centroid weights
+            
+        Returns:
+            List of floats representing the centroid as an embedding
+        """
+        try:
+            if not centroid:
+                return [0.0]
+            
+            # Flatten all weight tensors into a single vector
+            embedding_parts = []
+            
+            for param_name, tensor in centroid.items():
+                if isinstance(tensor, torch.Tensor):
+                    # Flatten the tensor and convert to list
+                    flattened = tensor.detach().cpu().numpy().flatten()
+                    embedding_parts.extend(flattened.tolist())
+            
+            # If no valid tensors found, return placeholder
+            if not embedding_parts:
+                return [0.0]
+            
+            # Truncate if too long (Neo4j has practical limits)
+            max_embedding_size = 1000  # Reasonable limit for Neo4j
+            if len(embedding_parts) > max_embedding_size:
+                # Sample evenly across the embedding
+                step = len(embedding_parts) // max_embedding_size
+                embedding_parts = embedding_parts[::step][:max_embedding_size]
+            
+            return embedding_parts
+            
+        except Exception as e:
+            logger.error(f"Error converting centroid to embedding: {e}")
+            return [0.0]
     
     def assign_model_to_family(self, 
                              model: Model,
@@ -197,6 +313,22 @@ class FamilyClusteringSystem:
             
             # Calculate centroid by averaging weights
             centroid = self._calculate_weights_centroid(family_weights)
+            
+            # Save centroid to file for incremental updates
+            if centroid:
+                self.save_family_centroid(family_id, centroid)
+                
+                # Update Neo4j centroid node with actual embedding
+                try:
+                    from src.services.neo4j_service import Neo4jService
+                    neo4j_service = Neo4jService()
+                    if neo4j_service.is_connected():
+                        embedding = self.centroid_to_embedding(centroid)
+                        neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                        neo4j_service.create_has_centroid_relationship(family_id)
+                    neo4j_service.close()
+                except Exception as neo4j_error:
+                    logger.warning(f"Failed to update Neo4j centroid for family {family_id}: {neo4j_error}")
             
             logger.info(f"Calculated centroid for family {family_id} with {len(family_weights)} models")
             return centroid
