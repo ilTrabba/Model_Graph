@@ -11,7 +11,7 @@ import torch
 import uuid
 import os
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
@@ -94,7 +94,7 @@ class FamilyClusteringSystem:
             # Prepare metadata for SafeTensors
             metadata = {
                 'family_id': family_id,
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
                 'version': '1.0',
                 'layer_count': str(len(centroid)),
                 'layer_keys': str(list(centroid.keys())),
@@ -392,7 +392,7 @@ class FamilyClusteringSystem:
             else:
                 family.avg_intra_distance = 0.0
             
-            family.updated_at = datetime.utcnow()
+            family.updated_at = datetime.now(timezone.utc)
             db.session.commit()
             
             # Trigger centroid recalculation for incremental updates
@@ -727,7 +727,7 @@ class FamilyClusteringSystem:
                     'family_id': family_id,
                     'layer_keys': layer_keys,
                     'model_count': model_count,
-                    'updated_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
                     'distance_metric': 'cosine',
                     'version': '1.1'  # Updated version
                 })

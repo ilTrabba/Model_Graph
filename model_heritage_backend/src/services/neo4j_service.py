@@ -353,7 +353,7 @@ class Neo4jService:
             return False
         
         try:
-            from datetime import datetime
+            from datetime import datetime, timezone
             
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
@@ -378,7 +378,7 @@ class Neo4jService:
                     'path': centroid_path,
                     'layer_keys': [],  # Will be populated when centroid is calculated
                     'model_count': 0,  # Will be updated when centroid is calculated
-                    'updated_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
                     'distance_metric': 'cosine',  # Default metric
                     'version': '1.0'
                 })

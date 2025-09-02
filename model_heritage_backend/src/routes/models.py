@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 from src.models.model import Model, Family
@@ -93,8 +93,8 @@ def _fallback_family_assignment(model_data):
             'id': family_id,
             'structural_pattern_hash': structural_hash,
             'member_count': 0,
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }
         neo4j_service.create_family(family_data)
     
@@ -105,7 +105,7 @@ def _fallback_family_assignment(model_data):
     family_update = {
         'id': family_id,
         'member_count': new_member_count,
-        'updated_at': datetime.utcnow().isoformat()
+        'updated_at': datetime.now(timezone.utc).isoformat()
     }
     neo4j_service.create_or_update_family(family_update)
     
@@ -231,7 +231,7 @@ def upload_model():
             'structural_hash': signature['structural_hash'],
             'status': 'processing',
             'weights_uri': 'weights/' + filename,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         # Save to Neo4j
@@ -245,7 +245,7 @@ def upload_model():
         model_updates = {
             'family_id': family_id,
             'status': 'ok',
-            'processed_at': datetime.utcnow().isoformat()
+            'processed_at': datetime.now(timezone.utc).isoformat()
         }
         
         if parent_id:

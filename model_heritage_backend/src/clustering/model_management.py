@@ -10,7 +10,7 @@ import logging
 import numpy as np
 import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.models.model import Model, Family, db
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
@@ -109,7 +109,7 @@ class ModelManagementSystem:
             
             # Step 4: Mark as processed
             model.status = 'ok'
-            model.processed_at = datetime.utcnow()
+            model.processed_at = datetime.now(timezone.utc)
             db.session.commit()
             
             # Step 5: Get family tree for context
@@ -131,7 +131,7 @@ class ModelManagementSystem:
             
             # Mark model as error state
             model.status = 'error'
-            model.processed_at = datetime.utcnow()
+            model.processed_at = datetime.now(timezone.utc)
             db.session.commit()
             
             return {
