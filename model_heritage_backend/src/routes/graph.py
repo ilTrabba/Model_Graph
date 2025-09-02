@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request
 from src.services.neo4j_service import neo4j_service
-from src.services.sync_service import sync_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,10 +8,28 @@ graph_bp = Blueprint('graph', __name__)
 
 @graph_bp.route('/graph/status', methods=['GET'])
 def get_graph_status():
-    """Get Neo4j connection and synchronization status"""
+    """Get Neo4j connection status"""
     try:
-        status = sync_service.get_sync_status()
-        return jsonify(status)
+        neo4j_connected = neo4j_service.is_connected()
+        
+        if not neo4j_connected:
+            return jsonify({
+                'neo4j_connected': False,
+                'neo4j_nodes': 0,
+                'neo4j_edges': 0,
+                'message': 'Neo4j not connected'
+            })
+        
+        # Get Neo4j stats
+        graph_data = neo4j_service.get_full_graph()
+        
+        return jsonify({
+            'neo4j_connected': True,
+            'neo4j_nodes': graph_data.get('node_count', 0),
+            'neo4j_edges': graph_data.get('edge_count', 0),
+            'message': 'Neo4j connected and operational'
+        })
+        
     except Exception as e:
         logger.error(f"Failed to get graph status: {e}")
         return jsonify({
@@ -54,13 +71,13 @@ def get_full_graph():
 
 @graph_bp.route('/graph/sync', methods=['POST'])
 def sync_graph_data():
-    """Manual synchronization endpoint"""
+    """Manual data refresh endpoint (Neo4j-only architecture)"""
     try:
         if not neo4j_service.is_connected():
             return jsonify({
                 'success': False,
                 'error': 'Neo4j not connected',
-                'message': 'Cannot sync without Neo4j connection'
+                'message': 'Cannot refresh without Neo4j connection'
             }), 503
         
         # Check if we should clear existing data first
@@ -68,20 +85,26 @@ def sync_graph_data():
         
         if clear_existing:
             neo4j_service.clear_all_data()
-            logger.info("Cleared existing Neo4j data before sync")
+            logger.info("Cleared existing Neo4j data")
         
-        result = sync_service.sync_all_data()
+        # Refresh constraints and indexes
+        neo4j_service.create_constraints()
         
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 500
+        # Get current stats
+        graph_data = neo4j_service.get_full_graph()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Neo4j data refreshed successfully',
+            'neo4j_nodes': graph_data.get('node_count', 0),
+            'neo4j_edges': graph_data.get('edge_count', 0)
+        })
             
     except Exception as e:
-        logger.error(f"Failed to sync graph data: {e}")
+        logger.error(f"Failed to refresh graph data: {e}")
         return jsonify({
             'success': False,
-            'error': 'Sync failed',
+            'error': 'Refresh failed',
             'details': str(e)
         }), 500
 
@@ -119,9 +142,9 @@ def get_family_subgraph(family_id):
             'edges': []
         }), 500
 
-@graph_bp.route('/graph/model/<model_id>/sync', methods=['POST'])
-def sync_single_model(model_id):
-    """Sync a single model to Neo4j"""
+@graph_bp.route('/graph/model/<model_id>/refresh', methods=['POST'])
+def refresh_single_model(model_id):
+    """Refresh a single model in Neo4j"""
     try:
         if not neo4j_service.is_connected():
             return jsonify({
@@ -129,18 +152,25 @@ def sync_single_model(model_id):
                 'error': 'Neo4j not connected'
             }), 503
         
-        result = sync_service.sync_single_model(model_id)
+        # Check if model exists in Neo4j
+        model_data = neo4j_service.get_model_by_id(model_id)
+        if not model_data:
+            return jsonify({
+                'success': False,
+                'error': 'Model not found'
+            }), 404
         
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 400 if 'not found' in result.get('error', '').lower() else 500
+        # Model is already in Neo4j, so just return success
+        return jsonify({
+            'success': True,
+            'message': f'Model {model_id} is already in Neo4j'
+        })
             
     except Exception as e:
-        logger.error(f"Failed to sync single model {model_id}: {e}")
+        logger.error(f"Failed to refresh single model {model_id}: {e}")
         return jsonify({
             'success': False,
-            'error': 'Failed to sync model',
+            'error': 'Failed to refresh model',
             'details': str(e)
         }), 500
 

@@ -10,11 +10,13 @@ import numpy as np
 import torch
 import uuid
 import os
+import json
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from enum import Enum
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
+import safetensors.torch
 
 from src.models.model import Model, Family, db
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
@@ -67,11 +69,13 @@ class FamilyClusteringSystem:
     
     def get_centroid_file_path(self, family_id: str) -> str:
         """Get the file path for a family's centroid file."""
-        return os.path.join(self.centroids_dir, f"family_{family_id}.pt")
+        centroids_dir = os.path.join("weights", "centroids")
+        os.makedirs(centroids_dir, exist_ok=True)
+        return os.path.join(centroids_dir, f"{family_id}.safetensors")
     
     def save_family_centroid(self, family_id: str, centroid: Dict[str, Any]) -> bool:
         """
-        Save family centroid to file.
+        Save family centroid to file using SafeTensors format.
         
         Args:
             family_id: ID of the family
@@ -87,15 +91,18 @@ class FamilyClusteringSystem:
             
             centroid_path = self.get_centroid_file_path(family_id)
             
-            # Add metadata to the centroid
-            centroid_with_metadata = {
+            # Prepare metadata
+            metadata = {
                 'family_id': family_id,
-                'weights': centroid,
                 'created_at': datetime.utcnow().isoformat(),
-                'version': '1.0'
+                'version': '1.0',
+                'layer_keys': json.dumps(list(centroid.keys())),
+                'model_count': str(len(centroid.get('source_models', []))),
+                'distance_metric': 'l2'
             }
             
-            torch.save(centroid_with_metadata, centroid_path)
+            # Save using SafeTensors
+            safetensors.torch.save_file(centroid, centroid_path, metadata=metadata)
             logger.info(f"Saved centroid for family {family_id} to {centroid_path}")
             return True
             
@@ -105,7 +112,7 @@ class FamilyClusteringSystem:
     
     def load_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
         """
-        Load family centroid from file.
+        Load family centroid from file (supports both SafeTensors and legacy PyTorch format).
         
         Args:
             family_id: ID of the family
@@ -117,22 +124,31 @@ class FamilyClusteringSystem:
             centroid_path = self.get_centroid_file_path(family_id)
             
             if not os.path.exists(centroid_path):
+                # Try legacy .pt format
+                legacy_path = os.path.join(self.centroids_dir, f"family_{family_id}.pt")
+                if os.path.exists(legacy_path):
+                    centroid_data = torch.load(legacy_path, map_location='cpu')
+                    # Handle both new format (with metadata) and old format (direct weights)
+                    if isinstance(centroid_data, dict) and 'weights' in centroid_data:
+                        logger.info(f"Loaded legacy centroid for family {family_id} from {legacy_path}")
+                        return centroid_data['weights']
+                    else:
+                        # Assume it's the old format - direct weights
+                        logger.info(f"Loaded legacy centroid for family {family_id} from {legacy_path}")
+                        return centroid_data
+                
                 logger.debug(f"No centroid file found for family {family_id}")
                 return None
             
-            centroid_data = torch.load(centroid_path, map_location='cpu')
-            
-            # Handle both new format (with metadata) and old format (direct weights)
-            if isinstance(centroid_data, dict) and 'weights' in centroid_data:
-                logger.info(f"Loaded centroid for family {family_id} from {centroid_path}")
-                return centroid_data['weights']
-            else:
-                # Assume it's the old format - direct weights
-                logger.info(f"Loaded legacy centroid for family {family_id} from {centroid_path}")
+            # Load SafeTensors format
+            with safetensors.torch.safe_open(centroid_path, framework="pt", device="cpu") as f:
+                centroid_data = {key: f.get_tensor(key) for key in f.keys()}
+                logger.info(f"Loaded SafeTensors centroid for family {family_id} from {centroid_path}")
                 return centroid_data
                 
         except Exception as e:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
+            return None
             return None
     
     def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
@@ -318,13 +334,24 @@ class FamilyClusteringSystem:
             if centroid:
                 self.save_family_centroid(family_id, centroid)
                 
-                # Update Neo4j centroid node with actual embedding
+                # Update Neo4j centroid node with enhanced metadata
                 try:
                     from src.services.neo4j_service import Neo4jService
                     neo4j_service = Neo4jService()
                     if neo4j_service.is_connected():
                         embedding = self.centroid_to_embedding(centroid)
-                        neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                        layer_keys = list(centroid.keys())
+                        model_count = len(family_weights)
+                        
+                        # Use the enhanced centroid creation
+                        neo4j_service.create_or_update_centroid(
+                            family_id=family_id,
+                            centroid_embedding=embedding,
+                            layer_keys=layer_keys,
+                            model_count=model_count,
+                            distance_metric='l2',
+                            version=1
+                        )
                         neo4j_service.create_has_centroid_relationship(family_id)
                     neo4j_service.close()
                 except Exception as neo4j_error:
