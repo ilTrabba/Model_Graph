@@ -319,9 +319,13 @@ class FamilyQuery:
         return len(self.all())
 
 
-# Create instances that mimic the SQLAlchemy model classes
-Model = ModelManager()
-Family = FamilyManager()
+# Alias the original classes so they can be instantiated
+Model = Model  # Keep the original Model class for instantiation
+Family = Family  # Keep the original Family class for instantiation
+
+# Also provide manager instances for compatibility
+ModelManager = ModelManager
+FamilyManager = FamilyManager
 
 # Mock database session for compatibility
 class MockSession:

@@ -396,7 +396,7 @@ class FamilyClusteringSystem:
                 family.avg_intra_distance = 0.0
             
             family.updated_at = datetime.utcnow()
-            db.session.commit()
+            # Note: Family updates are now handled directly through Neo4j
             
             # Trigger centroid recalculation for incremental updates
             if len(family_models) >= 1:
@@ -480,8 +480,7 @@ class FamilyClusteringSystem:
                 avg_intra_distance=0.0
             )
             
-            db.session.add(family)
-            db.session.commit()
+            # Note: Family creation is now handled directly through Neo4j
             
             logger.info(f"Created new family {family_id} for model {model.id}")
             return family_id
@@ -617,13 +616,13 @@ class FamilyClusteringSystem:
                             member_count=0,
                             avg_intra_distance=0.0
                         )
-                        db.session.add(family)
+                        # Note: Family creation is now handled directly through Neo4j
                     
                     family_id = label_to_family_id[label]
                     model.family_id = family_id
                     families[family_id].append(model.id)
             
-            db.session.commit()
+            # Note: Model updates are now handled directly through Neo4j
             
             # Update family statistics
             for family_id in families.keys():

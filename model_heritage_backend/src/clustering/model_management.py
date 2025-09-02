@@ -85,7 +85,7 @@ class ModelManagementSystem:
             
             # Update model with family assignment
             model.family_id = family_id
-            db.session.commit()
+            # Note: Model/Family updates are now handled directly through Neo4j
             
             logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
             
@@ -96,12 +96,12 @@ class ModelManagementSystem:
             if parent_id:
                 model.parent_id = parent_id
                 model.confidence_score = parent_confidence
-                db.session.commit()
+                # Note: Model/Family updates are now handled directly through Neo4j
                 logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
             else:
                 model.parent_id = None
                 model.confidence_score = 0.0
-                db.session.commit()
+                # Note: Model/Family updates are now handled directly through Neo4j
                 logger.info(f"Model {model.id} assigned as root in family {family_id}")
             
             # Step 3: Update family statistics
@@ -110,7 +110,7 @@ class ModelManagementSystem:
             # Step 4: Mark as processed
             model.status = 'ok'
             model.processed_at = datetime.utcnow()
-            db.session.commit()
+            # Note: Model/Family updates are now handled directly through Neo4j
             
             # Step 5: Get family tree for context
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
@@ -132,7 +132,7 @@ class ModelManagementSystem:
             # Mark model as error state
             model.status = 'error'
             model.processed_at = datetime.utcnow()
-            db.session.commit()
+            # Note: Model/Family updates are now handled directly through Neo4j
             
             return {
                 'model_id': model.id,
@@ -233,7 +233,7 @@ class ModelManagementSystem:
                         updated_count += 1
                         logger.debug(f"Set {model.id} as root model")
             
-            db.session.commit()
+            # Note: Model/Family updates are now handled directly through Neo4j
             
             # Update family statistics
             self.family_clustering.update_family_statistics(family_id)
