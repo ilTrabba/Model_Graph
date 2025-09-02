@@ -15,6 +15,7 @@ from datetime import datetime
 from enum import Enum
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
+import safetensors.torch
 
 from src.models.model import Model, Family, db
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
@@ -66,12 +67,12 @@ class FamilyClusteringSystem:
         logger.info(f"Centroids directory: {self.centroids_dir}")
     
     def get_centroid_file_path(self, family_id: str) -> str:
-        """Get the file path for a family's centroid file."""
-        return os.path.join(self.centroids_dir, f"family_{family_id}.pt")
+        """Get the file path for a family's centroid file using SafeTensors format."""
+        return os.path.join(self.centroids_dir, f"{family_id}.safetensors")
     
     def save_family_centroid(self, family_id: str, centroid: Dict[str, Any]) -> bool:
         """
-        Save family centroid to file.
+        Save family centroid to SafeTensors file with enhanced metadata.
         
         Args:
             family_id: ID of the family
@@ -87,16 +88,23 @@ class FamilyClusteringSystem:
             
             centroid_path = self.get_centroid_file_path(family_id)
             
-            # Add metadata to the centroid
-            centroid_with_metadata = {
+            # Ensure centroids directory exists
+            os.makedirs(os.path.dirname(centroid_path), exist_ok=True)
+            
+            # Prepare metadata for SafeTensors
+            metadata = {
                 'family_id': family_id,
-                'weights': centroid,
                 'created_at': datetime.utcnow().isoformat(),
-                'version': '1.0'
+                'version': '1.0',
+                'layer_count': str(len(centroid)),
+                'layer_keys': str(list(centroid.keys())),
+                'distance_metric': 'cosine',
+                'format': 'safetensors'
             }
             
-            torch.save(centroid_with_metadata, centroid_path)
-            logger.info(f"Saved centroid for family {family_id} to {centroid_path}")
+            # Save using SafeTensors format
+            safetensors.torch.save_file(centroid, centroid_path, metadata=metadata)
+            logger.info(f"Saved centroid for family {family_id} to {centroid_path} (SafeTensors format)")
             return True
             
         except Exception as e:
@@ -105,7 +113,7 @@ class FamilyClusteringSystem:
     
     def load_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
         """
-        Load family centroid from file.
+        Load family centroid from SafeTensors file.
         
         Args:
             family_id: ID of the family
@@ -120,11 +128,22 @@ class FamilyClusteringSystem:
                 logger.debug(f"No centroid file found for family {family_id}")
                 return None
             
+            # Check if it's a SafeTensors file
+            if centroid_path.endswith('.safetensors'):
+                try:
+                    # Load SafeTensors file
+                    centroid_data = safetensors.torch.load_file(centroid_path)
+                    logger.info(f"Loaded SafeTensors centroid for family {family_id} from {centroid_path}")
+                    return centroid_data
+                except Exception as st_error:
+                    logger.warning(f"Failed to load as SafeTensors, trying legacy format: {st_error}")
+            
+            # Fallback to legacy PyTorch format for backward compatibility
             centroid_data = torch.load(centroid_path, map_location='cpu')
             
             # Handle both new format (with metadata) and old format (direct weights)
             if isinstance(centroid_data, dict) and 'weights' in centroid_data:
-                logger.info(f"Loaded centroid for family {family_id} from {centroid_path}")
+                logger.info(f"Loaded legacy centroid for family {family_id} from {centroid_path}")
                 return centroid_data['weights']
             else:
                 # Assume it's the old format - direct weights
@@ -318,13 +337,18 @@ class FamilyClusteringSystem:
             if centroid:
                 self.save_family_centroid(family_id, centroid)
                 
-                # Update Neo4j centroid node with actual embedding
+                # Update Neo4j centroid node with actual embedding and metadata
                 try:
                     from src.services.neo4j_service import Neo4jService
                     neo4j_service = Neo4jService()
                     if neo4j_service.is_connected():
+                        # Update embedding in FamilyCentroid (for backward compatibility)
                         embedding = self.centroid_to_embedding(centroid)
                         neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                        
+                        # Update enhanced Centroid node with metadata
+                        self._update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
+                        
                         neo4j_service.create_has_centroid_relationship(family_id)
                     neo4j_service.close()
                 except Exception as neo4j_error:
@@ -678,3 +702,37 @@ class FamilyClusteringSystem:
         except Exception as e:
             logger.error(f"Error calculating weights centroid: {e}")
             return {}
+    
+    def _update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
+        """Update Centroid node metadata with enhanced attributes"""
+        try:
+            from datetime import datetime
+            
+            # Extract layer keys from centroid
+            layer_keys = list(centroid.keys()) if centroid else []
+            
+            # Update the Centroid node with metadata
+            with neo4j_service.driver.session(database=neo4j_service.driver._config.get('database', 'neo4j')) as session:
+                query = """
+                MATCH (c:Centroid {family_id: $family_id})
+                SET c.layer_keys = $layer_keys,
+                    c.model_count = $model_count,
+                    c.updated_at = $updated_at,
+                    c.distance_metric = $distance_metric,
+                    c.version = $version
+                RETURN c
+                """
+                
+                session.run(query, {
+                    'family_id': family_id,
+                    'layer_keys': layer_keys,
+                    'model_count': model_count,
+                    'updated_at': datetime.utcnow().isoformat(),
+                    'distance_metric': 'cosine',
+                    'version': '1.1'  # Updated version
+                })
+                
+            logger.info(f"Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
+            
+        except Exception as e:
+            logger.error(f"Failed to update centroid metadata for family {family_id}: {e}")

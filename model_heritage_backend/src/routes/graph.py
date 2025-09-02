@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from src.services.neo4j_service import neo4j_service
-from src.services.sync_service import sync_service
+from src.models.model import Model, Family
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,13 +9,30 @@ graph_bp = Blueprint('graph', __name__)
 
 @graph_bp.route('/graph/status', methods=['GET'])
 def get_graph_status():
-    """Get Neo4j connection and synchronization status"""
+    """Get Neo4j connection status"""
     try:
-        status = sync_service.get_sync_status()
-        return jsonify(status)
+        neo4j_connected = neo4j_service.is_connected()
+        
+        if not neo4j_connected:
+            return jsonify({
+                'neo4j_connected': False,
+                'error': 'Neo4j not connected'
+            }), 503
+        
+        # Get Neo4j stats
+        graph_data = neo4j_service.get_full_graph()
+        
+        return jsonify({
+            'neo4j_connected': True,
+            'neo4j_nodes': graph_data.get('node_count', 0),
+            'neo4j_edges': graph_data.get('edge_count', 0),
+            'message': 'Neo4j-only architecture active'
+        })
+        
     except Exception as e:
         logger.error(f"Failed to get graph status: {e}")
         return jsonify({
+            'neo4j_connected': False,
             'error': 'Failed to get status',
             'details': str(e)
         }), 500
@@ -54,36 +71,12 @@ def get_full_graph():
 
 @graph_bp.route('/graph/sync', methods=['POST'])
 def sync_graph_data():
-    """Manual synchronization endpoint"""
-    try:
-        if not neo4j_service.is_connected():
-            return jsonify({
-                'success': False,
-                'error': 'Neo4j not connected',
-                'message': 'Cannot sync without Neo4j connection'
-            }), 503
-        
-        # Check if we should clear existing data first
-        clear_existing = request.json.get('clear_existing', False) if request.json else False
-        
-        if clear_existing:
-            neo4j_service.clear_all_data()
-            logger.info("Cleared existing Neo4j data before sync")
-        
-        result = sync_service.sync_all_data()
-        
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 500
-            
-    except Exception as e:
-        logger.error(f"Failed to sync graph data: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Sync failed',
-            'details': str(e)
-        }), 500
+    """Legacy endpoint - no longer needed in Neo4j-only architecture"""
+    return jsonify({
+        'success': True,
+        'message': 'Synchronization not needed in Neo4j-only architecture',
+        'architecture': 'neo4j-only'
+    })
 
 @graph_bp.route('/graph/family/<family_id>', methods=['GET'])
 def get_family_subgraph(family_id):
@@ -121,28 +114,12 @@ def get_family_subgraph(family_id):
 
 @graph_bp.route('/graph/model/<model_id>/sync', methods=['POST'])
 def sync_single_model(model_id):
-    """Sync a single model to Neo4j"""
-    try:
-        if not neo4j_service.is_connected():
-            return jsonify({
-                'success': False,
-                'error': 'Neo4j not connected'
-            }), 503
-        
-        result = sync_service.sync_single_model(model_id)
-        
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 400 if 'not found' in result.get('error', '').lower() else 500
-            
-    except Exception as e:
-        logger.error(f"Failed to sync single model {model_id}: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to sync model',
-            'details': str(e)
-        }), 500
+    """Legacy endpoint - no longer needed in Neo4j-only architecture"""
+    return jsonify({
+        'success': True,
+        'message': f'Model {model_id} - synchronization not needed in Neo4j-only architecture',
+        'architecture': 'neo4j-only'
+    })
 
 @graph_bp.route('/graph/clear', methods=['POST'])
 def clear_graph_data():

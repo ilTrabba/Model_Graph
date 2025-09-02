@@ -52,13 +52,15 @@ class Neo4jService:
             "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Model) REQUIRE m.id IS UNIQUE",
             "CREATE CONSTRAINT IF NOT EXISTS FOR (f:Family) REQUIRE f.id IS UNIQUE", 
             "CREATE CONSTRAINT IF NOT EXISTS FOR (c:FamilyCentroid) REQUIRE c.id IS UNIQUE",
+            "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Centroid) REQUIRE c.id IS UNIQUE",
             "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Model) REQUIRE m.checksum IS UNIQUE"
         ]
         
         indexes = [
             "CREATE INDEX model_family_idx IF NOT EXISTS FOR (m:Model) ON (m.family_id)",
             "CREATE INDEX model_status_idx IF NOT EXISTS FOR (m:Model) ON (m.status)",
-            "CREATE INDEX family_pattern_idx IF NOT EXISTS FOR (f:Family) ON (f.structural_pattern_hash)"
+            "CREATE INDEX family_pattern_idx IF NOT EXISTS FOR (f:Family) ON (f.structural_pattern_hash)",
+            "CREATE INDEX centroid_family_idx IF NOT EXISTS FOR (c:Centroid) ON (c.family_id)"
         ]
         
         try:
@@ -301,8 +303,16 @@ class Neo4jService:
             return {'parent': None, 'children': []}
     
     def create_family(self, family_data: Dict[str, Any]) -> bool:
-        """Create a new family"""
-        return self.create_or_update_family(family_data)
+        """Create a new family and automatically create its centroid"""
+        success = self.create_or_update_family(family_data)
+        if success:
+            # Automatically create centroid with proper metadata
+            family_id = family_data['id']
+            success = self.create_centroid_with_metadata(family_id)
+            if success:
+                # Create HAS_CENTROID relationship
+                self.create_has_centroid_relationship(family_id)
+        return success
     
     def create_or_update_family(self, family_data: Dict[str, Any]) -> bool:
         if not self.driver:
@@ -335,6 +345,48 @@ class Neo4jService:
             return True
         except Exception as e:
             logger.error(f"Failed to create/update family node: {e}")
+            return False
+    
+    def create_centroid_with_metadata(self, family_id: str) -> bool:
+        """Create a Centroid node with enhanced metadata according to requirements"""
+        if not self.driver:
+            return False
+        
+        try:
+            from datetime import datetime
+            
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MERGE (c:Centroid {id: $id})
+                SET c.family_id = $family_id,
+                    c.path = $path,
+                    c.layer_keys = $layer_keys,
+                    c.model_count = $model_count,
+                    c.updated_at = $updated_at,
+                    c.distance_metric = $distance_metric,
+                    c.version = $version,
+                    c.color = 'white'
+                RETURN c
+                """
+                
+                centroid_id = f"centroid_{family_id}"
+                centroid_path = f"weights/centroids/{family_id}.safetensors"
+                
+                session.run(query, {
+                    'id': centroid_id,
+                    'family_id': family_id,
+                    'path': centroid_path,
+                    'layer_keys': [],  # Will be populated when centroid is calculated
+                    'model_count': 0,  # Will be updated when centroid is calculated
+                    'updated_at': datetime.utcnow().isoformat(),
+                    'distance_metric': 'cosine',  # Default metric
+                    'version': '1.0'
+                })
+                
+            logger.info(f"Created Centroid node for family {family_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create centroid node for family {family_id}: {e}")
             return False
     
     def create_or_update_family_centroid(self, family_id: str, centroid_embedding: Optional[List[float]] = None) -> bool:
@@ -474,7 +526,7 @@ class Neo4jService:
             return False
     
     def create_has_centroid_relationship(self, family_id: str) -> bool:
-        """Create HAS_CENTROID relationship between Family and FamilyCentroid"""
+        """Create HAS_CENTROID relationship between Family and Centroid"""
         if not self.driver:
             return False
         
@@ -482,7 +534,7 @@ class Neo4jService:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
                 MATCH (f:Family {id: $family_id})
-                MATCH (c:FamilyCentroid {family_id: $family_id})
+                MATCH (c:Centroid {family_id: $family_id})
                 MERGE (f)-[:HAS_CENTROID]->(c)
                 """
                 
