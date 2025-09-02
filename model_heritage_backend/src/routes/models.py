@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 import json
 
-from src.models.model import ModelProxy, FamilyProxy
+from src.models.model import Model, Family
 from src.services.neo4j_service import neo4j_service
 
 models_bp = Blueprint('models', __name__)
@@ -52,7 +52,7 @@ def assign_to_family_and_find_parent(model_data):
         mgmt_system = ModelManagementSystem()
         
         # Create a proxy object for compatibility with clustering system
-        model_proxy = ModelProxy(**model_data)
+        model_proxy = Model(**model_data)
         
         # Process the model through the complete pipeline
         result = mgmt_system.process_new_model(model_proxy)
@@ -112,7 +112,7 @@ def _fallback_family_assignment(model_data):
     # Try to find parent using original MoTHer algorithm
     try:
         from src.algorithms.mother_algorithm import find_model_parent_mother
-        model_proxy = ModelProxy(**model_data)
+        model_proxy = Model(**model_data)
         parent_id, confidence = find_model_parent_mother(model_proxy, family_id)
         return family_id, parent_id, confidence
     except Exception as e:
@@ -449,7 +449,7 @@ def reprocess_model(model_id):
         from src.clustering.model_management import ModelManagementSystem
         
         mgmt_system = ModelManagementSystem()
-        model_proxy = ModelProxy(**model_data)
+        model_proxy = Model(**model_data)
         result = mgmt_system.process_new_model(model_proxy)
         
         if result.get('status') == 'success':

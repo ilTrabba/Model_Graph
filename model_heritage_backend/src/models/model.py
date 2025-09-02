@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ModelProxy:
+class Model:
     """Proxy class for Model operations using Neo4j backend"""
     
     def __init__(self, **kwargs):
@@ -109,15 +109,15 @@ class ModelProxy:
         
         # Convert to proxy objects for compatibility
         if lineage.get('parent'):
-            lineage['parent'] = ModelProxy(**lineage['parent']).to_dict()
+            lineage['parent'] = Model(**lineage['parent']).to_dict()
         
         if lineage.get('children'):
-            lineage['children'] = [ModelProxy(**child).to_dict() for child in lineage['children']]
+            lineage['children'] = [Model(**child).to_dict() for child in lineage['children']]
         
         return lineage
 
 
-class FamilyProxy:
+class Family:
     """Proxy class for Family operations using Neo4j backend"""
     
     def __init__(self, **kwargs):
@@ -173,15 +173,15 @@ class ModelManager:
         return ModelQuery()
     
     @staticmethod
-    def get(model_id: str) -> Optional[ModelProxy]:
+    def get(model_id: str) -> Optional[Model]:
         """Get a model by ID"""
         model_data = neo4j_service.get_model_by_id(model_id)
         if model_data:
-            return ModelProxy(**model_data)
+            return Model(**model_data)
         return None
     
     @staticmethod
-    def get_or_404(model_id: str) -> ModelProxy:
+    def get_or_404(model_id: str) -> Model:
         """Get a model by ID or raise 404"""
         model = ModelManager.get(model_id)
         if not model:
@@ -214,17 +214,17 @@ class ModelQuery:
         """Order by field (handled in execution)"""
         return self
     
-    def all(self) -> List[ModelProxy]:
+    def all(self) -> List[Model]:
         """Get all models matching filters"""
         if 'checksum' in self._filters:
             # Special case for checksum lookup
             model_data = neo4j_service.get_model_by_checksum(self._filters['checksum'])
-            return [ModelProxy(**model_data)] if model_data else []
+            return [Model(**model_data)] if model_data else []
         
         if 'family_id' in self._filters:
             # Get models in specific family
             models_data = neo4j_service.get_family_models(self._filters['family_id'])
-            models = [ModelProxy(**data) for data in models_data]
+            models = [Model(**data) for data in models_data]
             
             # Apply additional filters
             if 'status' in self._filters:
@@ -238,7 +238,7 @@ class ModelQuery:
             search_term = self._search.right.value
         
         models_data = neo4j_service.get_all_models(search=search_term)
-        models = [ModelProxy(**data) for data in models_data]
+        models = [Model(**data) for data in models_data]
         
         # Apply filters
         if 'status' in self._filters:
@@ -246,7 +246,7 @@ class ModelQuery:
         
         return models
     
-    def first(self) -> Optional[ModelProxy]:
+    def first(self) -> Optional[Model]:
         """Get first model matching filters"""
         results = self.all()
         return results[0] if results else None
@@ -265,16 +265,16 @@ class FamilyManager:
         return FamilyQuery()
     
     @staticmethod
-    def get(family_id: str) -> Optional[FamilyProxy]:
+    def get(family_id: str) -> Optional[Family]:
         """Get a family by ID"""
         families = neo4j_service.get_all_families()
         for family_data in families:
             if family_data.get('id') == family_id:
-                return FamilyProxy(**family_data)
+                return Family(**family_data)
         return None
     
     @staticmethod
-    def get_or_404(family_id: str) -> FamilyProxy:
+    def get_or_404(family_id: str) -> Family:
         """Get a family by ID or raise 404"""
         family = FamilyManager.get(family_id)
         if not family:
@@ -298,10 +298,10 @@ class FamilyQuery:
         """Order by field"""
         return self
     
-    def all(self) -> List[FamilyProxy]:
+    def all(self) -> List[Family]:
         """Get all families"""
         families_data = neo4j_service.get_all_families()
-        families = [FamilyProxy(**data) for data in families_data]
+        families = [Family(**data) for data in families_data]
         
         # Apply filters
         if 'id' in self._filters:
@@ -309,7 +309,7 @@ class FamilyQuery:
         
         return families
     
-    def first(self) -> Optional[FamilyProxy]:
+    def first(self) -> Optional[Family]:
         """Get first family matching filters"""
         results = self.all()
         return results[0] if results else None
