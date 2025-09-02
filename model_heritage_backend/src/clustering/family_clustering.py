@@ -371,6 +371,13 @@ class FamilyClusteringSystem:
             family.updated_at = datetime.utcnow()
             db.session.commit()
             
+            # Trigger centroid recalculation for incremental updates
+            if len(family_models) >= 1:
+                try:
+                    self.calculate_family_centroid(family_id)
+                except Exception as centroid_error:
+                    logger.warning(f"Failed to update centroid for family {family_id}: {centroid_error}")
+            
             logger.info(f"Updated statistics for family {family_id}: {family.member_count} members, avg_distance: {family.avg_intra_distance:.4f}")
             return True
             
