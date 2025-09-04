@@ -238,14 +238,14 @@ class FamilyClusteringSystem:
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     logger.error(f"Failed to load weights for model {model.id}")
-                    return self._create_new_family(model), 0.0
+                    return self._create_new_family(model, None), 0.0
             
             # Get all existing models with the same structural pattern
             candidate_families = self._find_candidate_families(model)
             
             if not candidate_families:
-                # No candidate families, create new one
-                family_id = self._create_new_family(model)
+                # No candidate families, create new one with the model weights
+                family_id = self._create_new_family(model, model_weights)
                 return family_id, 1.0
             
             # Calculate distances to family centroids
@@ -258,14 +258,14 @@ class FamilyClusteringSystem:
                 self._add_model_to_family(model, best_family_id)
                 return best_family_id, confidence
             else:
-                # Create new family
-                family_id = self._create_new_family(model)
+                # Create new family with the model weights
+                family_id = self._create_new_family(model, model_weights)
                 return family_id, 1.0
                 
         except Exception as e:
             logger.error(f"Error assigning model {model.id} to family: {e}")
             # Fallback: create new family
-            family_id = self._create_new_family(model)
+            family_id = self._create_new_family(model, model_weights)
             return family_id, 0.0
     
     def recluster_all_families(self, 
@@ -314,7 +314,7 @@ class FamilyClusteringSystem:
             cluster_labels = self._perform_clustering(distance_matrix, valid_models)
             
             # Update family assignments
-            new_families = self._update_family_assignments(valid_models, cluster_labels)
+            new_families = self._update_family_assignments(valid_models, cluster_labels, model_weights)
             
             logger.info(f"Reclustering complete. Created {len(new_families)} families")
             return new_families
@@ -487,9 +487,13 @@ class FamilyClusteringSystem:
             logger.error(f"Error finding best family match: {e}")
             return "", 0.0
     
-    def _create_new_family(self, model: Model) -> str:
+    def _create_new_family(self, model: Model, model_weights: Optional[Dict[str, Any]] = None) -> str:
         """
         Create a new family for the model.
+        
+        Args:
+            model: Model object to create family for
+            model_weights: Pre-loaded model weights to use as initial centroid
         """
         try:
             family_id = f"family_{str(uuid.uuid4())[:8]}"
@@ -503,6 +507,44 @@ class FamilyClusteringSystem:
             
             db.session.add(family)
             db.session.commit()
+            
+            # Create initial centroid from the first model's weights if provided
+            if model_weights:
+                logger.info(f"Creating initial centroid for family {family_id} from model {model.id}")
+                
+                # Use the first model's weights as the initial centroid
+                initial_centroid = {}
+                for param_name, tensor in model_weights.items():
+                    if isinstance(tensor, torch.Tensor):
+                        # Create a copy of the tensor for the centroid
+                        initial_centroid[param_name] = tensor.detach().clone()
+                
+                # Save the initial centroid
+                if initial_centroid:
+                    self.save_family_centroid(family_id, initial_centroid)
+                    
+                    # Update Neo4j centroid node
+                    try:
+                        from src.services.neo4j_service import Neo4jService
+                        neo4j_service = Neo4jService()
+                        if neo4j_service.is_connected():
+                            # Create FamilyCentroid node (for backward compatibility)
+                            embedding = self.centroid_to_embedding(initial_centroid)
+                            neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                            
+                            # Update enhanced Centroid node with metadata
+                            self._update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
+                            
+                            neo4j_service.create_has_centroid_relationship(family_id)
+                        neo4j_service.close()
+                    except Exception as neo4j_error:
+                        logger.warning(f"Failed to update Neo4j centroid for new family {family_id}: {neo4j_error}")
+                    
+                    logger.info(f"✅ Initial centroid created and saved for family {family_id}")
+                else:
+                    logger.warning(f"No valid weights found to create centroid for family {family_id}")
+            else:
+                logger.info(f"No model weights provided - centroid will be created later for family {family_id}")
             
             logger.info(f"Created new family {family_id} for model {model.id}")
             return family_id
@@ -605,9 +647,15 @@ class FamilyClusteringSystem:
     
     def _update_family_assignments(self, 
                                  models: List[Model], 
-                                 cluster_labels: np.ndarray) -> Dict[str, List[str]]:
+                                 cluster_labels: np.ndarray,
+                                 model_weights: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, List[str]]:
         """
         Update database with new family assignments.
+        
+        Args:
+            models: List of models to assign
+            cluster_labels: Cluster labels for each model 
+            model_weights: Dictionary mapping model_id -> model weights for centroid creation
         """
         try:
             # Clear existing family assignments
@@ -621,7 +669,8 @@ class FamilyClusteringSystem:
             for i, (model, label) in enumerate(zip(models, cluster_labels)):
                 if label == -1:  # Noise/unassigned
                     # Create individual family
-                    family_id = self._create_new_family(model)
+                    weights = model_weights.get(model.id) if model_weights else None
+                    family_id = self._create_new_family(model, weights)
                     model.family_id = family_id
                     families[family_id] = [model.id]
                 else:
@@ -631,7 +680,7 @@ class FamilyClusteringSystem:
                         label_to_family_id[label] = family_id
                         families[family_id] = []
                         
-                        # Create family record
+                        # Create family record - we'll create centroid later during statistics update
                         family = Family(
                             id=family_id,
                             structural_pattern_hash=model.structural_hash,
