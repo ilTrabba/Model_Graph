@@ -12,7 +12,8 @@ import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 
-from src.models.model import Model, Family, db
+from src.models.model import Model, Family
+from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
 from .tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
@@ -84,8 +85,7 @@ class ModelManagementSystem:
             family_id, family_confidence = self.family_clustering.assign_model_to_family(model)
             
             # Update model with family assignment
-            model.family_id = family_id
-            db.session.commit()
+            neo4j_service.update_model(model.id, {'family_id': family_id})
             
             logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
             
@@ -94,23 +94,26 @@ class ModelManagementSystem:
             
             # Update model with parent assignment
             if parent_id:
-                model.parent_id = parent_id
-                model.confidence_score = parent_confidence
-                db.session.commit()
+                neo4j_service.update_model(model.id, {
+                    'parent_id': parent_id,
+                    'confidence_score': parent_confidence
+                })
                 logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
             else:
-                model.parent_id = None
-                model.confidence_score = 0.0
-                db.session.commit()
+                neo4j_service.update_model(model.id, {
+                    'parent_id': None,
+                    'confidence_score': 0.0
+                })
                 logger.info(f"Model {model.id} assigned as root in family {family_id}")
             
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
             
             # Step 4: Mark as processed
-            model.status = 'ok'
-            model.processed_at = datetime.now(timezone.utc)
-            db.session.commit()
+            neo4j_service.update_model(model.id, {
+                'status': 'ok',
+                'processed_at': datetime.now(timezone.utc)
+            })
             
             # Step 5: Get family tree for context
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
@@ -130,9 +133,10 @@ class ModelManagementSystem:
             logger.error(f"Error processing model {model.id}: {e}")
             
             # Mark model as error state
-            model.status = 'error'
-            model.processed_at = datetime.now(timezone.utc)
-            db.session.commit()
+            neo4j_service.update_model(model.id, {
+                'status': 'error',
+                'processed_at': datetime.now(timezone.utc)
+            })
             
             return {
                 'model_id': model.id,
@@ -221,19 +225,21 @@ class ModelManagementSystem:
                     new_confidence = confidence_scores.get(model.id, 0.0)
                     
                     if model.parent_id != new_parent_id or abs((model.confidence_score or 0.0) - new_confidence) > 0.01:
-                        model.parent_id = new_parent_id
-                        model.confidence_score = new_confidence
+                        neo4j_service.update_model(model.id, {
+                            'parent_id': new_parent_id,
+                            'confidence_score': new_confidence
+                        })
                         updated_count += 1
                         logger.debug(f"Updated parent for {model.id}: {new_parent_id} (confidence: {new_confidence:.3f})")
                 else:
                     # Model is a root
                     if model.parent_id is not None:
-                        model.parent_id = None
-                        model.confidence_score = 0.0
+                        neo4j_service.update_model(model.id, {
+                            'parent_id': None,
+                            'confidence_score': 0.0
+                        })
                         updated_count += 1
                         logger.debug(f"Set {model.id} as root model")
-            
-            db.session.commit()
             
             # Update family statistics
             self.family_clustering.update_family_statistics(family_id)

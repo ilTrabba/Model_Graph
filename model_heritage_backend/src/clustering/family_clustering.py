@@ -17,7 +17,8 @@ from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import safetensors.torch
 
-from src.models.model import Model, Family, db
+from src.models.model import Model, Family
+from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 
 logger = logging.getLogger(__name__)
@@ -363,8 +364,6 @@ class FamilyClusteringSystem:
                 
                 # Update Neo4j centroid node with actual embedding and metadata
                 try:
-                    from src.services.neo4j_service import Neo4jService
-                    neo4j_service = Neo4jService()
                     if neo4j_service.is_connected():
                         # Update embedding in FamilyCentroid (for backward compatibility)
                         embedding = self.centroid_to_embedding(centroid)
@@ -374,7 +373,6 @@ class FamilyClusteringSystem:
                         self._update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
                         
                         neo4j_service.create_has_centroid_relationship(family_id)
-                    neo4j_service.close()
                 except Exception as neo4j_error:
                     logger.warning(f"Failed to update Neo4j centroid for family {family_id}: {neo4j_error}")
             
@@ -407,17 +405,24 @@ class FamilyClusteringSystem:
             ).all()
             
             # Update member count
-            family.member_count = len(family_models)
+            member_count = len(family_models)
             
             # Calculate average intra-family distance
             if len(family_models) >= 2:
                 avg_distance = self._calculate_intra_family_distance(family_models)
-                family.avg_intra_distance = avg_distance
             else:
-                family.avg_intra_distance = 0.0
+                avg_distance = 0.0
             
-            family.updated_at = datetime.now(timezone.utc)
-            db.session.commit()
+            # Update family in Neo4j
+            updates = {
+                'member_count': member_count,
+                'avg_intra_distance': avg_distance,
+                'updated_at': datetime.now(timezone.utc)
+            }
+            neo4j_service.create_or_update_family({
+                'id': family_id,
+                **updates
+            })
             
             # Trigger centroid recalculation for incremental updates
             if len(family_models) >= 1:
@@ -426,7 +431,7 @@ class FamilyClusteringSystem:
                 except Exception as centroid_error:
                     logger.warning(f"Failed to update centroid for family {family_id}: {centroid_error}")
             
-            logger.info(f"Updated statistics for family {family_id}: {family.member_count} members, avg_distance: {family.avg_intra_distance:.4f}")
+            logger.info(f"Updated statistics for family {family_id}: {member_count} members, avg_distance: {avg_distance:.4f}")
             return True
             
         except Exception as e:
@@ -498,15 +503,16 @@ class FamilyClusteringSystem:
         try:
             family_id = f"family_{str(uuid.uuid4())[:8]}"
             
-            family = Family(
-                id=family_id,
-                structural_pattern_hash=model.structural_hash,
-                member_count=1,
-                avg_intra_distance=0.0
-            )
-            
-            db.session.add(family)
-            db.session.commit()
+            # Create family in Neo4j
+            family_data = {
+                'id': family_id,
+                'structural_pattern_hash': model.structural_hash,
+                'member_count': 1,
+                'avg_intra_distance': 0.0,
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc)
+            }
+            neo4j_service.create_or_update_family(family_data)
             
             # Create initial centroid from the first model's weights if provided
             if model_weights:
@@ -525,8 +531,6 @@ class FamilyClusteringSystem:
                     
                     # Update Neo4j centroid node
                     try:
-                        from src.services.neo4j_service import Neo4jService
-                        neo4j_service = Neo4jService()
                         if neo4j_service.is_connected():
                             # Create FamilyCentroid node (for backward compatibility)
                             embedding = self.centroid_to_embedding(initial_centroid)
@@ -536,7 +540,6 @@ class FamilyClusteringSystem:
                             self._update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
                             
                             neo4j_service.create_has_centroid_relationship(family_id)
-                        neo4j_service.close()
                     except Exception as neo4j_error:
                         logger.warning(f"Failed to update Neo4j centroid for new family {family_id}: {neo4j_error}")
                     
@@ -658,20 +661,17 @@ class FamilyClusteringSystem:
             model_weights: Dictionary mapping model_id -> model weights for centroid creation
         """
         try:
-            # Clear existing family assignments
-            for model in models:
-                model.family_id = None
-            
             # Create new families and assign models
             families = {}
             label_to_family_id = {}
+            model_updates = []  # Track model updates to batch them
             
             for i, (model, label) in enumerate(zip(models, cluster_labels)):
                 if label == -1:  # Noise/unassigned
                     # Create individual family
                     weights = model_weights.get(model.id) if model_weights else None
                     family_id = self._create_new_family(model, weights)
-                    model.family_id = family_id
+                    model_updates.append((model.id, {'family_id': family_id}))
                     families[family_id] = [model.id]
                 else:
                     # Get or create family for this cluster
@@ -680,20 +680,24 @@ class FamilyClusteringSystem:
                         label_to_family_id[label] = family_id
                         families[family_id] = []
                         
-                        # Create family record - we'll create centroid later during statistics update
-                        family = Family(
-                            id=family_id,
-                            structural_pattern_hash=model.structural_hash,
-                            member_count=0,
-                            avg_intra_distance=0.0
-                        )
-                        db.session.add(family)
+                        # Create family record in Neo4j
+                        family_data = {
+                            'id': family_id,
+                            'structural_pattern_hash': model.structural_hash,
+                            'member_count': 0,
+                            'avg_intra_distance': 0.0,
+                            'created_at': datetime.now(timezone.utc),
+                            'updated_at': datetime.now(timezone.utc)
+                        }
+                        neo4j_service.create_or_update_family(family_data)
                     
                     family_id = label_to_family_id[label]
-                    model.family_id = family_id
+                    model_updates.append((model.id, {'family_id': family_id}))
                     families[family_id].append(model.id)
             
-            db.session.commit()
+            # Update all models with their family assignments
+            for model_id, updates in model_updates:
+                neo4j_service.update_model(model_id, updates)
             
             # Update family statistics
             for family_id in families.keys():
