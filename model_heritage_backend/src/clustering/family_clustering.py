@@ -59,12 +59,14 @@ class FamilyClusteringSystem:
         self.min_family_size = min_family_size
         self.clustering_method = clustering_method
         
-        # Centroid storage configuration
-        self.centroids_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'weights', 'centroids')
+        # Centroid storage configuration - use same approach as UPLOAD_FOLDER
+        self.centroids_dir = os.path.join('weights', 'centroids')
         os.makedirs(self.centroids_dir, exist_ok=True)
         
         logger.info(f"Initialized FamilyClusteringSystem with threshold: {family_threshold}")
         logger.info(f"Centroids directory: {self.centroids_dir}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Absolute centroids path: {os.path.abspath(self.centroids_dir)}")
     
     def get_centroid_file_path(self, family_id: str) -> str:
         """Get the file path for a family's centroid file using SafeTensors format."""
@@ -81,15 +83,25 @@ class FamilyClusteringSystem:
         Returns:
             True if successfully saved, False otherwise
         """
+        logger.info(f"=== ATTEMPTING TO SAVE CENTROID FOR FAMILY {family_id} ===")
+        logger.info(f"Centroid keys: {list(centroid.keys()) if centroid else 'None'}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Centroids directory: {self.centroids_dir}")
+        logger.info(f"Absolute centroids path: {os.path.abspath(self.centroids_dir)}")
+        
         try:
             if not centroid:
                 logger.warning(f"Cannot save empty centroid for family {family_id}")
                 return False
             
             centroid_path = self.get_centroid_file_path(family_id)
+            logger.info(f"Target path: {centroid_path}")
+            logger.info(f"Absolute target path: {os.path.abspath(centroid_path)}")
+            logger.info(f"Directory exists: {os.path.exists(os.path.dirname(centroid_path))}")
             
             # Ensure centroids directory exists
             os.makedirs(os.path.dirname(centroid_path), exist_ok=True)
+            logger.info(f"Directory created/verified: {os.path.dirname(centroid_path)}")
             
             # Prepare metadata for SafeTensors
             metadata = {
@@ -104,11 +116,23 @@ class FamilyClusteringSystem:
             
             # Save using SafeTensors format
             safetensors.torch.save_file(centroid, centroid_path, metadata=metadata)
-            logger.info(f"Saved centroid for family {family_id} to {centroid_path} (SafeTensors format)")
+            logger.info(f"✅ SUCCESSFULLY SAVED centroid to {centroid_path} (SafeTensors format)")
+            
+            # Verify that the file was actually created
+            if os.path.exists(centroid_path):
+                file_size = os.path.getsize(centroid_path)
+                logger.info(f"✅ File verified: {centroid_path} ({file_size} bytes)")
+            else:
+                logger.error(f"❌ File NOT found after save: {centroid_path}")
+                return False
+            
             return True
             
         except Exception as e:
-            logger.error(f"Error saving centroid for family {family_id}: {e}")
+            logger.error(f"❌ Error saving centroid for family {family_id}: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return False
     
     def load_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
@@ -125,7 +149,7 @@ class FamilyClusteringSystem:
             centroid_path = self.get_centroid_file_path(family_id)
             
             if not os.path.exists(centroid_path):
-                logger.debug(f"No centroid file found for family {family_id}")
+                logger.debug(f"No centroid file found for family {family_id} at {centroid_path}")
                 return None
             
             # Check if it's a SafeTensors file

@@ -11,7 +11,7 @@ from src.services.neo4j_service import neo4j_service
 
 models_bp = Blueprint('models', __name__)
 
-UPLOAD_FOLDER = 'weights'
+UPLOAD_FOLDER = 'weights/models'
 ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth', 'html'}
 
 def allowed_file(filename):
