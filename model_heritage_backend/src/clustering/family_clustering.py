@@ -17,7 +17,7 @@ from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import safetensors.torch
 
-from src.models.model import Model, Family
+from ..models.model import Model, Family
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 
