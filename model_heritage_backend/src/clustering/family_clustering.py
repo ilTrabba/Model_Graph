@@ -367,7 +367,7 @@ class FamilyClusteringSystem:
                     if neo4j_service.is_connected():
                         # Update embedding in FamilyCentroid (for backward compatibility)
                         embedding = self.centroid_to_embedding(centroid)
-                        neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                        #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                         
                         # Update enhanced Centroid node with metadata
                         self._update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
@@ -512,7 +512,7 @@ class FamilyClusteringSystem:
                 'created_at': datetime.now(timezone.utc),
                 'updated_at': datetime.now(timezone.utc)
             }
-            neo4j_service.create_or_update_family(family_data)
+            neo4j_service.create_family(family_data)
             
             # Create initial centroid from the first model's weights if provided
             if model_weights:
@@ -534,7 +534,7 @@ class FamilyClusteringSystem:
                         if neo4j_service.is_connected():
                             # Create FamilyCentroid node (for backward compatibility)
                             embedding = self.centroid_to_embedding(initial_centroid)
-                            neo4j_service.create_or_update_family_centroid(family_id, embedding)
+                            #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                             
                             # Update enhanced Centroid node with metadata
                             self._update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
