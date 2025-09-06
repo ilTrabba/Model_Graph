@@ -789,7 +789,7 @@ class FamilyClusteringSystem:
             layer_keys = list(centroid.keys()) if centroid else []
             
             # Update the Centroid node with metadata
-            with neo4j_service.driver.session(database=neo4j_service.driver._config.get('database', 'neo4j')) as session:
+            with neo4j_service.driver.session(database='neo4j') as session:
                 query = """
                 MATCH (c:Centroid {family_id: $family_id})
                 SET c.layer_keys = $layer_keys,
