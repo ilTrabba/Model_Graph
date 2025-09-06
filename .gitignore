@@ -1,11 +1,12 @@
-ModelHeritageEnv/
-
 # Frontend
 model_heritage_frontend/pnpm-lock.yaml
 model_heritage_frontend/node_modules
 model_heritage_frontend/dist
 
 # Backend
+ModelHeritageEnv/
+model_heritage_backend/__pycache__
+model_heritage_backend/ModelHeritageEnv
 model_heritage_backend/src/__pycache__
 model_heritage_backend/src/*/__pycache__
 model_heritage_backend/src/database/app.db
@@ -13,8 +14,12 @@ model_heritage_backend/uploads/*.pt
 model_heritage_backend/uploads/*.pth
 model_heritage_backend/uploads/*.bin
 model_heritage_backend/uploads/*.safetensors
-
-node_modules
-
 model_heritage_backend/weights
 weights/
+node_modules/
+__pycache__/
+*.pyc
+
+# IDEs and debugging
+.idea/
+.vscode/
