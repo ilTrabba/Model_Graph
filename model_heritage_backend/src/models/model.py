@@ -320,6 +320,6 @@ class FamilyQuery:
 
 
 # Create instances that mimic the SQLAlchemy model classes
-Model = ModelManager()
-Family = FamilyManager()
+#Model = ModelManager()
+#Family = FamilyManager()
 

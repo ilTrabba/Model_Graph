@@ -28,7 +28,7 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(models_bp, url_prefix='/api')
 app.register_blueprint(graph_bp, url_prefix='/api')
 
-# Initialize Neo4j constraints (no SQLAlchemy needed)
+# Initialize Neo4j constraints
 with app.app_context():
     try:
         if neo4j_service.is_connected():
@@ -57,4 +57,6 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    print("🔍 DEBUG: Avvio del server") 
+    # Per il debug, usa threaded=True e debug=False
+    app.run(host='0.0.0.0', port=5001, debug=False, threaded=True, use_reloader=False)
