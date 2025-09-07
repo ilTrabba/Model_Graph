@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 
 from src.models.model import Model, Family
+from src.models.model import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
@@ -164,7 +165,7 @@ class ModelManagementSystem:
                 return None, 0.0
             
             # Get other models in the family
-            family_models = Model.query.filter(
+            family_models = ModelQuery.filter(
                 Model.family_id == target_family_id,
                 Model.id != model.id,
                 Model.status == 'ok'
@@ -198,7 +199,7 @@ class ModelManagementSystem:
             logger.info(f"Rebuilding tree for family {family_id}")
             
             # Get family models
-            family_models = Model.query.filter_by(
+            family_models = ModelQuery.filter_by(
                 family_id=family_id,
                 status='ok'
             ).all()
@@ -327,7 +328,7 @@ class ModelManagementSystem:
         """
         try:
             # Get family info
-            family = Family.query.get(family_id)
+            family = FamilyQuery.get(family_id)
             if not family:
                 return {'error': 'Family not found'}
             

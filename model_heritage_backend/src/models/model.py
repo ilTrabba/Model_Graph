@@ -298,6 +298,10 @@ class FamilyQuery:
         """Order by field"""
         return self
     
+    def get(self, family_id: str) -> Optional[Family]:
+        """Get a single family by its ID."""
+        return self.filter_by(id=family_id).first()
+    
     def all(self) -> List[Family]:
         """Get all families"""
         families_data = neo4j_service.get_all_families()
@@ -317,9 +321,4 @@ class FamilyQuery:
     def count(self) -> int:
         """Count families"""
         return len(self.all())
-
-
-# Create instances that mimic the SQLAlchemy model classes
-#Model = ModelManager()
-#Family = FamilyManager()
 

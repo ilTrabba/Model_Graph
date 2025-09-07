@@ -446,6 +446,18 @@ class Neo4jService:
             logger.error(f"Failed to get all families: {e}")
             return []
     
+    def get_family_by_id(self, family_id: str) -> Optional[Dict]:
+        """Get a single family from Neo4j by its ID."""
+        query = f"""
+        MATCH (f:Family {{id: $family_id}})
+        RETURN f AS family
+        """
+        result = self.execute_query(query, family_id=family_id)
+        if result:
+            return result[0]['family']
+        return None
+
+    
     def get_family_models(self, family_id: str) -> List[Dict[str, Any]]:
         """Get all models in a specific family"""
         if not self.driver:

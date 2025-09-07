@@ -18,10 +18,14 @@ from sklearn.metrics.pairwise import pairwise_distances
 import safetensors.torch
 
 from ..models.model import Model, Family
+from ..models.model import FamilyQuery, ModelQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 
 logger = logging.getLogger(__name__)
+
+family_query = FamilyQuery()
+model_query = ModelQuery()
 
 class ClusteringMethod(Enum):
     """Available clustering methods"""
@@ -43,7 +47,7 @@ class FamilyClusteringSystem:
     
     def __init__(self,
                  distance_calculator: Optional[ModelDistanceCalculator] = None,
-                 family_threshold: float = 0.5,
+                 family_threshold: float = 0.2,
                  min_family_size: int = 2,
                  clustering_method: ClusteringMethod = ClusteringMethod.THRESHOLD):
         """
@@ -180,45 +184,31 @@ class FamilyClusteringSystem:
             return None
     
     def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
-        """
-        Convert centroid weights to a single embedding vector for Neo4j.
-        
-        Args:
-            centroid: Dictionary containing centroid weights
-            
-        Returns:
-            List of floats representing the centroid as an embedding
-        """
         try:
             if not centroid:
                 return [0.0]
             
-            # Flatten all weight tensors into a single vector
-            embedding_parts = []
+            # Create a compact signature instead of full weights
+            signature = []
             
             for param_name, tensor in centroid.items():
                 if isinstance(tensor, torch.Tensor):
-                    # Flatten the tensor and convert to list
-                    flattened = tensor.detach().cpu().numpy().flatten()
-                    embedding_parts.extend(flattened.tolist())
+                    # Use statistical measures instead of raw weights
+                    tensor_np = tensor.detach().cpu().numpy()
+                    stats = [
+                        float(tensor_np.mean()),
+                        float(tensor_np.std()),
+                        float(tensor_np.min()),
+                        float(tensor_np.max()),
+                        float(tensor_np.shape[0] if len(tensor_np.shape) > 0 else 1)
+                    ]
+                    signature.extend(stats)
             
-            # If no valid tensors found, return placeholder
-            if not embedding_parts:
-                return [0.0]
-            
-            # Truncate if too long (Neo4j has practical limits)
-            max_embedding_size = 1000  # Reasonable limit for Neo4j
-            if len(embedding_parts) > max_embedding_size:
-                # Sample evenly across the embedding
-                step = len(embedding_parts) // max_embedding_size
-                embedding_parts = embedding_parts[::step][:max_embedding_size]
-            
-            return embedding_parts
-            
+            return signature[:100]  # Limit to 100 values max
         except Exception as e:
             logger.error(f"Error converting centroid to embedding: {e}")
             return [0.0]
-    
+        
     def assign_model_to_family(self, 
                              model: Model,
                              model_weights: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
@@ -254,7 +244,7 @@ class FamilyClusteringSystem:
                 model, model_weights, candidate_families
             )
             
-            if confidence >= self.family_threshold:
+            if confidence >= 0.2:
                 # Assign to existing family
                 self._add_model_to_family(model, best_family_id)
                 return best_family_id, confidence
@@ -284,7 +274,7 @@ class FamilyClusteringSystem:
             logger.info("Starting complete family reclustering")
             
             # Get all processed models
-            models = Model.query.filter_by(status='ok').all()
+            models = model_query.filter_by(status='ok').all()
             if len(models) < self.min_family_size:
                 logger.warning("Not enough models for meaningful clustering")
                 return {}
@@ -336,7 +326,7 @@ class FamilyClusteringSystem:
         """
         try:
             # Get all models in the family
-            family_models = Model.query.filter_by(
+            family_models = model_query.filter_by(
                 family_id=family_id, 
                 status='ok'
             ).all()
@@ -394,12 +384,12 @@ class FamilyClusteringSystem:
             True if successfully updated, False otherwise
         """
         try:
-            family = Family.query.get(family_id)
+            family = family_query.get(family_id)
             if not family:
                 return False
             
             # Get family models
-            family_models = Model.query.filter_by(
+            family_models = model_query.filter_by(
                 family_id=family_id,
                 status='ok'
             ).all()
@@ -445,7 +435,7 @@ class FamilyClusteringSystem:
         try:
             # For now, consider all families as candidates
             # In future versions, could filter by structural_hash or other criteria
-            return Family.query.all()
+            return family_query.all()
             
         except Exception as e:
             logger.error(f"Error finding candidate families: {e}")
@@ -466,6 +456,7 @@ class FamilyClusteringSystem:
             best_distance = float('inf')
             
             for family in candidate_families:
+                #prendere centroide già esistente della famiglia corrente con un if
                 # Calculate distance to family centroid
                 centroid = self.calculate_family_centroid(family.id)
                 if centroid is None:
@@ -481,10 +472,13 @@ class FamilyClusteringSystem:
             
             if best_family_id is None:
                 return "", 0.0
-            
+        
             # Convert distance to confidence score
-            confidence = max(0.0, 1.0 - (best_distance / (self.family_threshold * 2)))
-            confidence = min(1.0, confidence)
+            print(f"{self.family_threshold}")
+            value1 = best_distance / 2.0
+            value2 = 1- value1
+            confidence = max (0.0, value2)
+            confidence = min (1.0, confidence)
             
             return best_family_id, confidence
             
