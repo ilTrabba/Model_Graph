@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 
 from src.models.model import Model
+from src.models.model import ModelQuery
 from src.algorithms.mother_utils import (
     load_model_weights,
     calc_ku, 
@@ -21,6 +22,7 @@ from src.algorithms.mother_utils import (
 from .distance_calculator import ModelDistanceCalculator
 
 logger = logging.getLogger(__name__)
+model_query = ModelQuery()
 
 class TreeBuildingMethod(Enum):
     """Available tree building methods"""
@@ -75,7 +77,7 @@ class MoTHerTreeBuilder:
         try:
             # Get family models if not provided
             if models is None:
-                models = Model.query.filter_by(
+                models = model_query.filter_by(
                     family_id=family_id,
                     status='ok'
                 ).all()

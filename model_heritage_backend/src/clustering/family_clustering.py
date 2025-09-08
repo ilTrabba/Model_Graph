@@ -16,11 +16,12 @@ from enum import Enum
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import safetensors.torch
-
+from safetensors import safe_open
 from ..models.model import Model, Family
 from ..models.model import FamilyQuery, ModelQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -457,8 +458,32 @@ class FamilyClusteringSystem:
             
             for family in candidate_families:
                 #prendere centroide già esistente della famiglia corrente con un if
-                # Calculate distance to family centroid
-                centroid = self.calculate_family_centroid(family.id)
+                centroid_path = os.path.join("weights", "centroids", f"{family.id}.safetensors")
+                esiste_centroide = Path(centroid_path).exists()
+                print(f"{esiste_centroide}")
+
+
+                if os.path.exists(centroid_path):
+                    try:
+                        with safe_open(centroid_path, framework="pt") as f:
+                            # Create a dictionary to hold the tensors
+                            centroid_data = {}
+                            for key in f.keys():
+                                # Load each tensor and add it to the dictionary
+                                # .clone() is often good practice to ensure you have an independent copy
+                                centroid_data[key] = f.get_tensor(key).clone()
+
+                        # Now, centroid_data is a dictionary with the loaded tensors
+                        centroid = centroid_data
+
+                    except Exception as e:
+                        print(f"Error loading safetensors file: {e}")
+                        centroid = None
+                else:
+                    # Calculate distance to family centroid
+                    #centroid = self.calculate_family_centroid(family.id)
+                    print("hakuna matata")
+
                 if centroid is None:
                     continue
                 

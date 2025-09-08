@@ -21,6 +21,9 @@ from .tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
 
 logger = logging.getLogger(__name__)
 
+family_query = FamilyQuery()
+model_query = ModelQuery()
+
 class ModelManagementSystem:
     """
     Complete pipeline integration for model clustering and heritage detection.
@@ -165,7 +168,7 @@ class ModelManagementSystem:
                 return None, 0.0
             
             # Get other models in the family
-            family_models = ModelQuery.filter(
+            family_models = model_query.filter(
                 Model.family_id == target_family_id,
                 Model.id != model.id,
                 Model.status == 'ok'
@@ -199,7 +202,7 @@ class ModelManagementSystem:
             logger.info(f"Rebuilding tree for family {family_id}")
             
             # Get family models
-            family_models = ModelQuery.filter_by(
+            family_models = model_query.filter_by(
                 family_id=family_id,
                 status='ok'
             ).all()
@@ -328,12 +331,12 @@ class ModelManagementSystem:
         """
         try:
             # Get family info
-            family = FamilyQuery.get(family_id)
+            family = family_query.get(family_id)
             if not family:
                 return {'error': 'Family not found'}
             
             # Get family models
-            family_models = Model.query.filter_by(
+            family_models = model_query.filter_by(
                 family_id=family_id,
                 status='ok'
             ).all()
@@ -402,7 +405,7 @@ class ModelManagementSystem:
         """
         try:
             # Get model
-            model = Model.query.get(model_id)
+            model = model_query.get(model_id)
             if not model:
                 return {'error': 'Model not found'}
             
@@ -430,7 +433,7 @@ class ModelManagementSystem:
                         
                         if parent_edges:
                             parent_id = parent_edges[0]['source']
-                            parent_model = Model.query.get(parent_id)
+                            parent_model = model_query.get(parent_id)
                             if parent_model:
                                 ancestors.append(parent_model.to_dict())
                             current_id = parent_id
@@ -448,7 +451,7 @@ class ModelManagementSystem:
                         children = []
                         for edge in child_edges:
                             child_id = edge['target']
-                            child_model = Model.query.get(child_id)
+                            child_model = model_query.get(child_id)
                             if child_model:
                                 child_dict = child_model.to_dict()
                                 child_dict['children'] = find_children(child_id)
@@ -494,18 +497,18 @@ class ModelManagementSystem:
         """
         try:
             # Basic counts
-            total_models = Model.query.count()
-            processed_models = Model.query.filter_by(status='ok').count()
-            processing_models = Model.query.filter_by(status='processing').count()
-            error_models = Model.query.filter_by(status='error').count()
-            total_families = Family.query.count()
+            total_models = model_query.count()
+            processed_models = model_query.filter_by(status='ok').count()
+            processing_models = model_query.filter_by(status='processing').count()
+            error_models = model_query.filter_by(status='error').count()
+            total_families = family_query.count()
             
             # Family statistics
             family_sizes = []
-            families = Family.query.all()
+            families = family_query.all()
             
             for family in families:
-                family_model_count = Model.query.filter_by(
+                family_model_count = model_query.filter_by(
                     family_id=family.id,
                     status='ok'
                 ).count()
@@ -517,12 +520,12 @@ class ModelManagementSystem:
             min_family_size = min(family_sizes) if family_sizes else 0
             
             # Parent/child statistics
-            models_with_parents = Model.query.filter(
+            models_with_parents = model_query.filter(
                 Model.parent_id.isnot(None),
                 Model.status == 'ok'
             ).count()
             
-            root_models = Model.query.filter(
+            root_models = model_query.filter(
                 Model.parent_id.is_(None),
                 Model.status == 'ok'
             ).count()

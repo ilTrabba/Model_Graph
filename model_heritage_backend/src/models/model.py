@@ -307,9 +307,9 @@ class FamilyQuery:
         families_data = neo4j_service.get_all_families()
         families = [Family(**data) for data in families_data]
         
-        # Apply filters
-        if 'id' in self._filters:
-            families = [f for f in families if f.id == self._filters['id']]
+        # Apply filters, filtro che se verrà usato in futuro, è ampiamente da rivedere
+        #if 'id' in self._filters:
+            #families = [f for f in families if f.id == self._filters['id']]
         
         return families
     
