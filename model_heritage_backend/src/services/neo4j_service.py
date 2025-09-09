@@ -365,7 +365,8 @@ class Neo4jService:
                     c.updated_at = $updated_at,
                     c.distance_metric = $distance_metric,
                     c.version = $version,
-                    c.color = 'white'
+                    c.color = 'white',
+                    c.display_name = $id
                 RETURN c
                 """
                 
@@ -380,7 +381,8 @@ class Neo4jService:
                     'model_count': 0,  # Will be updated when centroid is calculated
                     'updated_at': datetime.now(timezone.utc).isoformat(),
                     'distance_metric': 'cosine',  # Default metric
-                    'version': '1.0'
+                    'version': '1.0',
+                    'display_name': centroid_id
                 })
                 
             logger.info(f"Created Centroid node for family {family_id}")

@@ -248,6 +248,7 @@ class FamilyClusteringSystem:
             if confidence >= 0.2:
                 # Assign to existing family
                 self._add_model_to_family(model, best_family_id)
+                #centroid2=self.calculate_family_centroid(family_id)  questa è sbagliata
                 return best_family_id, confidence
             else:
                 # Create new family with the model weights
