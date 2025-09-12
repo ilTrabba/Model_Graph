@@ -179,6 +179,8 @@ class ModelManagementSystem:
                 return None, 0.0
             
             # Use mother algorithm directly for parent finding
+            # TODO: Optimize for batch processing - reconstruct family tree once and reuse for multiple models
+            # instead of rebuilding tree for each find_model_parent call
             from src.algorithms.mother_algorithm import find_model_parent_mother
             parent_id, confidence = find_model_parent_mother(model, target_family_id)
             
