@@ -109,14 +109,86 @@ def _fallback_family_assignment(model_data):
     }
     neo4j_service.create_or_update_family(family_update)
     
-    # Try to find parent using original MoTHer algorithm
+    # Try to use tree-based approach for comprehensive relationship updates
     try:
+        from src.clustering.model_management import ModelManagementSystem
+        from src.clustering.tree_builder import MoTHerTreeBuilder
+        
+        # Initialize tree builder
+        tree_builder = MoTHerTreeBuilder()
+        
+        # Get all family models
+        family_models = neo4j_service.get_family_models(family_id)
+        ok_models = [m for m in family_models if m.get('status') == 'ok']
+        
+        # Create model proxies for tree building
+        model_proxies = []
+        for model_dict in ok_models:
+            try:
+                model_proxy = Model(**model_dict)
+                model_proxies.append(model_proxy)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to create proxy for model {model_dict.get('id')}: {e}")
+        
+        # Add our new model to the list
+        new_model_proxy = Model(**model_data)
+        model_proxies.append(new_model_proxy)
+        
+        if len(model_proxies) >= 2:
+            # Build complete family tree
+            tree, confidence_scores = tree_builder.build_tree_for_models(model_proxies)
+            
+            if tree.number_of_nodes() > 0:
+                # Update all model relationships based on tree
+                parent_id = None
+                parent_confidence = 0.0
+                
+                for model_proxy in model_proxies:
+                    predecessors = list(tree.predecessors(model_proxy.id))
+                    
+                    if predecessors:
+                        # Model has a parent
+                        new_parent_id = predecessors[0]
+                        new_confidence = confidence_scores.get(model_proxy.id, 0.0)
+                        
+                        # Update in Neo4j
+                        neo4j_service.update_model(model_proxy.id, {
+                            'parent_id': new_parent_id,
+                            'confidence_score': new_confidence
+                        })
+                        
+                        # If this is our new model, capture the parent info
+                        if model_proxy.id == model_data.get('id'):
+                            parent_id = new_parent_id
+                            parent_confidence = new_confidence
+                    else:
+                        # Model is a root
+                        neo4j_service.update_model(model_proxy.id, {
+                            'parent_id': None,
+                            'confidence_score': 0.0
+                        })
+                        
+                        # If this is our new model, capture the root status
+                        if model_proxy.id == model_data.get('id'):
+                            parent_id = None
+                            parent_confidence = 0.0
+                
+                current_app.logger.info(f"Successfully updated tree relationships for family {family_id}")
+                return family_id, parent_id, parent_confidence
+            else:
+                current_app.logger.warning("Tree building produced empty tree, falling back to individual parent finding")
+        else:
+            current_app.logger.info("Insufficient models for tree building, using individual parent finding")
+        
+        # Fallback to individual parent finding
         from src.algorithms.mother_algorithm import find_model_parent_mother
         model_proxy = Model(**model_data)
         parent_id, confidence = find_model_parent_mother(model_proxy, family_id)
         return family_id, parent_id, confidence
+        
     except Exception as e:
-        current_app.logger.error(f"MoTHer algorithm failed: {e}")
+        current_app.logger.error(f"Tree-based approach failed: {e}")
+        # Final fallback to parameter similarity
         parent_id, confidence = _fallback_parameter_similarity(model_data, family_id)
         return family_id, parent_id, confidence
 

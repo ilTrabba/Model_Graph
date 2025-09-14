@@ -93,23 +93,74 @@ class ModelManagementSystem:
             
             logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
             
-            # Step 2: Find parent within family
-            parent_id, parent_confidence = self.find_model_parent(model, family_id)
+            # Step 2: Build complete family tree and update all relationships
+            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
             
-            # Update model with parent assignment
-            if parent_id:
-                neo4j_service.update_model(model.id, {
-                    'parent_id': parent_id,
-                    'confidence_score': parent_confidence
-                })
-                logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
+            # Update all model relationships based on the complete tree
+            parent_id = None
+            parent_confidence = 0.0
+            
+            if family_tree.number_of_nodes() > 0:
+                # Get all family models for batch update
+                family_models = model_query.filter_by(
+                    family_id=family_id,
+                    status='ok'
+                ).all()
+                
+                # Update relationships for all models in the family based on tree structure
+                for family_model in family_models:
+                    predecessors = list(family_tree.predecessors(family_model.id))
+                    
+                    if predecessors:
+                        # Model has a parent
+                        new_parent_id = predecessors[0]
+                        new_confidence = tree_confidence.get(family_model.id, 0.0)
+                        
+                        neo4j_service.update_model(family_model.id, {
+                            'parent_id': new_parent_id,
+                            'confidence_score': new_confidence
+                        })
+                        
+                        # If this is our newly added model, store its parent info for response
+                        if family_model.id == model.id:
+                            parent_id = new_parent_id
+                            parent_confidence = new_confidence
+                            
+                        logger.debug(f"Updated parent for {family_model.id}: {new_parent_id} (confidence: {new_confidence:.3f})")
+                    else:
+                        # Model is a root
+                        neo4j_service.update_model(family_model.id, {
+                            'parent_id': None,
+                            'confidence_score': 0.0
+                        })
+                        
+                        # If this is our newly added model, store its root status for response
+                        if family_model.id == model.id:
+                            parent_id = None
+                            parent_confidence = 0.0
+                            
+                        logger.debug(f"Set {family_model.id} as root model")
+                
+                logger.info(f"Updated tree relationships for family {family_id} with {family_tree.number_of_nodes()} nodes")
             else:
-                neo4j_service.update_model(model.id, {
-                    'parent_id': None,
-                    'confidence_score': 0.0
-                })
-                logger.info(f"Model {model.id} assigned as root in family {family_id}")
-            
+                # Fallback to individual parent finding if tree building fails
+                logger.warning(f"Tree building failed for family {family_id}, falling back to individual parent finding")
+                parent_id, parent_confidence = self.find_model_parent(model, family_id)
+                
+                # Update model with parent assignment
+                if parent_id:
+                    neo4j_service.update_model(model.id, {
+                        'parent_id': parent_id,
+                        'confidence_score': parent_confidence
+                    })
+                    logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
+                else:
+                    neo4j_service.update_model(model.id, {
+                        'parent_id': None,
+                        'confidence_score': 0.0
+                    })
+                    logger.info(f"Model {model.id} assigned as root in family {family_id}")
+
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
             
@@ -118,9 +169,6 @@ class ModelManagementSystem:
                 'status': 'ok',
                 'processed_at': datetime.now(timezone.utc)
             })
-            
-            # Step 5: Get family tree for context
-            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
             
             return {
                 'model_id': model.id,
