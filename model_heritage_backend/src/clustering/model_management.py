@@ -94,21 +94,25 @@ class ModelManagementSystem:
             logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
             
             # Step 2: Build complete family tree and update all relationships
-            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id)
+            # Get all existing family models
+            existing_family_models = model_query.filter_by(
+                family_id=family_id,
+                status='ok'
+            ).all()
+            
+            # Include the new model in the tree building process
+            all_family_models = existing_family_models + [model]
+            
+            family_tree, tree_confidence = self.tree_builder.build_tree_for_models(all_family_models)
             
             # Update all model relationships based on the complete tree
             parent_id = None
             parent_confidence = 0.0
             
             if family_tree.number_of_nodes() > 0:
-                # Get all family models for batch update
-                family_models = model_query.filter_by(
-                    family_id=family_id,
-                    status='ok'
-                ).all()
                 
                 # Update relationships for all models in the family based on tree structure
-                for family_model in family_models:
+                for family_model in all_family_models:
                     predecessors = list(family_tree.predecessors(family_model.id))
                     
                     if predecessors:
@@ -226,7 +230,31 @@ class ModelManagementSystem:
                 logger.info(f"Model {model.id} is the only model in family {target_family_id}")
                 return None, 0.0
             
-            # Use mother algorithm directly for parent finding
+            # Try to use tree-based approach first (more comprehensive)
+            try:
+                all_models = family_models + [model]
+                tree, confidence_scores = self.tree_builder.build_tree_for_models(all_models)
+                
+                if tree.number_of_nodes() > 0:
+                    # Find parent of target model in tree
+                    predecessors = list(tree.predecessors(model.id))
+                    
+                    if predecessors:
+                        parent_id = predecessors[0]  # Should be only one parent in a tree
+                        confidence = confidence_scores.get(model.id, 0.0)
+                        
+                        logger.info(f"Tree-based approach found parent {parent_id} for model {model.id} with confidence {confidence:.3f}")
+                        return parent_id, confidence
+                    else:
+                        # Target model is a root node
+                        logger.info(f"Tree-based approach determined model {model.id} is a root model")
+                        return None, 0.0
+                else:
+                    logger.warning("Tree building produced empty tree, falling back to individual parent finding")
+            except Exception as e:
+                logger.warning(f"Tree-based approach failed for model {model.id}: {e}, falling back to individual parent finding")
+            
+            # Fallback to individual parent finding using mother algorithm
             from src.algorithms.mother_algorithm import find_model_parent_mother
             parent_id, confidence = find_model_parent_mother(model, target_family_id)
             
