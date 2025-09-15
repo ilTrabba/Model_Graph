@@ -9,11 +9,29 @@ import networkx as nx
 from typing import Tuple, Optional, List, Dict, Any
 
 from src.models.model import Model
+from src.models.model import ModelQuery
 from src.algorithms.mother_utils import (
     load_model_weights, calc_ku, calculate_l2_distance, build_tree
 )
 
 logger = logging.getLogger(__name__)
+model_query = ModelQuery()
+
+
+def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
+    """
+    Ensure edges are oriented parent -> child.
+    If the tree has no nodes with in_degree == 0 but has sinks (out_degree == 0),
+    it likely means edges are child -> parent; in that case, reverse it.
+    """
+    if tree is None or tree.number_of_nodes() == 0:
+        return tree
+    roots = [n for n in tree.nodes if tree.in_degree(n) == 0]
+    sinks = [n for n in tree.nodes if tree.out_degree(n) == 0]
+    if len(roots) == 0 and len(sinks) >= 1:
+        return nx.reverse(tree, copy=True)
+    return tree
+
 
 def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str], float]:
     """
@@ -28,7 +46,7 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
     """
     try:
         # Get all models in the family (excluding the current model)
-        family_models = Model.query.filter_by(family_id=family_id, status='ok').all()
+        family_models = model_query.filter_by(family_id=family_id, status='ok').all()
         
         if not family_models:
             logger.info(f"No models found in family {family_id}")
@@ -47,8 +65,8 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
         
         # Load weights for all models (including current model)
         all_models = [model] + candidates
-        model_weights = {}
-        valid_models = []
+        model_weights: Dict[str, Any] = {}
+        valid_models: List[Model] = []
         
         for m in all_models:
             weights = load_model_weights(m.file_path)
@@ -62,9 +80,12 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
             logger.warning(f"Insufficient valid models for MoTHer analysis. Falling back to parameter similarity.")
             return _fallback_parameter_similarity(model, candidates)
         
-        # Calculate kurtosis for each model
-        kurtosis_values = []
-        model_ids = []
+        # Stabilize order for reproducibility (independent of insertion order)
+        valid_models.sort(key=lambda m: m.id)
+
+        # Calculate kurtosis for each model in the stabilized order
+        kurtosis_values: List[float] = []
+        model_ids: List[str] = []
         
         for m in valid_models:
             ku = calc_ku(model_weights[m.id])
@@ -72,7 +93,7 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
             model_ids.append(m.id)
             logger.info(f"Model {m.id} kurtosis: {ku:.4f}")
         
-        # Build distance matrix
+        # Build distance matrix w.r.t. the same stabilized order
         n_models = len(valid_models)
         distance_matrix = np.zeros((n_models, n_models))
         
@@ -93,6 +114,9 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
             distance_matrix=distance_matrix,
             lambda_param=0.5  # Balance between kurtosis and distance
         )
+
+        # Normalize orientation to parent -> child before reading predecessors as "parents"
+        tree = _normalize_parent_child_orientation(tree)
         
         # Find the current model's index
         try:
@@ -101,7 +125,7 @@ def find_model_parent_mother(model: Model, family_id: str) -> Tuple[Optional[str
             logger.error(f"Current model {model.id} not found in valid models")
             return _fallback_parameter_similarity(model, candidates)
         
-        # Get parent from tree
+        # Get parent from tree (now oriented parent -> child)
         predecessors = list(tree.predecessors(current_model_idx))
         
         if predecessors:

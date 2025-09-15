@@ -90,9 +90,9 @@ class FamilyClusteringSystem:
             True if successfully saved, False otherwise
         """
         logger.info(f"=== ATTEMPTING TO SAVE CENTROID FOR FAMILY {family_id} ===")
-        logger.info(f"Centroid keys: {list(centroid.keys()) if centroid else 'None'}")
-        logger.info(f"Current working directory: {os.getcwd()}")
-        logger.info(f"Centroids directory: {self.centroids_dir}")
+        #logger.info(f"Centroid keys: {list(centroid.keys()) if centroid else 'None'}")
+        #logger.info(f"Current working directory: {os.getcwd()}")
+        #logger.info(f"Centroids directory: {self.centroids_dir}")
         logger.info(f"Absolute centroids path: {os.path.abspath(self.centroids_dir)}")
         
         try:

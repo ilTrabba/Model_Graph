@@ -103,7 +103,7 @@ class ModelManagementSystem:
             # Include the new model in the tree building process
             all_family_models = existing_family_models + [model]
             
-            family_tree, tree_confidence = self.tree_builder.build_tree_for_models(all_family_models)
+            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
             
             # Update all model relationships based on the complete tree
             parent_id = None
@@ -149,7 +149,8 @@ class ModelManagementSystem:
             else:
                 # Fallback to individual parent finding if tree building fails
                 logger.warning(f"Tree building failed for family {family_id}, falling back to individual parent finding")
-                parent_id, parent_confidence = self.find_model_parent(model, family_id)
+                from src.algorithms.mother_algorithm import find_model_parent_mother
+                parent_id, parent_confidence = find_model_parent_mother(model, family_id)
                 
                 # Update model with parent assignment
                 if parent_id:
@@ -233,7 +234,7 @@ class ModelManagementSystem:
             # Try to use tree-based approach first (more comprehensive)
             try:
                 all_models = family_models + [model]
-                tree, confidence_scores = self.tree_builder.build_tree_for_models(all_models)
+                tree, confidence_scores = self.tree_builder.build_family_tree(all_models)
                 
                 if tree.number_of_nodes() > 0:
                     # Find parent of target model in tree

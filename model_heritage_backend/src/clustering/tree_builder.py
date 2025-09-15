@@ -30,6 +30,22 @@ class TreeBuildingMethod(Enum):
     DISTANCE_ONLY = "distance" # Distance-based minimum spanning tree only
     KURTOSIS_ONLY = "kurtosis" # Kurtosis-based ordering only
 
+
+def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
+    """
+    Ensure edges are oriented parent -> child.
+    If the tree has no nodes with in_degree == 0 but has sinks (out_degree == 0),
+    it likely means edges are child -> parent; in that case, reverse it.
+    """
+    if tree is None or tree.number_of_nodes() == 0:
+        return tree
+    roots = [n for n in tree.nodes if tree.in_degree(n) == 0]
+    sinks = [n for n in tree.nodes if tree.out_degree(n) == 0]
+    if len(roots) == 0 and len(sinks) >= 1:
+        return nx.reverse(tree, copy=True)
+    return tree
+
+
 class MoTHerTreeBuilder:
     """
     Build genealogical relationships within model families using the MoTHer algorithm.
@@ -71,7 +87,7 @@ class MoTHerTreeBuilder:
             
         Returns:
             Tuple of (directed_tree, confidence_scores)
-            - directed_tree: NetworkX DiGraph with model IDs as nodes
+            - directed_tree: NetworkX DiGraph with model IDs as nodes (parent -> child)
             - confidence_scores: Dictionary mapping model_id -> confidence score
         """
         try:
@@ -81,6 +97,9 @@ class MoTHerTreeBuilder:
                     family_id=family_id,
                     status='ok'
                 ).all()
+
+            # Deterministic ordering independent of insertion timing
+            models = sorted(models, key=lambda m: m.id)
             
             if len(models) < 2:
                 logger.warning(f"Family {family_id} has insufficient models for tree building")
@@ -89,8 +108,8 @@ class MoTHerTreeBuilder:
             logger.info(f"Building tree for family {family_id} with {len(models)} models")
             
             # Load model weights
-            model_weights = {}
-            valid_models = []
+            model_weights: Dict[str, Any] = {}
+            valid_models: List[Model] = []
             
             for model in models:
                 weights = load_model_weights(model.file_path)
@@ -103,6 +122,9 @@ class MoTHerTreeBuilder:
             if len(valid_models) < 2:
                 logger.warning(f"Insufficient valid models for tree building in family {family_id}")
                 return nx.DiGraph(), {}
+
+            # Deterministic ordering also for valid-only set
+            valid_models.sort(key=lambda m: m.id)
             
             # Build tree using selected method
             if self.method == TreeBuildingMethod.MOTHER:
@@ -117,6 +139,9 @@ class MoTHerTreeBuilder:
             # Convert node indices to model IDs
             tree_with_ids = self._convert_tree_to_model_ids(tree, valid_models)
             confidence_with_ids = self._convert_confidence_to_model_ids(confidence_scores, valid_models)
+
+            # Normalize orientation to parent -> child for end-to-end consistency
+            tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
             
             logger.info(f"Built tree for family {family_id}: {tree_with_ids.number_of_nodes()} nodes, {tree_with_ids.number_of_edges()} edges")
             return tree_with_ids, confidence_with_ids
@@ -140,12 +165,15 @@ class MoTHerTreeBuilder:
             if len(models) < 2:
                 logger.warning("Need at least 2 models for tree building")
                 return nx.DiGraph(), {}
+
+            # Deterministic ordering
+            models = sorted(models, key=lambda m: m.id)
             
             logger.info(f"Building tree for {len(models)} models")
             
             # Load model weights
-            model_weights = {}
-            valid_models = []
+            model_weights: Dict[str, Any] = {}
+            valid_models: List[Model] = []
             
             for model in models:
                 weights = load_model_weights(model.file_path)
@@ -158,6 +186,9 @@ class MoTHerTreeBuilder:
             if len(valid_models) < 2:
                 logger.warning("Insufficient valid models for tree building")
                 return nx.DiGraph(), {}
+
+            # Deterministic ordering for valid models
+            valid_models.sort(key=lambda m: m.id)
             
             # Build tree using selected method
             if self.method == TreeBuildingMethod.MOTHER:
@@ -172,6 +203,9 @@ class MoTHerTreeBuilder:
             # Convert node indices to model IDs
             tree_with_ids = self._convert_tree_to_model_ids(tree, valid_models)
             confidence_with_ids = self._convert_confidence_to_model_ids(confidence_scores, valid_models)
+
+            # Normalize orientation to parent -> child
+            tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
             
             logger.info(f"Built tree: {tree_with_ids.number_of_nodes()} nodes, {tree_with_ids.number_of_edges()} edges")
             return tree_with_ids, confidence_with_ids
@@ -194,18 +228,24 @@ class MoTHerTreeBuilder:
             Tuple of (parent_model_id, confidence_score)
         """
         try:
+            # Deterministic order if used downstream
+            family_models = sorted([m for m in family_models if m.id != target_model.id], key=lambda m: m.id)
+
             # Include target model in the analysis
-            all_models = [target_model] + [m for m in family_models if m.id != target_model.id]
+            all_models = [target_model] + family_models
             
             if len(all_models) < 2:
                 logger.warning("Need at least 2 models for parent finding")
                 return None, 0.0
             
-            # Build tree for all models
+            # Build tree for all models (already normalized to parent -> child)
             tree, confidence_scores = self.build_tree_for_models(all_models)
             
             if tree.number_of_nodes() == 0:
                 return None, 0.0
+
+            # Defensive re-normalization (no-op if already parent -> child)
+            tree = _normalize_parent_child_orientation(tree)
             
             # Find parent of target model in tree
             predecessors = list(tree.predecessors(target_model.id))
@@ -404,7 +444,30 @@ class MoTHerTreeBuilder:
         except Exception as e:
             logger.error(f"Error converting confidence to model IDs: {e}")
             return {}
-    
+
+        def get_edges_for_persistence(self, 
+                                  tree_with_ids: nx.DiGraph, 
+                                  confidence_with_ids: Dict[str, float]) -> List[Tuple[str, str, float]]:
+            """
+            Restituisce una lista di tuple (child_id, parent_id, confidence_of_child) da persistere su Neo4j
+            con relazione (child)-[:IS_CHILD_OF {confidence}]->(parent).
+
+            Il tree_with_ids è parent -> child; qui invertiamo gli estremi per il writer IS_CHILD_OF.
+            """
+            edges: List[Tuple[str, str, float]] = []
+            try:
+                if tree_with_ids.number_of_nodes() == 0:
+                    return edges
+                # Assicura orientamento parent -> child
+                tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
+                for parent, child in tree_with_ids.edges():
+                    conf = confidence_with_ids.get(child, 0.0)
+                    # Output nel verso child -> parent per IS_CHILD_OF
+                    edges.append((child, parent, conf))
+                return edges
+            except Exception as e:
+                logger.error(f"Error building edges for persistence: {e}")
+                return []
     def get_tree_statistics(self, tree: nx.DiGraph) -> Dict[str, Any]:
         """
         Calculate statistics for a genealogical tree.
