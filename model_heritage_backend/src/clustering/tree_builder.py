@@ -281,6 +281,7 @@ class MoTHerTreeBuilder:
                 kurtosis_values.append(ku)
                 model_ids.append(model.id)
                 logger.debug(f"Model {model.id} kurtosis: {ku:.4f}")
+                print(f"Modello: {model.id} -> kurtosi: {ku:.4f}")
             
             # Build distance matrix
             n_models = len(models)
@@ -445,29 +446,29 @@ class MoTHerTreeBuilder:
             logger.error(f"Error converting confidence to model IDs: {e}")
             return {}
 
-        def get_edges_for_persistence(self, 
+    def get_edges_for_persistence(self, 
                                   tree_with_ids: nx.DiGraph, 
                                   confidence_with_ids: Dict[str, float]) -> List[Tuple[str, str, float]]:
-            """
-            Restituisce una lista di tuple (child_id, parent_id, confidence_of_child) da persistere su Neo4j
-            con relazione (child)-[:IS_CHILD_OF {confidence}]->(parent).
+        """
+        Restituisce una lista di tuple (child_id, parent_id, confidence_of_child) da persistere su Neo4j
+        con relazione (child)-[:IS_CHILD_OF {confidence}]->(parent).
 
-            Il tree_with_ids è parent -> child; qui invertiamo gli estremi per il writer IS_CHILD_OF.
-            """
-            edges: List[Tuple[str, str, float]] = []
-            try:
-                if tree_with_ids.number_of_nodes() == 0:
-                    return edges
-                # Assicura orientamento parent -> child
-                tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
-                for parent, child in tree_with_ids.edges():
-                    conf = confidence_with_ids.get(child, 0.0)
-                    # Output nel verso child -> parent per IS_CHILD_OF
-                    edges.append((child, parent, conf))
+        Il tree_with_ids è parent -> child; qui invertiamo gli estremi per il writer IS_CHILD_OF.
+        """
+        edges: List[Tuple[str, str, float]] = []
+        try:
+            if tree_with_ids.number_of_nodes() == 0:
                 return edges
-            except Exception as e:
-                logger.error(f"Error building edges for persistence: {e}")
-                return []
+            # Assicura orientamento parent -> child
+            tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
+            for parent, child in tree_with_ids.edges():
+                conf = confidence_with_ids.get(child, 0.0)
+                # Output nel verso child -> parent per IS_CHILD_OF
+                edges.append((child, parent, conf))
+            return edges
+        except Exception as e:
+            logger.error(f"Error building edges for persistence: {e}")
+            return []
     def get_tree_statistics(self, tree: nx.DiGraph) -> Dict[str, Any]:
         """
         Calculate statistics for a genealogical tree.

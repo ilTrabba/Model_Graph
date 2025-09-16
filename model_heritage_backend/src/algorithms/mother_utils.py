@@ -64,7 +64,7 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
         return None
 
 def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
-    """Calculate kurtosis of model weights"""
+    """Calculate kurtosis of model weights (only 2D square tensors)."""
     try:
         layer_kinds = _get_layer_kinds()
         all_weights = []
@@ -72,15 +72,18 @@ def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
         for param_name, param_tensor in weights.items():
             # Filter by layer kind if specified
             if layer_kind:
-                if not any(lk in param_name for lk in [layer_kind]):
+                if layer_kind not in param_name:
                     continue
             else:
-                # Include all weight and bias parameters for analysis
-                # More inclusive approach for simple models
+                # Include all weight and bias parameters for analysis (then shape-filter below)
                 if not any(lk in param_name for lk in layer_kinds) and 'weight' not in param_name and 'bias' not in param_name:
                     continue
                     
             if isinstance(param_tensor, torch.Tensor):
+                # Only include 2D square matrices
+                if not (param_tensor.ndim == 2 and param_tensor.shape[0] == param_tensor.shape[1]):
+                    continue
+
                 # Flatten and convert to numpy
                 param_weights = param_tensor.detach().cpu().numpy().flatten()
                 all_weights.extend(param_weights)
@@ -102,8 +105,7 @@ def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
         
     except Exception as e:
         logger.error(f"Error calculating kurtosis: {e}")
-        return 0.0
-
+        return 0.0   
 def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
     """Calculate L2 distance between two sets of model weights"""
     try:
@@ -204,16 +206,7 @@ def build_tree(ku_values: List[float],
                lambda_param: float) -> Tuple[nx.DiGraph, Dict[int, float]]:
     """
     Build directed tree using MoTHer algorithm with Chu-Liu-Edmonds MDST
-    
-    Args:
-        ku_values: Kurtosis values for each model
-        distance_matrix: Distance matrix between models (n x n)
-        lambda_param: Balance parameter (0.0 = distance only, 1.0 = kurtosis only)
-        
-    Returns:
-        Tuple of:
-        - directed_tree: NetworkX DiGraph with node indices
-        - confidence_scores: Dict mapping node_index -> confidence score
+    RIPRISTINO IMPLEMENTAZIONE ORIGINALE con SOLO correzione logica kurtosis
     """
     n = len(ku_values)
     
@@ -222,8 +215,8 @@ def build_tree(ku_values: List[float],
         return nx.DiGraph(), {}
     
     if n == 2:
-        # Special case: only two models, create simple parent->child based on kurtosis
-        if ku_values[0] < ku_values[1]:
+        # CORREZIONE: Higher kurtosis = parent (original model, less fine-tuned)
+        if ku_values[0] > ku_values[1]:
             parent, child = 0, 1
         else:
             parent, child = 1, 0
@@ -245,10 +238,12 @@ def build_tree(ku_values: List[float],
                 # Distance component (normalized)
                 distance_cost = distance_matrix[i, j]
                 
-                # Kurtosis component - lower kurtosis models are better parents
-                kurtosis_diff = ku_values[j] - ku_values[i]  # Cost for i->j edge
+                # CORREZIONE KURTOSIS: Higher kurtosis models should be parents
+                # Based on paper: fine-tuning reduces kurtosis (fewer outliers)
+                # A (high kurtosis, original) -> B (low kurtosis, fine-tuned)
+                kurtosis_diff = ku_values[i] - ku_values[j]  # CORRETTO: parent_ku - child_ku
                 
-                # If i has lower kurtosis than j, this is a good parent->child relationship
+                # If i has higher kurtosis than j, this is a good parent->child relationship
                 if kurtosis_diff > 0:
                     kurtosis_cost = -abs(kurtosis_diff)  # Negative cost = preferred
                 else:
@@ -260,6 +255,7 @@ def build_tree(ku_values: List[float],
                 G.add_edge(i, j, weight=edge_weight)
     
     # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
+    # RIPRISTINO ALGORITMO ORIGINALE
     try:
         mdst = chu_liu_edmonds_algorithm(G)
         logger.debug(f"Chu-Liu-Edmonds completed: {mdst.number_of_nodes()} nodes, {mdst.number_of_edges()} edges")
@@ -273,161 +269,160 @@ def build_tree(ku_values: List[float],
     return mdst, confidence_scores
 
 
+def _find_min_incoming_edges(graph):
+    """Find minimum incoming edge for each node"""
+    min_edges = {}
+    for node in graph.nodes():
+        min_weight = float('inf')
+        min_edge = None
+        
+        for pred in graph.predecessors(node):
+            weight = graph[pred][node]['weight']
+            if weight < min_weight:
+                min_weight = weight
+                min_edge = (pred, node)
+        
+        if min_edge is not None:
+            min_edges[node] = min_edge
+    
+    return min_edges
+
+
+def _build_candidate_tree(graph, min_edges):
+    """Build candidate tree with minimum incoming edges"""
+    candidate = nx.DiGraph()
+    candidate.add_nodes_from(graph.nodes())
+    
+    for target_node, (source_node, _) in min_edges.items():
+        if graph.has_edge(source_node, target_node):
+            candidate.add_edge(source_node, target_node, 
+                             weight=graph[source_node][target_node]['weight'])
+    
+    return candidate
+
+
+def _resolve_cycles(candidate_tree):
+    """Detect and resolve cycles by removing heaviest edges"""
+    max_iterations = len(candidate_tree.nodes()) * 2
+    iteration = 0
+    
+    while iteration < max_iterations:
+        try:
+            # Find simple cycles
+            cycles = list(nx.simple_cycles(candidate_tree))
+            
+            if not cycles:
+                break  # No more cycles
+            
+            # Process the first cycle found
+            cycle = cycles[0]
+            if len(cycle) < 2:
+                iteration += 1
+                continue
+            
+            # Find the heaviest edge in the cycle
+            max_weight = float('-inf')
+            heaviest_edge = None
+            
+            for i in range(len(cycle)):
+                u = cycle[i]
+                v = cycle[(i + 1) % len(cycle)]
+                
+                if candidate_tree.has_edge(u, v):
+                    weight = candidate_tree[u][v]['weight']
+                    if weight > max_weight:
+                        max_weight = weight
+                        heaviest_edge = (u, v)
+            
+            # Remove the heaviest edge
+            if heaviest_edge is not None:
+                candidate_tree.remove_edge(heaviest_edge[0], heaviest_edge[1])
+                logger.debug(f"Removed edge {heaviest_edge} with weight {max_weight}")
+            
+            iteration += 1
+            
+        except (nx.NetworkXError, nx.NetworkXNoCycle):
+            break
+    
+    return candidate_tree
+
+
+def _ensure_connectivity(tree, original_graph):
+    """Add edges to ensure weak connectivity if needed"""
+    components = list(nx.weakly_connected_components(tree))
+    
+    if len(components) <= 1:
+        return tree
+    
+    # Connect components with minimum weight edges
+    connected_tree = tree.copy()
+    
+    for i in range(len(components) - 1):
+        comp1 = components[i]
+        comp2 = components[i + 1]
+        
+        min_weight = float('inf')
+        best_edge = None
+        
+        # Find minimum weight edge between components
+        for u in comp1:
+            for v in comp2:
+                if original_graph.has_edge(u, v):
+                    weight = original_graph[u][v]['weight']
+                    if weight < min_weight:
+                        min_weight = weight
+                        best_edge = (u, v)
+                
+                if original_graph.has_edge(v, u):
+                    weight = original_graph[v][u]['weight']
+                    if weight < min_weight:
+                        min_weight = weight
+                        best_edge = (v, u)
+        
+        # Add the best connecting edge
+        if best_edge is not None:
+            u, v = best_edge
+            connected_tree.add_edge(u, v, weight=original_graph[u][v]['weight'])
+    
+    return connected_tree
+
+
 def chu_liu_edmonds_algorithm(G: nx.DiGraph) -> nx.DiGraph:
     """
     Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
-    
-    Implements the algorithm as described in the paper:
-    1. Find minimum incoming edge for each node
-    2. Detect cycles in the resulting graph
-    3. Contract cycles by removing heaviest edge
-    4. Repeat until no cycles remain
+    RIPRISTINO IMPLEMENTAZIONE ORIGINALE (quella che funzionava)
     """
     if G.number_of_nodes() <= 1:
         return G.copy()
     
-    # Step 1: Find minimum incoming edge for each node
-    def find_min_incoming_edges(graph):
-        min_edges = {}
-        for node in graph.nodes():
-            min_weight = float('inf')
-            min_edge = None
-            
-            for pred in graph.predecessors(node):
-                weight = graph[pred][node]['weight']
-                if weight < min_weight:
-                    min_weight = weight
-                    min_edge = (pred, node)
-            
-            if min_edge is not None:
-                min_edges[node] = min_edge
-        
-        return min_edges
-    
-    # Step 2: Build candidate tree with minimum incoming edges
-    def build_candidate_tree(graph, min_edges):
-        candidate = nx.DiGraph()
-        candidate.add_nodes_from(graph.nodes())
-        
-        for target_node, (source_node, _) in min_edges.items():
-            if graph.has_edge(source_node, target_node):
-                candidate.add_edge(source_node, target_node, 
-                                 weight=graph[source_node][target_node]['weight'])
-        
-        return candidate
-    
-    # Step 3: Detect and resolve cycles
-    def resolve_cycles(candidate_tree):
-        max_iterations = len(candidate_tree.nodes()) * 2
-        iteration = 0
-        
-        while iteration < max_iterations:
-            try:
-                # Find simple cycles
-                cycles = list(nx.simple_cycles(candidate_tree))
-                
-                if not cycles:
-                    break  # No more cycles
-                
-                # Process the first cycle found
-                cycle = cycles[0]
-                if len(cycle) < 2:
-                    iteration += 1
-                    continue
-                
-                # Find the heaviest edge in the cycle
-                max_weight = float('-inf')
-                heaviest_edge = None
-                
-                for i in range(len(cycle)):
-                    u = cycle[i]
-                    v = cycle[(i + 1) % len(cycle)]
-                    
-                    if candidate_tree.has_edge(u, v):
-                        weight = candidate_tree[u][v]['weight']
-                        if weight > max_weight:
-                            max_weight = weight
-                            heaviest_edge = (u, v)
-                
-                # Remove the heaviest edge
-                if heaviest_edge is not None:
-                    candidate_tree.remove_edge(heaviest_edge[0], heaviest_edge[1])
-                    logger.debug(f"Removed edge {heaviest_edge} with weight {max_weight}")
-                
-                iteration += 1
-                
-            except (nx.NetworkXError, nx.NetworkXNoCycle):
-                break
-        
-        return candidate_tree
-    
-    # Step 4: Ensure connectivity
-    def ensure_connectivity(tree, original_graph):
-        """Add edges to ensure weak connectivity if needed"""
-        components = list(nx.weakly_connected_components(tree))
-        
-        if len(components) <= 1:
-            return tree
-        
-        # Connect components with minimum weight edges
-        connected_tree = tree.copy()
-        
-        for i in range(len(components) - 1):
-            comp1 = components[i]
-            comp2 = components[i + 1]
-            
-            min_weight = float('inf')
-            best_edge = None
-            
-            # Find minimum weight edge between components
-            for u in comp1:
-                for v in comp2:
-                    if original_graph.has_edge(u, v):
-                        weight = original_graph[u][v]['weight']
-                        if weight < min_weight:
-                            min_weight = weight
-                            best_edge = (u, v)
-                    
-                    if original_graph.has_edge(v, u):
-                        weight = original_graph[v][u]['weight']
-                        if weight < min_weight:
-                            min_weight = weight
-                            best_edge = (v, u)
-            
-            # Add the best connecting edge
-            if best_edge is not None:
-                u, v = best_edge
-                connected_tree.add_edge(u, v, weight=original_graph[u][v]['weight'])
-        
-        return connected_tree
-    
-    # Execute the algorithm
+    # Execute the algorithm - LOGICA ORIGINALE
     current_graph = G.copy()
     
     # Main iteration
     for main_iteration in range(len(G.nodes())):
-        min_edges = find_min_incoming_edges(current_graph)
+        min_edges = _find_min_incoming_edges(current_graph)
         
         if not min_edges:
             break
             
-        candidate_tree = build_candidate_tree(current_graph, min_edges)
-        resolved_tree = resolve_cycles(candidate_tree)
+        candidate_tree = _build_candidate_tree(current_graph, min_edges)
+        resolved_tree = _resolve_cycles(candidate_tree)
         
         # Check if we have a valid tree
         if resolved_tree.number_of_edges() >= len(G.nodes()) - 1:
-            final_tree = ensure_connectivity(resolved_tree, G)
+            final_tree = _ensure_connectivity(resolved_tree, G)
             return final_tree
         
         current_graph = resolved_tree
     
     # Fallback: ensure we return something reasonable
-    return ensure_connectivity(current_graph, G)
+    return _ensure_connectivity(current_graph, G)
 
 
 def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:
     """
     Fallback algorithm using greedy approach for directed MST
+    RIPRISTINO IMPLEMENTAZIONE ORIGINALE
     """
     logger.debug("Using fallback directed MST algorithm")
     
@@ -464,6 +459,7 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
                               ku_values: List[float]) -> Dict[int, float]:
     """
     Calculate confidence scores for each node based on tree structure and kurtosis
+    RIPRISTINO IMPLEMENTAZIONE ORIGINALE
     """
     confidence_scores = {}
     
@@ -504,8 +500,8 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
                 else:
                     weight_confidence = 0.5
                 
-                # Kurtosis confidence (parent should have lower kurtosis)
-                kurtosis_diff = ku_values[node] - ku_values[parent]
+                # CORREZIONE: Parent should have HIGHER kurtosis than child
+                kurtosis_diff = ku_values[parent] - ku_values[node]
                 if kurtosis_diff > 0:
                     kurtosis_confidence = min(1.0, kurtosis_diff * 2)  # Good parent-child relationship
                 else:
@@ -518,74 +514,3 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
                 confidence_scores[node] = 0.4  # Default for orphaned nodes
     
     return confidence_scores
-
-'''
-def build_tree(ku_values: List[float], distance_matrix: np.ndarray, 
-               lambda_param: float = 0.5, ground_truth: Optional[List] = None, 
-               rev: bool = False) -> Tuple[nx.DiGraph, Dict[int, float]]:
-    """Build heritage tree from kurtosis and distance matrices"""
-    try:
-        n = len(ku_values)
-        if n <= 1:
-            return nx.DiGraph(), {}
-            
-        # Create combined cost matrix
-        ku_array = np.array(ku_values)
-        
-        # Normalize kurtosis values to [0, 1] range
-        ku_min, ku_max = ku_array.min(), ku_array.max()
-        if ku_max > ku_min:
-            ku_normalized = (ku_array - ku_min) / (ku_max - ku_min)
-        else:
-            ku_normalized = np.zeros_like(ku_array)
-            
-        # Normalize distance matrix
-        dist_flat = distance_matrix[~np.isinf(distance_matrix)]
-        if len(dist_flat) > 0:
-            dist_min, dist_max = dist_flat.min(), dist_flat.max()
-            if dist_max > dist_min:
-                dist_normalized = (distance_matrix - dist_min) / (dist_max - dist_min)
-                dist_normalized[np.isinf(distance_matrix)] = 1.0
-            else:
-                dist_normalized = np.zeros_like(distance_matrix)
-        else:
-            dist_normalized = np.ones_like(distance_matrix)
-            
-        # Combine kurtosis and distance with lambda weighting
-        combined_matrix = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                if i != j:
-                    # Parent should have higher kurtosis (less trained)
-                    kurtosis_diff = ku_normalized[j] - ku_normalized[i]  # i->j
-                    ku_cost = kurtosis_diff if kurtosis_diff > 0 else abs(kurtosis_diff) * 2
-                    dist_cost = dist_normalized[i, j]
-                    combined_matrix[i, j] = lambda_param * ku_cost + (1 - lambda_param) * dist_cost
-                else:
-                    combined_matrix[i, j] = float('inf')
-        
-        # Find minimum spanning tree
-        mst = _find_min_weighted_directed_tree(combined_matrix)
-        
-        # Calculate confidence scores based on edge weights
-        confidence_scores = {}
-        for node in mst.nodes():
-            predecessors = list(mst.predecessors(node))
-            if predecessors:
-                edge_data = mst.get_edge_data(predecessors[0], node)
-                if edge_data:
-                    # Convert cost to confidence (lower cost = higher confidence)
-                    confidence = 1.0 - min(1.0, edge_data.get('weight', 1.0))
-                    confidence_scores[node] = max(0.1, min(0.9, confidence))
-                else:
-                    confidence_scores[node] = 0.5
-            else:
-                confidence_scores[node] = 0.0  # Root node
-                
-        return mst, confidence_scores
-        
-    except Exception as e:
-        logger.error(f"Error building tree: {e}")
-        return nx.DiGraph(), {}
-
-'''

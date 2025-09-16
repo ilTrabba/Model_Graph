@@ -182,7 +182,11 @@ class Neo4jService:
                 SET {', '.join(set_clauses)}
                 RETURN m
                 """
-                
+
+                if "parent_id" in updates:
+                    parent_id = updates["parent_id"]
+                    neo4j_service.create_parent_child_relationship(parent_id, model_id, 0.7)
+
                 result = session.run(query, params)
                 return result.single() is not None
                 
