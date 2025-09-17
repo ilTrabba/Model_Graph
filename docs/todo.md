@@ -11,4 +11,5 @@
 10. eliminazione di un modello dal sistema (MoTher rilanciato sulla famiglia, tranne se elimino una foglia)
 11. filtro/i sulla ricerca (alfabetica, task?{inserire task nella form}, ecc).
 12. aggiunta campi nella form
+13. pulizia del codice
 

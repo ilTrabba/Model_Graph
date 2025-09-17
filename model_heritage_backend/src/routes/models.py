@@ -320,21 +320,21 @@ def upload_model():
             'processed_at': datetime.now(timezone.utc).isoformat()
         }
         
-        if parent_id:
-            model_updates['parent_id'] = parent_id
-            model_updates['confidence_score'] = confidence
+        #if parent_id:
+        #    model_updates['parent_id'] = parent_id
+        #    model_updates['confidence_score'] = confidence
         
         # Update the model in Neo4j
-        if not neo4j_service.update_model(model_id, model_updates):
-            raise Exception("Failed to update model in Neo4j")
+        #if not neo4j_service.update_model(model_id, model_updates):
+            #raise Exception("Failed to update model in Neo4j")
         
         # Create family relationship if family was assigned
         if family_id:
             neo4j_service.create_belongs_to_relationship(model_id, family_id)
         
         # Create parent-child relationship if parent was found
-        if parent_id:
-            neo4j_service.create_parent_child_relationship(parent_id, model_id, confidence)
+        #if parent_id:
+            #neo4j_service.create_parent_child_relationship(parent_id, model_id, confidence)
         
         # Get final model data for response
         final_model_data = neo4j_service.get_model_by_id(model_id)

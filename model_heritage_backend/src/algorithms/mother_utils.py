@@ -11,6 +11,7 @@ import safetensors
 from scipy import stats
 from typing import Dict, List, Tuple, Optional, Any
 import networkx as nx
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,14 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
         layer_kinds = _get_layer_kinds()
         total_distance = 0.0
         param_count = 0
+
+        #normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
+        weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
+        weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
         
         # Get common parameters
-        common_params = set(weights1.keys()) & set(weights2.keys())
+        common_params = set(weights1_normalized.keys()) & set(weights2_normalized.keys())
+        logger.debug(f"Common Parameters: {common_params}")
         
         for param_name in common_params:
             # Include all weight and bias parameters for distance calculation
@@ -131,13 +137,15 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
             if not should_include:
                 continue
                 
-            tensor1 = weights1[param_name]
-            tensor2 = weights2[param_name]
+            tensor1 = weights1_normalized[param_name]
+            tensor2 = weights2_normalized[param_name]
             
             if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
                 # Ensure same shape
                 if tensor1.shape != tensor2.shape:
+                    logger.warning(f"Shape mismatch for {param_name}: {tensor1.shape} vs {tensor2.shape}")
                     continue
+
                     
                 # Calculate L2 distance
                 diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
@@ -514,3 +522,30 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
                 confidence_scores[node] = 0.4  # Default for orphaned nodes
     
     return confidence_scores
+
+
+
+# lista di prefissi
+CORE_ARCHITECTURAL_PREFIXES = [
+    'encoder.',
+    'decoder.',
+    'transformer',
+    'embeddings.',
+    'backbone.',
+    'classifier.',
+]
+
+# da spostare in futuro in una classe più consona
+#pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES)
+#regex = re.compile(rf'.*?({pattern_str}.*)')
+
+def normalize_key(key: str) -> str:
+    """
+    Restituisce la sottostringa a partire dal primo prefisso architetturale trovato.
+    Se nessun prefisso è presente, ritorna la chiave originale.
+    """
+    for prefix in CORE_ARCHITECTURAL_PREFIXES:
+        idx = key.find(prefix)
+        if idx != -1:
+            return key[idx:]   # <-- qui tutta la sottostringa dal prefisso
+    return key

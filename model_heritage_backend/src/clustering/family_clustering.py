@@ -495,13 +495,14 @@ class FamilyClusteringSystem:
                 if distance < best_distance:
                     best_distance = distance
                     best_family_id = family.id
+
             
             if best_family_id is None:
                 return "", 0.0
         
             # Convert distance to confidence score
             print(f"{self.family_threshold}")
-            value1 = best_distance / 2.0
+            value1 = best_distance / 4.2
             value2 = 1- value1
             confidence = max (0.0, value2)
             confidence = min (1.0, confidence)

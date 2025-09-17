@@ -172,7 +172,7 @@ class ModelManagementSystem:
             # Step 4: Mark as processed
             neo4j_service.update_model(model.id, {
                 'status': 'ok',
-                'processed_at': datetime.now(timezone.utc)
+                'processed_at': datetime.now(timezone.utc).isoformat()
             })
             
             return {
