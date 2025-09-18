@@ -209,6 +209,31 @@ def _find_min_weighted_directed_tree(distance_matrix: np.ndarray) -> nx.DiGraph:
         logger.error(f"Error finding minimum directed tree: {e}")
         return nx.DiGraph()
     
+
+def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
+    """
+    Compute lambda as defined in the MoTHer paper:
+    
+        λ = c * (1/n^2) * Σ_{i,j} D_ij
+    
+    Parameters
+    ----------
+    distance_matrix : np.ndarray
+        Matrix of pairwise distances between models (n x n).
+    c : float, optional
+        Scaling constant, default = 0.3 as in the paper.
+    
+    Returns
+    -------
+    float
+        Value of λ.
+    """
+    n = distance_matrix.shape[0]
+    mean_distance = np.sum(distance_matrix) / (n * n)
+    lam = c * mean_distance
+    return lam
+
+
 def build_tree(ku_values: List[float], 
                distance_matrix: np.ndarray, 
                lambda_param: float) -> Tuple[nx.DiGraph, Dict[int, float]]:
@@ -234,6 +259,9 @@ def build_tree(ku_values: List[float],
         return tree, {parent: 0.8, child: 0.7}
     
     logger.debug(f"Building tree with {n} models using Chu-Liu-Edmonds algorithm")
+
+    true_lambda = compute_lambda(distance_matrix)
+    #commentino
     
     # Create weighted directed graph
     G = nx.DiGraph()
@@ -253,19 +281,19 @@ def build_tree(ku_values: List[float],
                 
                 # If i has higher kurtosis than j, this is a good parent->child relationship
                 if kurtosis_diff > 0:
-                    kurtosis_cost = -abs(kurtosis_diff)  # Negative cost = preferred
+                    kurtosis_cost = 0 #-abs(kurtosis_diff)  # Negative cost = preferred
                 else:
                     kurtosis_cost = abs(kurtosis_diff) * 2  # Penalty for bad direction
                 
                 # Combine costs using lambda parameter
-                edge_weight = lambda_param * kurtosis_cost + (1 - lambda_param) * distance_cost
+                edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
                 
                 G.add_edge(i, j, weight=edge_weight)
-    
+
     # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
     # RIPRISTINO ALGORITMO ORIGINALE
     try:
-        mdst = chu_liu_edmonds_algorithm(G)
+        mdst = chu_liu_edmonds_algorithm(G,np.argmax(ku_values))
         logger.debug(f"Chu-Liu-Edmonds completed: {mdst.number_of_nodes()} nodes, {mdst.number_of_edges()} edges")
     except Exception as e:
         logger.warning(f"Chu-Liu-Edmonds failed ({e}), using fallback")
@@ -277,18 +305,60 @@ def build_tree(ku_values: List[float],
     return mdst, confidence_scores
 
 
-def _find_min_incoming_edges(graph):
-    """Find minimum incoming edge for each node"""
+def chu_liu_edmonds_algorithm(G: nx.DiGraph, root: int) -> nx.DiGraph:
+    """
+    Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree (Arborescence)
+    
+    Args:
+        G: Directed graph with 'weight' attribute on edges
+        root: Root node for the arborescence
+        
+    Returns:
+        Minimum spanning arborescence rooted at 'root'
+    """
+    if G.number_of_nodes() <= 1:
+        return G.copy()
+    
+    if root not in G.nodes():
+        raise ValueError(f"Root node {root} not in graph")
+    
+    # Step 1: Find minimum incoming edges for each node (except root)
+    min_edges = find_min_incoming_edges(G, root)
+    
+    if not min_edges:
+        # No incoming edges found, return just the root
+        result = nx.DiGraph()
+        result.add_node(root)
+        return result
+    
+    # Step 2: Check for cycles in the minimum edge set
+    cycles = find_cycles_in_min_edges(min_edges, root)
+    
+    if not cycles:
+        # No cycles: we have our arborescence
+        return build_arborescence_from_edges(G, min_edges, root)
+    
+    # Step 3: Contract cycles and solve recursively
+    return contract_cycles_and_recurse(G, root, min_edges, cycles)
+
+
+def find_min_incoming_edges(graph: nx.DiGraph, root: int) -> Dict[int, Tuple[int, int, float]]:
+    """Find minimum incoming edge for each node (except root)"""
     min_edges = {}
+    
     for node in graph.nodes():
+        if node == root:
+            continue
+            
         min_weight = float('inf')
         min_edge = None
         
         for pred in graph.predecessors(node):
-            weight = graph[pred][node]['weight']
-            if weight < min_weight:
-                min_weight = weight
-                min_edge = (pred, node)
+            if graph.has_edge(pred, node):
+                weight = graph[pred][node]['weight']
+                if weight < min_weight:
+                    min_weight = weight
+                    min_edge = (pred, node, weight)
         
         if min_edge is not None:
             min_edges[node] = min_edge
@@ -296,135 +366,175 @@ def _find_min_incoming_edges(graph):
     return min_edges
 
 
-def _build_candidate_tree(graph, min_edges):
-    """Build candidate tree with minimum incoming edges"""
-    candidate = nx.DiGraph()
-    candidate.add_nodes_from(graph.nodes())
+def find_cycles_in_min_edges(min_edges: Dict[int, Tuple[int, int, float]], root: int) -> list:
+    """Find cycles formed by minimum incoming edges"""
+    # Build a graph with only the minimum edges
+    temp_graph = nx.DiGraph()
     
-    for target_node, (source_node, _) in min_edges.items():
-        if graph.has_edge(source_node, target_node):
-            candidate.add_edge(source_node, target_node, 
-                             weight=graph[source_node][target_node]['weight'])
+    # Add all nodes that appear in min_edges
+    nodes = set([root])
+    for target, (source, _, _) in min_edges.items():
+        nodes.add(source)
+        nodes.add(target)
     
-    return candidate
+    temp_graph.add_nodes_from(nodes)
+    
+    # Add minimum edges
+    for target, (source, _, weight) in min_edges.items():
+        temp_graph.add_edge(source, target, weight=weight)
+    
+    # Find cycles
+    try:
+        cycles = list(nx.simple_cycles(temp_graph))
+        return cycles
+    except:
+        return []
 
 
-def _resolve_cycles(candidate_tree):
-    """Detect and resolve cycles by removing heaviest edges"""
-    max_iterations = len(candidate_tree.nodes()) * 2
-    iteration = 0
+def build_arborescence_from_edges(graph: nx.DiGraph, min_edges: Dict[int, Tuple[int, int, float]], root: int) -> nx.DiGraph:
+    """Build arborescence from minimum edges (when no cycles exist)"""
+    result = nx.DiGraph()
+    result.add_node(root)
     
-    while iteration < max_iterations:
-        try:
-            # Find simple cycles
-            cycles = list(nx.simple_cycles(candidate_tree))
+    for target, (source, _, weight) in min_edges.items():
+        result.add_edge(source, target, weight=weight)
+    
+    return result
+
+
+def contract_cycles_and_recurse(graph: nx.DiGraph, root: int, min_edges: Dict[int, Tuple[int, int, float]], cycles: list) -> nx.DiGraph:
+    """Contract cycles into super-nodes and solve recursively"""
+    
+    # Take the first cycle to contract
+    cycle = cycles[0]
+    cycle_nodes = set(cycle)
+    
+    # Create contracted graph
+    contracted_graph = nx.DiGraph()
+    
+    # Create mapping: original_node -> contracted_node
+    super_node = f"super_{min(cycle)}"  # Name for the super-node
+    node_mapping = {}
+    
+    # Map cycle nodes to super-node, others to themselves
+    for node in graph.nodes():
+        if node in cycle_nodes:
+            node_mapping[node] = super_node
+        else:
+            node_mapping[node] = node
+            contracted_graph.add_node(node)
+    
+    contracted_graph.add_node(super_node)
+    
+    # Calculate cycle weight (sum of minimum edges in cycle)
+    cycle_weight = 0
+    for node in cycle:
+        if node in min_edges:
+            cycle_weight += min_edges[node][2]
+    
+    # Add edges to contracted graph with adjusted weights
+    for u, v, data in graph.edges(data=True):
+        u_mapped = node_mapping[u]
+        v_mapped = node_mapping[v]
+        
+        # Skip self-loops in contracted graph
+        if u_mapped == v_mapped:
+            continue
+        
+        weight = data['weight']
+        
+        # If edge enters the super-node, adjust weight
+        if v in cycle_nodes and u not in cycle_nodes:
+            # Adjust weight by subtracting the minimum incoming edge weight for v
+            if v in min_edges:
+                weight = weight - min_edges[v][2]
+        
+        # Add edge to contracted graph (keep minimum if multiple edges exist)
+        if contracted_graph.has_edge(u_mapped, v_mapped):
+            current_weight = contracted_graph[u_mapped][v_mapped]['weight']
+            if weight < current_weight:
+                contracted_graph[u_mapped][v_mapped]['weight'] = weight
+        else:
+            contracted_graph.add_edge(u_mapped, v_mapped, weight=weight)
+    
+    # Recursively solve on contracted graph
+    contracted_root = node_mapping[root]
+    contracted_solution = chu_liu_edmonds_algorithm(contracted_graph, contracted_root)
+    
+    # Expand solution back to original graph
+    return expand_solution(graph, contracted_solution, cycle, min_edges, super_node, node_mapping)
+
+
+def expand_solution(original_graph: nx.DiGraph, contracted_solution: nx.DiGraph, 
+                   cycle: list, min_edges: Dict[int, Tuple[int, int, float]], 
+                   super_node: str, node_mapping: Dict[int, str]) -> nx.DiGraph:
+    """Expand the solution from contracted graph back to original graph"""
+    
+    result = nx.DiGraph()
+    
+    # Add all original nodes
+    result.add_nodes_from(original_graph.nodes())
+    
+    # Add edges from contracted solution, mapping back to original nodes
+    for u, v, data in contracted_solution.edges(data=True):
+        if u == super_node:
+            # Edge from super-node: shouldn't happen in a valid arborescence
+            continue
+        elif v == super_node:
+            # Edge to super-node: need to find which cycle node it connects to
+            # Find the cycle node that this edge should connect to
+            original_u = None
+            for orig_node, mapped_node in node_mapping.items():
+                if mapped_node == u:
+                    original_u = orig_node
+                    break
             
-            if not cycles:
-                break  # No more cycles
-            
-            # Process the first cycle found
-            cycle = cycles[0]
-            if len(cycle) < 2:
-                iteration += 1
-                continue
-            
-            # Find the heaviest edge in the cycle
-            max_weight = float('-inf')
-            heaviest_edge = None
-            
-            for i in range(len(cycle)):
-                u = cycle[i]
-                v = cycle[(i + 1) % len(cycle)]
+            if original_u is not None:
+                # Find best entry point to cycle
+                min_weight = float('inf')
+                best_target = None
+                for cycle_node in cycle:
+                    if original_graph.has_edge(original_u, cycle_node):
+                        weight = original_graph[original_u][cycle_node]['weight']
+                        if weight < min_weight:
+                            min_weight = weight
+                            best_target = cycle_node
                 
-                if candidate_tree.has_edge(u, v):
-                    weight = candidate_tree[u][v]['weight']
-                    if weight > max_weight:
-                        max_weight = weight
-                        heaviest_edge = (u, v)
+                if best_target is not None:
+                    result.add_edge(original_u, best_target, weight=min_weight)
+        else:
+            # Regular edge: map back to original nodes
+            original_u = None
+            original_v = None
+            for orig_node, mapped_node in node_mapping.items():
+                if mapped_node == u:
+                    original_u = orig_node
+                if mapped_node == v:
+                    original_v = orig_node
             
-            # Remove the heaviest edge
-            if heaviest_edge is not None:
-                candidate_tree.remove_edge(heaviest_edge[0], heaviest_edge[1])
-                logger.debug(f"Removed edge {heaviest_edge} with weight {max_weight}")
-            
-            iteration += 1
-            
-        except (nx.NetworkXError, nx.NetworkXNoCycle):
+            if original_u is not None and original_v is not None:
+                result.add_edge(original_u, original_v, weight=data['weight'])
+    
+    # Add cycle edges (except the one that was "broken" by external connection)
+    external_entry = None
+    for node in cycle:
+        for pred in result.predecessors(node):
+            if pred not in cycle:
+                external_entry = node
+                break
+        if external_entry:
             break
     
-    return candidate_tree
+    # Add minimum edges within cycle, except for external entry point
+    for node in cycle:
+        if node != external_entry and node in min_edges:
+            source, target, weight = min_edges[node]
+            if source in cycle:  # Internal cycle edge
+                result.add_edge(source, target, weight=weight)
+    
+    return result
 
 
-def _ensure_connectivity(tree, original_graph):
-    """Add edges to ensure weak connectivity if needed"""
-    components = list(nx.weakly_connected_components(tree))
-    
-    if len(components) <= 1:
-        return tree
-    
-    # Connect components with minimum weight edges
-    connected_tree = tree.copy()
-    
-    for i in range(len(components) - 1):
-        comp1 = components[i]
-        comp2 = components[i + 1]
-        
-        min_weight = float('inf')
-        best_edge = None
-        
-        # Find minimum weight edge between components
-        for u in comp1:
-            for v in comp2:
-                if original_graph.has_edge(u, v):
-                    weight = original_graph[u][v]['weight']
-                    if weight < min_weight:
-                        min_weight = weight
-                        best_edge = (u, v)
-                
-                if original_graph.has_edge(v, u):
-                    weight = original_graph[v][u]['weight']
-                    if weight < min_weight:
-                        min_weight = weight
-                        best_edge = (v, u)
-        
-        # Add the best connecting edge
-        if best_edge is not None:
-            u, v = best_edge
-            connected_tree.add_edge(u, v, weight=original_graph[u][v]['weight'])
-    
-    return connected_tree
-
-
-def chu_liu_edmonds_algorithm(G: nx.DiGraph) -> nx.DiGraph:
-    """
-    Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
-    RIPRISTINO IMPLEMENTAZIONE ORIGINALE (quella che funzionava)
-    """
-    if G.number_of_nodes() <= 1:
-        return G.copy()
-    
-    # Execute the algorithm - LOGICA ORIGINALE
-    current_graph = G.copy()
-    
-    # Main iteration
-    for main_iteration in range(len(G.nodes())):
-        min_edges = _find_min_incoming_edges(current_graph)
-        
-        if not min_edges:
-            break
-            
-        candidate_tree = _build_candidate_tree(current_graph, min_edges)
-        resolved_tree = _resolve_cycles(candidate_tree)
-        
-        # Check if we have a valid tree
-        if resolved_tree.number_of_edges() >= len(G.nodes()) - 1:
-            final_tree = _ensure_connectivity(resolved_tree, G)
-            return final_tree
-        
-        current_graph = resolved_tree
-    
-    # Fallback: ensure we return something reasonable
-    return _ensure_connectivity(current_graph, G)
 
 
 def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:

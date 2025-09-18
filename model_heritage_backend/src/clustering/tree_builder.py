@@ -59,7 +59,7 @@ class MoTHerTreeBuilder:
     
     def __init__(self,
                  distance_calculator: Optional[ModelDistanceCalculator] = None,
-                 lambda_param: float = 0.5,
+                 lambda_param: float = 0.3, # parametro c, non lambda, da rinominare ovunque
                  method: TreeBuildingMethod = TreeBuildingMethod.MOTHER):
         """
         Initialize the tree builder.
@@ -296,7 +296,7 @@ class MoTHerTreeBuilder:
                         )
                         distance_matrix[i, j] = dist
                     else:
-                        distance_matrix[i, j] = float('inf')
+                        distance_matrix[i, j] = 0
             
             # Apply MoTHer algorithm using existing implementation
             tree, confidence_scores = build_tree(
