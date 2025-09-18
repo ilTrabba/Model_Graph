@@ -48,7 +48,7 @@ export default function HomePage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-600">
-              Our MoTHer algorithm analyzes model weights to reconstruct genealogy trees, 
+              The MoTHer algorithm analyzes model weights to reconstruct genealogy trees, 
               identifying which models were fine-tuned from others.
             </p>
           </CardContent>

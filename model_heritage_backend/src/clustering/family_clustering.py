@@ -483,7 +483,7 @@ class FamilyClusteringSystem:
                 else:
                     # Calculate distance to family centroid
                     #centroid = self.calculate_family_centroid(family.id)
-                    print("hakuna matata")
+                    logger.info("centroid do not exist in the system")
 
                 if centroid is None:
                     continue

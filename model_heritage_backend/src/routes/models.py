@@ -12,7 +12,7 @@ from src.services.neo4j_service import neo4j_service
 models_bp = Blueprint('models', __name__)
 
 UPLOAD_FOLDER = 'weights/models'
-ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth', 'html'}
+ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
