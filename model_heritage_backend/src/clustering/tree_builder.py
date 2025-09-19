@@ -288,15 +288,18 @@ class MoTHerTreeBuilder:
             distance_matrix = np.zeros((n_models, n_models))
             
             for i in range(n_models):
-                for j in range(n_models):
+                for j in range(i, n_models):
                     if i != j:
                         dist = calculate_l2_distance(
                             model_weights[model_ids[i]], 
                             model_weights[model_ids[j]]
                         )
                         distance_matrix[i, j] = dist
+                        distance_matrix[j, i] = dist
+
                     else:
                         distance_matrix[i, j] = 0
+                        
             
             # Apply MoTHer algorithm using existing implementation
             tree, confidence_scores = build_tree(

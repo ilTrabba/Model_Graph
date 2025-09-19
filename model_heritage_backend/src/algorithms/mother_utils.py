@@ -107,6 +107,7 @@ def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
     except Exception as e:
         logger.error(f"Error calculating kurtosis: {e}")
         return 0.0   
+
 def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
     """Calculate L2 distance between two sets of model weights"""
     try:
