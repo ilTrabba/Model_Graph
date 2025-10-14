@@ -184,6 +184,7 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
     
+    #centroid to embedding
     def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
         try:
             if not centroid:
