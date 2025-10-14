@@ -34,9 +34,20 @@ print_info() {
 }
 
 # Header
-echo -e "${PURPLE}=================================${NC}"
-echo -e "${PURPLE}    Model Heritage Project${NC}"
-echo -e "${PURPLE}=================================${NC}"
+echo -e "${PURPLE}"
+cat << 'EOF'
+      ======================================================================================================
+      __  __           _      _   _    _           _ _                     _____           _           _   
+      |  \/  |         | |    | | | |  | |         (_) |                   |  __ \         (_)         | |  
+      | \  / | ___   __| | ___| | | |__| | ___ _ __ _| |_ __ _  __ _  ___  | |__) | __ ___  _  ___  ___| |_ 
+      | |\/| |/ _ \ / _` |/ _ \ | |  __  |/ _ \ '__| | __/ _` |/ _` |/ _ \ |  ___/ '__/ _ \| |/ _ \/ __| __|
+      | |  | | (_) | (_| |  __/ | | |  | |  __/ |  | | || (_| | (_| |  __/ | |   | | | (_) | |  __/ (__| |_ 
+      |_|  |_|\___/ \__,_|\___|_| |_|  |_|\___|_|  |_|\__\__,_|\__, |\___| |_|   |_|  \___/| |\___|\___|\__|
+                                                                 __/ |                     _/ |              
+                                                                |___/                     |__/               
+      ======================================================================================================
+EOF
+echo -e "${NC}"
 echo ""
 
 # Check if virtual environment exists
@@ -47,6 +58,9 @@ if [ ! -d "$GLOBAL_VENV_NAME" ]; then
 fi
 
 print_success "Virtual environment '$GLOBAL_VENV_NAME' found"
+source "$GLOBAL_VENV_NAME"/bin/activate
+print_info "Activated virtual environment for backend"
+
 
 # --- Run Backend in background ---
 print_status "Starting backend server..."
@@ -58,10 +72,7 @@ if [ ! -f "run_server.py" ]; then
     exit 1
 fi
 
-source "../$GLOBAL_VENV_NAME"/bin/activate
-print_info "Activated virtual environment for backend"
-
-python run_server.py &
+python run_server.py > /dev/null 2>&1 &
 BACKEND_PID=$!
 cd ..
 
@@ -83,10 +94,7 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-source "../$GLOBAL_VENV_NAME"/bin/activate
-print_info "Activated virtual environment for frontend"
-
-pnpm run dev --host &
+pnpm run dev --host > /dev/null 2>&1 &
 FRONTEND_PID=$!
 cd ..
 
@@ -102,8 +110,8 @@ fi
 
 # Success message
 echo ""
-echo -e "${GREEN}🚀 =================================${NC}"
-echo -e "${GREEN}    PROJECT IS RUNNING!${NC}"
+echo -e "${GREEN}=================================${NC}"
+echo -e "${GREEN}    🚀 PROJECT IS RUNNING!${NC}"
 echo -e "${GREEN}=================================${NC}"
 echo -e "${CYAN}📡 Backend:${NC}  http://localhost:5001"
 echo -e "${CYAN}🌐 Frontend:${NC} http://localhost:5173"
@@ -135,6 +143,7 @@ cleanup() {
     
     echo ""
     print_success "All services stopped successfully"
+    echo ""
     echo -e "${PURPLE}Thanks for using Model Heritage Project!${NC}"
     exit 0
 }

@@ -1,3 +1,7 @@
+#General
+pnpm-lock.yaml
+package.json
+
 # Frontend
 model_heritage_frontend/pnpm-lock.yaml
 model_heritage_frontend/node_modules

@@ -14,7 +14,7 @@ from src.routes.graph import graph_bp
 from src.services.neo4j_service import neo4j_service
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
