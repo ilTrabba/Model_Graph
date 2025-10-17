@@ -7,7 +7,6 @@ import logging
 import numpy as np
 import networkx as nx
 from typing import Tuple, Optional, List, Dict, Any
-
 from src.models.model import Model
 from src.models.model import ModelQuery
 from src.algorithms.mother_utils import (
@@ -16,7 +15,6 @@ from src.algorithms.mother_utils import (
 
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()
-
 
 def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """

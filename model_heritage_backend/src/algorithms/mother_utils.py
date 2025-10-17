@@ -52,6 +52,7 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
                 weights = {key: f.get_tensor(key) for key in f.keys()}
         elif file_path.endswith(('.pt', '.pth', '.bin')):
             weights = torch.load(file_path, map_location='cpu')
+
             # Handle state_dict format
             if isinstance(weights, dict) and 'state_dict' in weights:
                 weights = weights['state_dict']
@@ -115,7 +116,7 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
         total_distance = 0.0
         param_count = 0
 
-        #normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
+        # Normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
         weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
         weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
         
@@ -124,6 +125,7 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
         logger.debug(f"Common Parameters: {common_params}")
         
         for param_name in common_params:
+
             # Include all weight and bias parameters for distance calculation
             should_include = False
             for lk in layer_kinds:
@@ -142,12 +144,12 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
             tensor2 = weights2_normalized[param_name]
             
             if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
+
                 # Ensure same shape
                 if tensor1.shape != tensor2.shape:
                     logger.warning(f"Shape mismatch for {param_name}: {tensor1.shape} vs {tensor2.shape}")
                     continue
 
-                    
                 # Calculate L2 distance
                 diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
                 l2_dist = np.linalg.norm(diff.flatten())
@@ -164,6 +166,7 @@ def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) ->
         logger.error(f"Error calculating L2 distance: {e}")
         return float('inf')
 
+# Never used
 def _find_min_weighted_directed_tree(distance_matrix: np.ndarray) -> nx.DiGraph:
     """Find minimum weighted directed spanning tree"""
     try:
@@ -189,6 +192,7 @@ def _find_min_weighted_directed_tree(distance_matrix: np.ndarray) -> nx.DiGraph:
             mst = nx.minimum_spanning_arborescence(G)
             return mst
         except nx.NetworkXException:
+
             # Fallback: create a simple tree structure
             mst = nx.DiGraph()
             for i in range(n):
@@ -210,7 +214,6 @@ def _find_min_weighted_directed_tree(distance_matrix: np.ndarray) -> nx.DiGraph:
         logger.error(f"Error finding minimum directed tree: {e}")
         return nx.DiGraph()
     
-
 def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     """
     Compute lambda as defined in the MoTHer paper:
@@ -235,12 +238,15 @@ def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     return lam
 
 
+######################################################################################
+########################### Genealogy block construction #############################
+######################################################################################
+
 def build_tree(ku_values: List[float], 
                distance_matrix: np.ndarray, 
                lambda_param: float) -> Tuple[nx.DiGraph, Dict[int, float]]:
     """
     Build directed tree using MoTHer algorithm with Chu-Liu-Edmonds MDST
-    RIPRISTINO IMPLEMENTAZIONE ORIGINALE con SOLO correzione logica kurtosis
     """
     n = len(ku_values)
     
@@ -249,7 +255,8 @@ def build_tree(ku_values: List[float],
         return nx.DiGraph(), {}
     
     if n == 2:
-        # CORREZIONE: Higher kurtosis = parent (original model, less fine-tuned)
+
+        # Higher kurtosis = parent (original model, less fine-tuned)
         if ku_values[0] > ku_values[1]:
             parent, child = 0, 1
         else:
@@ -262,7 +269,6 @@ def build_tree(ku_values: List[float],
     logger.debug(f"Building tree with {n} models using Chu-Liu-Edmonds algorithm")
 
     true_lambda = compute_lambda(distance_matrix)
-    #commentino
     
     # Create weighted directed graph
     G = nx.DiGraph()
@@ -272,13 +278,14 @@ def build_tree(ku_values: List[float],
     for i in range(n):
         for j in range(n):
             if i != j:
+
                 # Distance component (normalized)
                 distance_cost = distance_matrix[i, j]
                 
-                # CORREZIONE KURTOSIS: Higher kurtosis models should be parents
+                # Higher kurtosis models should be parents
                 # Based on paper: fine-tuning reduces kurtosis (fewer outliers)
                 # A (high kurtosis, original) -> B (low kurtosis, fine-tuned)
-                kurtosis_diff = ku_values[i] - ku_values[j]  # CORRETTO: parent_ku - child_ku
+                kurtosis_diff = ku_values[i] - ku_values[j]  # parent_ku - child_ku
                 
                 # If i has higher kurtosis than j, this is a good parent->child relationship
                 if kurtosis_diff > 0:
@@ -292,7 +299,6 @@ def build_tree(ku_values: List[float],
                 G.add_edge(i, j, weight=edge_weight)
 
     # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
-    # RIPRISTINO ALGORITMO ORIGINALE
     try:
         mdst = chu_liu_edmonds_algorithm(G,np.argmax(ku_values))
         logger.debug(f"Chu-Liu-Edmonds completed: {mdst.number_of_nodes()} nodes, {mdst.number_of_edges()} edges")
@@ -304,7 +310,6 @@ def build_tree(ku_values: List[float],
     confidence_scores = calculate_confidence_scores(mdst, G, ku_values)
     
     return mdst, confidence_scores
-
 
 def chu_liu_edmonds_algorithm(G: nx.DiGraph, root: int) -> nx.DiGraph:
     """
@@ -327,6 +332,7 @@ def chu_liu_edmonds_algorithm(G: nx.DiGraph, root: int) -> nx.DiGraph:
     min_edges = find_min_incoming_edges(G, root)
     
     if not min_edges:
+
         # No incoming edges found, return just the root
         result = nx.DiGraph()
         result.add_node(root)
@@ -336,12 +342,12 @@ def chu_liu_edmonds_algorithm(G: nx.DiGraph, root: int) -> nx.DiGraph:
     cycles = find_cycles_in_min_edges(min_edges, root)
     
     if not cycles:
+
         # No cycles: we have our arborescence
         return build_arborescence_from_edges(G, min_edges, root)
     
     # Step 3: Contract cycles and solve recursively
     return contract_cycles_and_recurse(G, root, min_edges, cycles)
-
 
 def find_min_incoming_edges(graph: nx.DiGraph, root: int) -> Dict[int, Tuple[int, int, float]]:
     """Find minimum incoming edge for each node (except root)"""
@@ -535,8 +541,9 @@ def expand_solution(original_graph: nx.DiGraph, contracted_solution: nx.DiGraph,
     
     return result
 
-
-
+######################################################################################
+######################################################################################
+######################################################################################
 
 def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:
     """
@@ -572,7 +579,6 @@ def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:
             break
     
     return result
-
 
 def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph, 
                               ku_values: List[float]) -> Dict[int, float]:
@@ -634,9 +640,7 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
     
     return confidence_scores
 
-
-
-# lista di prefissi
+# lista di prefissi - potenzialmente da togliere
 CORE_ARCHITECTURAL_PREFIXES = [
     'encoder.',
     'decoder.',
@@ -646,10 +650,8 @@ CORE_ARCHITECTURAL_PREFIXES = [
     'classifier.',
 ]
 
-# da spostare in futuro in una classe più consona
-#pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES)
+#pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES) - potenzialmente da togliere
 #regex = re.compile(rf'.*?({pattern_str}.*)')
-
 def normalize_key(key: str) -> str:
     """
     Restituisce la sottostringa a partire dal primo prefisso architetturale trovato.
