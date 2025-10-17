@@ -173,6 +173,7 @@ class ModelDistanceCalculator:
             logger.error(f"Error loading and calculating distance: {e}")
             return float('inf')
     
+    #push stupido
     def _calculate_l2_distance(self, 
                               weights1: Dict[str, Any], 
                               weights2: Dict[str, Any]) -> float:
