@@ -100,7 +100,8 @@ class ModelDistanceCalculator:
             logger.error(f"Error calculating distance: {e}")
             return float('inf')
     
-    def calculate_pairwise_distances(self,
+    #calulate distances of all pairs of models in a family
+    def calculate_matrix_pairwise_distances(self,
                                    models_weights: Dict[str, Dict[str, Any]],
                                    metric: Optional[DistanceMetric] = None) -> np.ndarray:
         """

@@ -300,7 +300,7 @@ class FamilyClusteringSystem:
                 return {}
             
             # Calculate pairwise distances
-            distance_matrix = self.distance_calculator.calculate_pairwise_distances(
+            distance_matrix = self.distance_calculator.calculate_matrix_pairwise_distances(
                 model_weights
             )
             
