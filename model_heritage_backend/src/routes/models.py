@@ -42,6 +42,7 @@ def extract_weight_signature_stub(file_path):
     
     return signature
 
+# cambiare nome della funzione
 def assign_to_family_and_find_parent(model_data):
     """Use the new clustering system for family assignment and parent finding"""
     try:

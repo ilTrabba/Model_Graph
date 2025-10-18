@@ -108,8 +108,10 @@ class ModelManagementSystem:
             # Update all model relationships based on the complete tree
             parent_id = None
             parent_confidence = 0.0
+
+            num_nodes = family_tree.number_of_nodes()
             
-            if family_tree.number_of_nodes() > 0:
+            if num_nodes > 1:
                 
                 # Update relationships for all models in the family based on tree structure
                 for family_model in all_family_models:
@@ -146,25 +148,17 @@ class ModelManagementSystem:
                         logger.debug(f"Set {family_model.id} as root model")
                 
                 logger.info(f"Updated tree relationships for family {family_id} with {family_tree.number_of_nodes()} nodes")
-            else:
-                # Fallback to individual parent finding if tree building fails
-                logger.warning(f"Tree building failed for family {family_id}, falling back to individual parent finding")
-                from src.algorithms.mother_algorithm import find_model_parent_mother
-                parent_id, parent_confidence = find_model_parent_mother(model, family_id)
+            elif num_nodes == 1:
+                logger.info(f"Tree building for family {family_id}, with only one model")
                 
-                # Update model with parent assignment
-                if parent_id:
-                    neo4j_service.update_model(model.id, {
-                        'parent_id': parent_id,
-                        'confidence_score': parent_confidence
-                    })
-                    logger.info(f"Found parent {parent_id} for model {model.id} with confidence {parent_confidence:.3f}")
-                else:
-                    neo4j_service.update_model(model.id, {
-                        'parent_id': None,
-                        'confidence_score': 0.0
-                    })
-                    logger.info(f"Model {model.id} assigned as root in family {family_id}")
+                neo4j_service.update_model(model.id, {
+                    'parent_id': None,
+                    'confidence_score': 0.0
+                })
+                logger.info(f"Model {model.id} assigned as root in family {family_id}")
+            else:
+                logger.error(f"Tree building failed for family {family_id}, no nodes in tree")
+                raise ValueError("Tree building failed, no nodes in tree")
 
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)

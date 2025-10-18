@@ -72,7 +72,8 @@ if [ ! -f "run_server.py" ]; then
     exit 1
 fi
 
-python run_server.py > /dev/null 2>&1 &
+# Versione che Mostra solo i tuoi debug
+python run_server.py 2>&1 | grep "🔍\|\[DEBUG\]" &
 BACKEND_PID=$!
 cd ..
 

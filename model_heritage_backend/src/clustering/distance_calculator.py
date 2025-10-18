@@ -55,7 +55,7 @@ class ModelDistanceCalculator:
         """
         self.default_metric = default_metric
         self.layer_filter = layer_filter or _get_layer_kinds()
-        logger.info(f"Initialized ModelDistanceCalculator with metric: {default_metric}")
+        #logger.info(f"Initialized ModelDistanceCalculator with metric: {default_metric}")
         
     def calculate_distance(self, 
                           model1_weights: Dict[str, Any],
