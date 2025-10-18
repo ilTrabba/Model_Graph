@@ -239,7 +239,7 @@ class MoTHerTreeBuilder:
                 return None, 0.0
             
             # Build tree for all models (already normalized to parent -> child)
-            tree, confidence_scores = self.build_tree_for_models(all_models)
+            tree, confidence_scores = self.build_family_tree(all_models)
             
             if tree.number_of_nodes() == 0:
                 return None, 0.0
@@ -449,29 +449,7 @@ class MoTHerTreeBuilder:
             logger.error(f"Error converting confidence to model IDs: {e}")
             return {}
 
-    def get_edges_for_persistence(self, 
-                                  tree_with_ids: nx.DiGraph, 
-                                  confidence_with_ids: Dict[str, float]) -> List[Tuple[str, str, float]]:
-        """
-        Restituisce una lista di tuple (child_id, parent_id, confidence_of_child) da persistere su Neo4j
-        con relazione (child)-[:IS_CHILD_OF {confidence}]->(parent).
-
-        Il tree_with_ids è parent -> child; qui invertiamo gli estremi per il writer IS_CHILD_OF.
-        """
-        edges: List[Tuple[str, str, float]] = []
-        try:
-            if tree_with_ids.number_of_nodes() == 0:
-                return edges
-            # Assicura orientamento parent -> child
-            tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
-            for parent, child in tree_with_ids.edges():
-                conf = confidence_with_ids.get(child, 0.0)
-                # Output nel verso child -> parent per IS_CHILD_OF
-                edges.append((child, parent, conf))
-            return edges
-        except Exception as e:
-            logger.error(f"Error building edges for persistence: {e}")
-            return []
+    
     def get_tree_statistics(self, tree: nx.DiGraph) -> Dict[str, Any]:
         """
         Calculate statistics for a genealogical tree.

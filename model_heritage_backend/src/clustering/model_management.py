@@ -201,69 +201,6 @@ class ModelManagementSystem:
                 'error': str(e)
             }
     
-    def find_model_parent(self, 
-                         model: Model, 
-                         family_id: Optional[str] = None) -> Tuple[Optional[str], float]:
-        """
-        Find the most likely parent for a model within its family.
-        
-        Args:
-            model: Model to find parent for
-            family_id: Family ID (will use model's family if None)
-            
-        Returns:
-            Tuple of (parent_model_id, confidence_score)
-        """
-        try:
-            target_family_id = family_id or model.family_id
-            if not target_family_id:
-                logger.warning(f"Model {model.id} has no family assigned")
-                return None, 0.0
-            
-            # Get other models in the family
-            family_models = model_query.filter(
-                Model.family_id == target_family_id,
-                Model.id != model.id,
-                Model.status == 'ok'
-            ).all()
-            
-            if not family_models:
-                logger.info(f"Model {model.id} is the only model in family {target_family_id}")
-                return None, 0.0
-            
-            # Try to use tree-based approach first (more comprehensive)
-            try:
-                all_models = family_models + [model]
-                tree, confidence_scores = self.tree_builder.build_family_tree(all_models)
-                
-                if tree.number_of_nodes() > 0:
-                    # Find parent of target model in tree
-                    predecessors = list(tree.predecessors(model.id))
-                    
-                    if predecessors:
-                        parent_id = predecessors[0]  # Should be only one parent in a tree
-                        confidence = confidence_scores.get(model.id, 0.0)
-                        
-                        logger.info(f"Tree-based approach found parent {parent_id} for model {model.id} with confidence {confidence:.3f}")
-                        return parent_id, confidence
-                    else:
-                        # Target model is a root node
-                        logger.info(f"Tree-based approach determined model {model.id} is a root model")
-                        return None, 0.0
-                else:
-                    logger.warning("Tree building produced empty tree, falling back to individual parent finding")
-            except Exception as e:
-                logger.warning(f"Tree-based approach failed for model {model.id}: {e}, falling back to individual parent finding")
-            
-            # Fallback to individual parent finding using mother algorithm
-            from src.algorithms.mother_algorithm import find_model_parent_mother
-            parent_id, confidence = find_model_parent_mother(model, target_family_id)
-            
-            return parent_id, confidence
-            
-        except Exception as e:
-            logger.error(f"Error finding parent for model {model.id}: {e}")
-            return None, 0.0
     
     def rebuild_family_tree(self, family_id: str) -> Dict[str, Any]:
         """

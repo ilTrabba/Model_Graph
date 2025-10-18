@@ -136,7 +136,7 @@ def _fallback_family_assignment(model_data):
         
         if len(model_proxies) >= 2:
             # Build complete family tree
-            tree, confidence_scores = tree_builder.build_tree_for_models(model_proxies)
+            tree, confidence_scores = tree_builder.build_family_tree(model_proxies)
             
             if tree.number_of_nodes() > 0:
                 # Update all model relationships based on tree
