@@ -30,7 +30,7 @@ class TreeBuildingMethod(Enum):
     DISTANCE_ONLY = "distance" # Distance-based minimum spanning tree only
     KURTOSIS_ONLY = "kurtosis" # Kurtosis-based ordering only
 
-
+#da spulciare bene
 def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """
     Ensure edges are oriented parent -> child.

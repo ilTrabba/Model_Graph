@@ -293,6 +293,7 @@ class ModelDistanceCalculator:
             logger.error(f"Error flattening weights: {e}")
             return np.array([])
     
+    #se utilizzeremo l'ordinamento invece del nome dei layer, allora non servirà più questa funzione (forse)
     def _should_include_layer(self, param_name: str) -> bool:
         """
         Check if a parameter should be included based on layer filtering.
