@@ -111,7 +111,7 @@ class ModelManagementSystem:
 
             num_nodes = family_tree.number_of_nodes()
             
-            if num_nodes > 1:
+            if num_nodes > 0:
                 
                 # Update relationships for all models in the family based on tree structure
                 for family_model in all_family_models:
@@ -148,7 +148,7 @@ class ModelManagementSystem:
                         logger.debug(f"Set {family_model.id} as root model")
                 
                 logger.info(f"Updated tree relationships for family {family_id} with {family_tree.number_of_nodes()} nodes")
-            elif num_nodes == 1:
+            else:   #num_nodes == 1
                 logger.info(f"Tree building for family {family_id}, with only one model")
                 
                 neo4j_service.update_model(model.id, {
@@ -156,9 +156,7 @@ class ModelManagementSystem:
                     'confidence_score': 0.0
                 })
                 logger.info(f"Model {model.id} assigned as root in family {family_id}")
-            else:
-                logger.error(f"Tree building failed for family {family_id}, no nodes in tree")
-                raise ValueError("Tree building failed, no nodes in tree")
+            
 
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
