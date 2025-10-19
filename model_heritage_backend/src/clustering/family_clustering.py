@@ -85,9 +85,6 @@ class FamilyClusteringSystem:
             True if successfully saved, False otherwise
         """
         logger.info(f"=== ATTEMPTING TO SAVE CENTROID FOR FAMILY {family_id} ===")
-        #logger.info(f"Centroid keys: {list(centroid.keys()) if centroid else 'None'}")
-        #logger.info(f"Current working directory: {os.getcwd()}")
-        #logger.info(f"Centroids directory: {self.centroids_dir}")
         logger.info(f"Absolute centroids path: {os.path.abspath(self.centroids_dir)}")
         
         try:
@@ -179,7 +176,6 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
     
-    #riccardo felici
     def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
         try:
             if not centroid:
@@ -664,11 +660,12 @@ class FamilyClusteringSystem:
         except Exception as e:
             logger.error(f"Error in threshold clustering: {e}")
             return np.arange(distance_matrix.shape[0])
-    
-    def _update_family_assignments(self, 
-                                 models: List[Model], 
-                                 cluster_labels: np.ndarray,
-                                 model_weights: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, List[str]]:
+
+    # chiamata solo in una funzione re-cluster
+    def _update_family_assignments(self,
+                                    models: List[Model],
+                                    cluster_labels: np.ndarray,
+                                    model_weights: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, List[str]]:
         """
         Update database with new family assignments.
         

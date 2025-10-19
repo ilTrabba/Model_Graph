@@ -11,7 +11,6 @@ import numpy as np
 import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
-
 from src.models.model import Model, Family
 from src.models.model import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
@@ -193,7 +192,7 @@ class ModelManagementSystem:
                 'error': str(e)
             }
     
-    
+    # viene chiamata esclusivamente in recluster_all_models e in una route connessa
     def rebuild_family_tree(self, family_id: str) -> Dict[str, Any]:
         """
         Rebuild the genealogical tree for a family and update all parent relationships.
