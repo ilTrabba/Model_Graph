@@ -75,20 +75,6 @@ class Neo4jService:
             logger.error(f"Failed to create Neo4j constraints and indexes: {e}")
             return False
     
-    def clear_all_data(self):
-        """Clear all data from Neo4j (for testing/reset)"""
-        if not self.driver:
-            return False
-        
-        try:
-            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
-                session.run("MATCH (n) DETACH DELETE n")
-            logger.info("Neo4j database cleared")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to clear Neo4j data: {e}")
-            return False
-    
     def upsert_model(self, model_data: Dict[str, Any]) -> bool:
         """Create or update a Model node using MERGE (unified method)"""
         if not self.driver:

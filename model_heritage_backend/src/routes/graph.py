@@ -69,15 +69,6 @@ def get_full_graph():
             'edges': []
         }), 500
 
-@graph_bp.route('/graph/sync', methods=['POST'])
-def sync_graph_data():
-    """Legacy endpoint - no longer needed in Neo4j-only architecture"""
-    return jsonify({
-        'success': True,
-        'message': 'Synchronization not needed in Neo4j-only architecture',
-        'architecture': 'neo4j-only'
-    })
-
 @graph_bp.route('/graph/family/<family_id>', methods=['GET'])
 def get_family_subgraph(family_id):
     """Get specific family subgraph"""
@@ -120,32 +111,3 @@ def sync_single_model(model_id):
         'message': f'Model {model_id} - synchronization not needed in Neo4j-only architecture',
         'architecture': 'neo4j-only'
     })
-
-@graph_bp.route('/graph/clear', methods=['POST'])
-def clear_graph_data():
-    """Clear all data from Neo4j (for testing/reset)"""
-    try:
-        if not neo4j_service.is_connected():
-            return jsonify({
-                'success': False,
-                'error': 'Neo4j not connected'
-            }), 503
-        
-        if neo4j_service.clear_all_data():
-            return jsonify({
-                'success': True,
-                'message': 'All graph data cleared successfully'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to clear graph data'
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Failed to clear graph data: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to clear graph data',
-            'details': str(e)
-        }), 500

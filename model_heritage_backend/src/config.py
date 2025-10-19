@@ -16,6 +16,9 @@ class Config:
     # Weights storage
     WEIGHTS_FOLDER = 'weights'
     CENTROIDS_FOLDER = 'weights/centroids'
+
+    # Models storage
+    MODEL_FOLDER = 'weights/models'
     
     # Other settings
     SECRET_KEY = 'asdf#FGSgvasgf$5$WGT'

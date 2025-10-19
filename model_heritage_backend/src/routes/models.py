@@ -8,11 +8,12 @@ import json
 
 from src.models.model import Model, Family
 from src.services.neo4j_service import neo4j_service
+from src.config import Config
 
 models_bp = Blueprint('models', __name__)
 
-UPLOAD_FOLDER = 'weights/models'
-ALLOWED_EXTENSIONS = {'safetensors', 'pt', 'bin', 'pth'}
+MODEL_FOLDER = Config.MODEL_FOLDER
+ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -274,9 +275,9 @@ def upload_model():
     model_id = str(uuid.uuid4())
     
     # Save file
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(MODEL_FOLDER, exist_ok=True)
     filename = secure_filename(f"{model_id}_{file.filename}")
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(MODEL_FOLDER, filename)
     file.save(file_path)
     
     try:
