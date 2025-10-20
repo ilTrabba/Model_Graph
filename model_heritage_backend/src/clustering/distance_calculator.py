@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 
 # Import existing MoTHer utilities
-from src.algorithms.mother_utils import (
+from src.mother_algorithm.mother_utils import (
     load_model_weights, 
     calculate_l2_distance,
     _get_layer_kinds

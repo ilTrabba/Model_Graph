@@ -1,7 +1,7 @@
 """
-MoTHerTreeBuilder
+TreeBuilder
 
-This module builds genealogical relationships within model families using the MoTHer algorithm approach.
+This module builds genealogical relationships within model families using algorithm approaches (MoTHer).
 It leverages the existing MoTHer implementation to create heritage trees within families.
 """
 
@@ -11,15 +11,15 @@ import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 
-from src.models.model import Model
-from src.models.model import ModelQuery
-from src.algorithms.mother_utils import (
+from src.db_entities.entity import Model
+from src.db_entities.entity import ModelQuery
+from src.mother_algorithm.mother_utils import (
     load_model_weights,
     calc_ku, 
     calculate_l2_distance,
     build_tree
 )
-from .distance_calculator import ModelDistanceCalculator
+
 
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()
@@ -45,7 +45,6 @@ def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
         return nx.reverse(tree, copy=True)
     return tree
 
-
 class MoTHerTreeBuilder:
     """
     Build genealogical relationships within model families using the MoTHer algorithm.
@@ -58,7 +57,6 @@ class MoTHerTreeBuilder:
     """
     
     def __init__(self,
-                 distance_calculator: Optional[ModelDistanceCalculator] = None,
                  lambda_param: float = 0.3, # parametro c, non lambda, da rinominare ovunque
                  method: TreeBuildingMethod = TreeBuildingMethod.MOTHER):
         """
@@ -69,7 +67,6 @@ class MoTHerTreeBuilder:
             lambda_param: Balance between kurtosis and distance (0=distance only, 1=kurtosis only)
             method: Tree building method to use
         """
-        self.distance_calculator = distance_calculator or ModelDistanceCalculator()
         self.lambda_param = lambda_param
         self.method = method
         

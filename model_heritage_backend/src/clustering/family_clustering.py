@@ -17,8 +17,8 @@ from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import safetensors.torch
 from safetensors import safe_open
-from ..models.model import Model, Family
-from ..models.model import FamilyQuery, ModelQuery
+from ..db_entities.entity import Model, Family
+from ..db_entities.entity import FamilyQuery, ModelQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from pathlib import Path
@@ -218,7 +218,7 @@ class FamilyClusteringSystem:
         try:
             # Load model weights if not provided
             if model_weights is None:
-                from src.algorithms.mother_utils import load_model_weights
+                from src.mother_algorithm.mother_utils import load_model_weights
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     logger.error(f"Failed to load weights for model {model.id}")
@@ -278,7 +278,7 @@ class FamilyClusteringSystem:
             valid_models = []
             
             for model in models:
-                from src.algorithms.mother_utils import load_model_weights
+                from src.mother_algorithm.mother_utils import load_model_weights
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
                     model_weights[model.id] = weights
@@ -331,7 +331,7 @@ class FamilyClusteringSystem:
             # Load weights for all family models
             family_weights = []
             for model in family_models:
-                from src.algorithms.mother_utils import load_model_weights
+                from src.mother_algorithm.mother_utils import load_model_weights
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
                     family_weights.append(weights)
@@ -734,7 +734,7 @@ class FamilyClusteringSystem:
             # Load weights for all models
             model_weights = {}
             for model in family_models:
-                from src.algorithms.mother_utils import load_model_weights
+                from src.mother_algorithm.mother_utils import load_model_weights
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
                     model_weights[model.id] = weights

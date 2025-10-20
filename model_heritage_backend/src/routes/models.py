@@ -5,15 +5,49 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 import json
+import logging
 
-from src.models.model import Model, Family
+from src.db_entities.entity import Model, Family
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 
+logger = logging.getLogger(__name__)
 models_bp = Blueprint('models', __name__)
 
 MODEL_FOLDER = Config.MODEL_FOLDER
 ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
+
+def new_model_handler(model_data):
+    """Use the new clustering system for family assignment and parent finding"""
+    try:
+        # Import clustering system (with graceful fallback if dependencies missing)
+        from src.clustering.model_management import ModelManagementSystem
+        
+        # Initialize the management system
+        mgmt_system = ModelManagementSystem()
+        
+        # Create a proxy object for compatibility with clustering system
+        model_proxy = Model(**model_data)
+        
+        # Process the model through the complete pipeline
+        result = mgmt_system.process_new_model(model_proxy)
+        
+        if result.get('status') == 'success':
+            return result.get('family_id'), result.get('parent_id'), result.get('parent_confidence', 0.0)
+        else:
+            current_app.logger.error(f"Clustering system failed: {result.get('error')}")
+            # Fallback to stub implementation
+            return error_handler(model_data)
+            
+    except ImportError as e:
+        current_app.logger.warning(f"Clustering system not available, using fallback: {e}")
+        return error_handler(model_data)
+    except Exception as e:
+        current_app.logger.error(f"Clustering system failed, using fallback: {e}")
+        return error_handler(model_data)
+
+def error_handler(model_data):
+    return logger.error(f"Test error")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -42,191 +76,6 @@ def extract_weight_signature_stub(file_path):
     }
     
     return signature
-
-# cambiare nome della funzione
-def assign_to_family_and_find_parent(model_data):
-    """Use the new clustering system for family assignment and parent finding"""
-    try:
-        # Import clustering system (with graceful fallback if dependencies missing)
-        from src.clustering.model_management import ModelManagementSystem
-        
-        # Initialize the management system
-        mgmt_system = ModelManagementSystem()
-        
-        # Create a proxy object for compatibility with clustering system
-        model_proxy = Model(**model_data)
-        
-        # Process the model through the complete pipeline
-        result = mgmt_system.process_new_model(model_proxy)
-        
-        if result.get('status') == 'success':
-            return result.get('family_id'), result.get('parent_id'), result.get('parent_confidence', 0.0)
-        else:
-            current_app.logger.error(f"Clustering system failed: {result.get('error')}")
-            # Fallback to stub implementation
-            return _fallback_family_assignment(model_data)
-            
-    except ImportError as e:
-        current_app.logger.warning(f"Clustering system not available, using fallback: {e}")
-        return _fallback_family_assignment(model_data)
-    except Exception as e:
-        current_app.logger.error(f"Clustering system failed, using fallback: {e}")
-        return _fallback_family_assignment(model_data)
-
-def _fallback_family_assignment(model_data):
-    """Fallback family assignment using simple parameter-based rules"""
-    param_count = model_data.get('total_parameters', 0)
-    structural_hash = model_data.get('structural_hash', '')
-    
-    # Simple family assignment based on parameter count ranges
-    if param_count < 1000000:  # < 1M params
-        family_id = "small_models"
-    elif param_count < 100000000:  # < 100M params
-        family_id = "medium_models"
-    else:
-        family_id = "large_models"
-    
-    # Check if family exists, create if not
-    families = neo4j_service.get_all_families()
-    family_exists = any(f.get('id') == family_id for f in families)
-    
-    if not family_exists:
-        family_data = {
-            'id': family_id,
-            'structural_pattern_hash': structural_hash,
-            'member_count': 0,
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-        neo4j_service.create_family(family_data)
-    
-    # Update family member count (this is a simplified approach)
-    family_models = neo4j_service.get_family_models(family_id)
-    new_member_count = len(family_models) + 1
-    
-    family_update = {
-        'id': family_id,
-        'member_count': new_member_count,
-        'updated_at': datetime.now(timezone.utc).isoformat()
-    }
-    neo4j_service.create_or_update_family(family_update)
-    
-    # Try to use tree-based approach for comprehensive relationship updates
-    try:
-        from src.clustering.model_management import ModelManagementSystem
-        from src.clustering.tree_builder import MoTHerTreeBuilder
-        
-        # Initialize tree builder
-        tree_builder = MoTHerTreeBuilder()
-        
-        # Get all family models
-        family_models = neo4j_service.get_family_models(family_id)
-        ok_models = [m for m in family_models if m.get('status') == 'ok']
-        
-        # Create model proxies for tree building
-        model_proxies = []
-        for model_dict in ok_models:
-            try:
-                model_proxy = Model(**model_dict)
-                model_proxies.append(model_proxy)
-            except Exception as e:
-                current_app.logger.warning(f"Failed to create proxy for model {model_dict.get('id')}: {e}")
-        
-        # Add our new model to the list
-        new_model_proxy = Model(**model_data)
-        model_proxies.append(new_model_proxy)
-        
-        if len(model_proxies) >= 2:
-            # Build complete family tree
-            tree, confidence_scores = tree_builder.build_family_tree(model_proxies)
-            
-            if tree.number_of_nodes() > 0:
-                # Update all model relationships based on tree
-                parent_id = None
-                parent_confidence = 0.0
-                
-                for model_proxy in model_proxies:
-                    predecessors = list(tree.predecessors(model_proxy.id))
-                    
-                    if predecessors:
-                        # Model has a parent
-                        new_parent_id = predecessors[0]
-                        new_confidence = confidence_scores.get(model_proxy.id, 0.0)
-                        
-                        # Update in Neo4j
-                        neo4j_service.update_model(model_proxy.id, {
-                            'parent_id': new_parent_id,
-                            'confidence_score': new_confidence
-                        })
-                        
-                        # If this is our new model, capture the parent info
-                        if model_proxy.id == model_data.get('id'):
-                            parent_id = new_parent_id
-                            parent_confidence = new_confidence
-                    else:
-                        # Model is a root
-                        neo4j_service.update_model(model_proxy.id, {
-                            'parent_id': None,
-                            'confidence_score': 0.0
-                        })
-                        
-                        # If this is our new model, capture the root status
-                        if model_proxy.id == model_data.get('id'):
-                            parent_id = None
-                            parent_confidence = 0.0
-                
-                current_app.logger.info(f"Successfully updated tree relationships for family {family_id}")
-                return family_id, parent_id, parent_confidence
-            else:
-                current_app.logger.warning("Tree building produced empty tree, falling back to individual parent finding")
-        else:
-            current_app.logger.info("Insufficient models for tree building, using individual parent finding")
-        
-        # Fallback to individual parent finding
-        from src.algorithms.mother_algorithm import find_model_parent_mother
-        model_proxy = Model(**model_data)
-        parent_id, confidence = find_model_parent_mother(model_proxy, family_id)
-        return family_id, parent_id, confidence
-        
-    except Exception as e:
-        current_app.logger.error(f"Tree-based approach failed: {e}")
-        # Final fallback to parameter similarity
-        parent_id, confidence = _fallback_parameter_similarity(model_data, family_id)
-        return family_id, parent_id, confidence
-
-def _fallback_parameter_similarity(model_data, family_id):
-    """Fallback implementation using parameter count similarity"""
-    # Simple heuristic: find model in same family with similar parameter count
-    family_models = neo4j_service.get_family_models(family_id)
-    
-    # Filter only OK status models
-    ok_models = [m for m in family_models if m.get('status') == 'ok']
-    
-    if not ok_models:
-        return None, 0.0
-    
-    # Find closest by parameter count
-    closest_model = None
-    min_diff = float('inf')
-    model_params = model_data.get('total_parameters', 0)
-    
-    for candidate in ok_models:
-        if candidate.get('id') != model_data.get('id'):
-            candidate_params = candidate.get('total_parameters', 0)
-            diff = abs(candidate_params - model_params)
-            if diff < min_diff:
-                min_diff = diff
-                closest_model = candidate
-    
-    if closest_model:
-        # Mock confidence based on parameter similarity
-        max_params = max(model_params, closest_model.get('total_parameters', 0))
-        confidence = 1.0 - (min_diff / max_params) if max_params > 0 else 0.0
-        confidence = max(0.1, min(0.9, confidence))  # Clamp between 0.1 and 0.9
-        
-        return closest_model.get('id'), confidence
-    
-    return None, 0.0
 
 @models_bp.route('/models', methods=['GET'])
 def list_models():
@@ -313,7 +162,7 @@ def upload_model():
             raise Exception("Failed to save model to Neo4j")
         
         # Use new clustering system for family assignment and parent finding
-        family_id, parent_id, confidence = assign_to_family_and_find_parent(model_data)
+        family_id, parent_id, confidence = new_model_handler(model_data)
         
         # Update model with results
         model_updates = {

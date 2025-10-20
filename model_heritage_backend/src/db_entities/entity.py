@@ -11,7 +11,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class Model:
     """Proxy class for Model operations using Neo4j backend"""
     

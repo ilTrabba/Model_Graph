@@ -11,12 +11,12 @@ import numpy as np
 import networkx as nx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
-from src.models.model import Model, Family
-from src.models.model import ModelQuery, FamilyQuery
+from src.db_entities.entity import Model, Family
+from src.db_entities.entity import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
-from .tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
+from src.mother_algorithm.tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
 
 logger = logging.getLogger(__name__)
 
