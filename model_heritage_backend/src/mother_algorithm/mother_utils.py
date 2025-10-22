@@ -10,7 +10,7 @@ import safetensors
 import networkx as nx
 
 from scipy import stats
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,21 @@ def _get_layer_kinds() -> List[str]:
         '.weight',  # Any layer with weights
         '.bias'     # Any layer with bias
     ]
+
+#da spulciare bene (forse da eliminare)
+def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
+    """
+    Ensure edges are oriented parent -> child.
+    If the tree has no nodes with in_degree == 0 but has sinks (out_degree == 0),
+    it likely means edges are child -> parent; in that case, reverse it.
+    """
+    if tree is None or tree.number_of_nodes() == 0:
+        return tree
+    roots = [n for n in tree.nodes if tree.in_degree(n) == 0]
+    sinks = [n for n in tree.nodes if tree.out_degree(n) == 0]
+    if len(roots) == 0 and len(sinks) >= 1:
+        return nx.reverse(tree, copy=True)
+    return tree
 
 def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
     """Load model weights from file"""
@@ -108,63 +123,6 @@ def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
         logger.error(f"Error calculating kurtosis: {e}")
         return 0.0   
 
-def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
-    """Calculate L2 distance between two sets of model weights"""
-    try:
-        layer_kinds = _get_layer_kinds()
-        total_distance = 0.0
-        param_count = 0
-
-        # Normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
-        weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
-        weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
-        
-        # Get common parameters
-        common_params = set(weights1_normalized.keys()) & set(weights2_normalized.keys())
-        logger.debug(f"Common Parameters: {common_params}")
-        
-        for param_name in common_params:
-
-            # Include all weight and bias parameters for distance calculation
-            should_include = False
-            for lk in layer_kinds:
-                if lk in param_name:
-                    should_include = True
-                    break
-            
-            # Also include if it's a weight or bias parameter
-            if 'weight' in param_name or 'bias' in param_name:
-                should_include = True
-                
-            if not should_include:
-                continue
-                
-            tensor1 = weights1_normalized[param_name]
-            tensor2 = weights2_normalized[param_name]
-            
-            if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
-
-                # Ensure same shape
-                if tensor1.shape != tensor2.shape:
-                    logger.warning(f"Shape mismatch for {param_name}: {tensor1.shape} vs {tensor2.shape}")
-                    continue
-
-                # Calculate L2 distance
-                diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
-                l2_dist = np.linalg.norm(diff.flatten())
-                total_distance += l2_dist
-                param_count += 1
-        
-        if param_count == 0:
-            return float('inf')
-            
-        # Return average L2 distance
-        return total_distance / param_count
-        
-    except Exception as e:
-        logger.error(f"Error calculating L2 distance: {e}")
-        return float('inf')
-
 def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     """
     Compute lambda as defined in the MoTHer paper:
@@ -188,84 +146,7 @@ def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     lam = c * mean_distance
     return lam
 
-######################################################################################
-########################### Genealogy block construction #############################
-######################################################################################
-
-def build_tree(ku_values: List[float], 
-               distance_matrix: np.ndarray, 
-               lambda_param: float) -> Tuple[nx.DiGraph, Dict[int, float]]:
-    """
-    Build directed tree using MoTHer algorithm with Chu-Liu-Edmonds MDST
-    """
-    from .chu_liu_edmonds_algorithm import chu_liu_edmonds_algorithm
-    
-    n = len(ku_values)
-    
-    if n < 2:
-        logger.warning("Cannot build tree with fewer than 2 models")
-        return nx.DiGraph(), {}
-    
-    if n == 2:
-
-        # Higher kurtosis = parent (original model, less fine-tuned)
-        if ku_values[0] > ku_values[1]:
-            parent, child = 0, 1
-        else:
-            parent, child = 1, 0
-            
-        tree = nx.DiGraph()
-        tree.add_edge(parent, child)
-        return tree, {parent: 0.8, child: 0.7}
-    
-    logger.debug(f"Building tree with {n} models using Chu-Liu-Edmonds algorithm")
-
-    true_lambda = compute_lambda(distance_matrix)
-    
-    # Create weighted directed graph
-    G = nx.DiGraph()
-    G.add_nodes_from(range(n))
-    
-    # Calculate edge weights combining distance and kurtosis
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-
-                # Distance component (normalized)
-                distance_cost = distance_matrix[i, j]
-                
-                # Higher kurtosis models should be parents
-                # Based on paper: fine-tuning reduces kurtosis (fewer outliers)
-                # A (high kurtosis, original) -> B (low kurtosis, fine-tuned)
-                kurtosis_diff = ku_values[i] - ku_values[j]  # parent_ku - child_ku
-                
-                # If i has higher kurtosis than j, this is a good parent->child relationship
-                if kurtosis_diff > 0:
-                    kurtosis_cost = 0 #-abs(kurtosis_diff)  # Negative cost = preferred
-                else:
-                    kurtosis_cost = abs(kurtosis_diff) * 2  # Penalty for bad direction
-                
-                # Combine costs using lambda parameter
-                edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
-                
-                G.add_edge(i, j, weight=edge_weight)
-
-    # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
-    try:
-        mdst = chu_liu_edmonds_algorithm(G,np.argmax(ku_values))
-        logger.debug(f"Chu-Liu-Edmonds completed: {mdst.number_of_nodes()} nodes, {mdst.number_of_edges()} edges")
-    except Exception as e:
-        logger.warning(f"Chu-Liu-Edmonds failed ({e}), using fallback")
-        mdst = fallback_directed_mst(G)
-    
-    # Calculate confidence scores
-    confidence_scores = calculate_confidence_scores(mdst, G, ku_values)
-    
-    return mdst, confidence_scores
-
-######################################################################################
-######################################################################################
-######################################################################################
+#################################################################################
 
 def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:
     """

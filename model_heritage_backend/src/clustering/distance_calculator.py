@@ -10,13 +10,14 @@ import numpy as np
 import torch
 
 from typing import Dict, List, Optional, Any
+from ..db_entities.entity import Model
 from enum import Enum
 
 # Import existing MoTHer utilities
 from src.mother_algorithm.mother_utils import (
-    load_model_weights, 
-    calculate_l2_distance,
-    _get_layer_kinds
+    load_model_weights,
+    _get_layer_kinds,
+    normalize_key
 )
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,151 @@ class ModelDistanceCalculator:
         self.default_metric = default_metric
         self.layer_filter = layer_filter or _get_layer_kinds()
         #logger.info(f"Initialized ModelDistanceCalculator with metric: {default_metric}")
-        
+
+    def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
+        """Calculate L2 distance between two sets of model weights"""
+        try:
+            layer_kinds = _get_layer_kinds()
+            total_distance = 0.0
+            param_count = 0
+
+            # Normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
+            weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
+            weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
+            
+            # Get common parameters
+            common_params = set(weights1_normalized.keys()) & set(weights2_normalized.keys())
+            logger.debug(f"Common Parameters: {common_params}")
+            
+            for param_name in common_params:
+
+                # Include all weight and bias parameters for distance calculation
+                should_include = False
+                for lk in layer_kinds:
+                    if lk in param_name:
+                        should_include = True
+                        break
+                
+                # Also include if it's a weight or bias parameter
+                if 'weight' in param_name or 'bias' in param_name:
+                    should_include = True
+                    
+                if not should_include:
+                    continue
+                    
+                tensor1 = weights1_normalized[param_name]
+                tensor2 = weights2_normalized[param_name]
+                
+                if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
+
+                    # Ensure same shape
+                    if tensor1.shape != tensor2.shape:
+                        logger.warning(f"Shape mismatch for {param_name}: {tensor1.shape} vs {tensor2.shape}")
+                        continue
+
+                    # Calculate L2 distance
+                    diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+                    l2_dist = np.linalg.norm(diff.flatten())
+                    total_distance += l2_dist
+                    param_count += 1
+            
+            if param_count == 0:
+                return float('inf')
+                
+            # Return average L2 distance
+            return total_distance / param_count
+            
+        except Exception as e:
+            logger.error(f"Error calculating L2 distance: {e}")
+            return float('inf')
+
+    def calculate_matrix_rank_distance(self,
+                                      weights1: Dict[str, Any],
+                                      weights2: Dict[str, Any]) -> float:
+        """
+        Calculate distance based on matrix rank differences (optimized for LoRA models).        
+        For LoRA models, we analyze the rank of weight difference matrices
+        as they typically have low-rank adaptations.
+        """
+        try:
+            total_rank_diff = 0.0
+            param_count = 0
+            
+            # Get common parameters
+            common_params = set(weights1.keys()) & set(weights2.keys())
+            
+            for param_name in common_params:
+                # Filter relevant layers
+                if not self._should_include_layer(param_name):
+                    continue
+                    
+                tensor1 = weights1[param_name]
+                tensor2 = weights2[param_name]
+                
+                if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
+                    if tensor1.shape != tensor2.shape:
+                        continue
+                        
+                    # Calculate difference matrix
+                    diff_matrix = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+                    
+                    # For matrices, calculate rank
+                    if len(diff_matrix.shape) == 2:
+                        rank = np.linalg.matrix_rank(diff_matrix)
+                        max_rank = min(diff_matrix.shape)
+                        normalized_rank = rank / max_rank if max_rank > 0 else 0
+                        total_rank_diff += normalized_rank
+                    else:
+                        # For other tensors, use frobenius norm as fallback
+                        total_rank_diff += np.linalg.norm(diff_matrix)
+                        
+                    param_count += 1
+            
+            if param_count == 0:
+                return float('inf')
+                
+            return total_rank_diff / param_count
+            
+        except Exception as e:
+            logger.error(f"Error in matrix rank distance calculation: {e}")
+            return float('inf')
+    
+    def calculate_cosine_distance(self,
+                                 weights1: Dict[str, Any],
+                                 weights2: Dict[str, Any]) -> float:
+        """
+        Calculate cosine distance between model weights.
+        """
+        try:
+            # Flatten all relevant weights into vectors
+            vec1 = self._flatten_weights(weights1)
+            vec2 = self._flatten_weights(weights2)
+            
+            if len(vec1) == 0 or len(vec2) == 0:
+                return float('inf')
+                
+            # Calculate cosine similarity
+            dot_product = np.dot(vec1, vec2)
+            norm1 = np.linalg.norm(vec1)
+            norm2 = np.linalg.norm(vec2)
+            
+            if norm1 == 0 or norm2 == 0:
+                return float('inf')
+                
+            cosine_sim = dot_product / (norm1 * norm2)
+            
+            # Convert to distance (1 - similarity)
+            return 1.0 - cosine_sim
+            
+        except Exception as e:
+            logger.error(f"Error in cosine distance calculation: {e}")
+            return float('inf')
+    
     def calculate_distance(self, 
                           model1_weights: Dict[str, Any],
                           model2_weights: Dict[str, Any],
                           metric: Optional[DistanceMetric] = None,
-                          model_type: ModelType = ModelType.AUTO) -> float:
+                          model_type: ModelType = ModelType.FULL_FINETUNED) -> float:
         """
         Calculate distance between two model weight dictionaries.
         
@@ -80,8 +220,7 @@ class ModelDistanceCalculator:
             
             # Auto-select metric based on model type
             if metric == DistanceMetric.AUTO:
-                model_type_detected = self._detect_model_type(model1_weights, model2_weights)
-                if model_type_detected == ModelType.LORA:
+                if model_type == ModelType.LORA:
                     metric = DistanceMetric.MATRIX_RANK
                 else:
                     metric = DistanceMetric.L2_DISTANCE
@@ -89,11 +228,12 @@ class ModelDistanceCalculator:
             logger.debug(f"Using metric: {metric} for model comparison")
             
             if metric == DistanceMetric.L2_DISTANCE:
-                return self._calculate_l2_distance(model1_weights, model2_weights)
+                logger.info("params: " + str((model1_weights)) + " " + str((model2_weights)))
+                return self.calculate_l2_distance(model1_weights, model2_weights)
             elif metric == DistanceMetric.MATRIX_RANK:
-                return self._calculate_matrix_rank_distance(model1_weights, model2_weights)
+                return self.calculate_matrix_rank_distance(model1_weights, model2_weights)
             elif metric == DistanceMetric.COSINE_SIMILARITY:
-                return self._calculate_cosine_distance(model1_weights, model2_weights)
+                return self.calculate_cosine_distance(model1_weights, model2_weights)
             else:
                 raise ValueError(f"Unsupported distance metric: {metric}")
                 
@@ -145,134 +285,44 @@ class ModelDistanceCalculator:
             logger.error(f"Error calculating pairwise distances: {e}")
             return np.array([[]])
     
-    def load_and_calculate_distance(self,
-                                  model1_path: str,
-                                  model2_path: str,
-                                  metric: Optional[DistanceMetric] = None) -> float:
+    def _calculate_intra_family_distance(self, family_models: List[Model]) -> float:
         """
-        Load model weights from files and calculate distance.
-        
-        Args:
-            model1_path: Path to first model file
-            model2_path: Path to second model file
-            metric: Distance metric to use
-            
-        Returns:
-            Distance value
+        Calculate average intra-family distance.
         """
         try:
-            weights1 = load_model_weights(model1_path)
-            weights2 = load_model_weights(model2_path)
+            if len(family_models) < 2:
+                return 0.0
             
-            if weights1 is None or weights2 is None:
-                logger.error("Failed to load one or both model weights")
-                return float('inf')
-                
-            return self.calculate_distance(weights1, weights2, metric)
+            # Load weights for all models
+            model_weights = {}
+            for model in family_models:
+                weights = load_model_weights(model.file_path)
+                if weights is not None:
+                    model_weights[model.id] = weights
             
-        except Exception as e:
-            logger.error(f"Error loading and calculating distance: {e}")
-            return float('inf')
-    
-    #push stupido e brutto
-    def _calculate_l2_distance(self, 
-                              weights1: Dict[str, Any], 
-                              weights2: Dict[str, Any]) -> float:
-        """
-        Calculate L2 distance using existing MoTHer implementation.
-        
-        This leverages the existing calculate_l2_distance function from mother_utils
-        which already handles layer filtering and tensor operations properly.
-        """
-        try:
-            return calculate_l2_distance(weights1, weights2)
-        except Exception as e:
-            logger.error(f"Error in L2 distance calculation: {e}")
-            return float('inf')
-    
-    def _calculate_matrix_rank_distance(self,
-                                      weights1: Dict[str, Any],
-                                      weights2: Dict[str, Any]) -> float:
-        """
-        Calculate distance based on matrix rank differences (optimized for LoRA models).
-        
-        For LoRA models, we analyze the rank of weight difference matrices
-        as they typically have low-rank adaptations.
-        """
-        try:
-            total_rank_diff = 0.0
-            param_count = 0
+            if len(model_weights) < 2:
+                return 0.0
             
-            # Get common parameters
-            common_params = set(weights1.keys()) & set(weights2.keys())
+            # Calculate pairwise distances
+            distances = []
+            model_ids = list(model_weights.keys())
             
-            for param_name in common_params:
-                # Filter relevant layers
-                if not self._should_include_layer(param_name):
-                    continue
-                    
-                tensor1 = weights1[param_name]
-                tensor2 = weights2[param_name]
-                
-                if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
-                    if tensor1.shape != tensor2.shape:
-                        continue
-                        
-                    # Calculate difference matrix
-                    diff_matrix = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
-                    
-                    # For matrices, calculate rank
-                    if len(diff_matrix.shape) == 2:
-                        rank = np.linalg.matrix_rank(diff_matrix)
-                        max_rank = min(diff_matrix.shape)
-                        normalized_rank = rank / max_rank if max_rank > 0 else 0
-                        total_rank_diff += normalized_rank
-                    else:
-                        # For other tensors, use frobenius norm as fallback
-                        total_rank_diff += np.linalg.norm(diff_matrix)
-                        
-                    param_count += 1
+            for i in range(len(model_ids)):
+                for j in range(i + 1, len(model_ids)):
+                    dist = self.calculate_distance(
+                        model_weights[model_ids[i]],
+                        model_weights[model_ids[j]]
+                    )
+                    distances.append(dist)
             
-            if param_count == 0:
-                return float('inf')
-                
-            return total_rank_diff / param_count
+            return np.mean(distances) if distances else 0.0
             
         except Exception as e:
-            logger.error(f"Error in matrix rank distance calculation: {e}")
-            return float('inf')
-    
-    def _calculate_cosine_distance(self,
-                                 weights1: Dict[str, Any],
-                                 weights2: Dict[str, Any]) -> float:
-        """
-        Calculate cosine distance between model weights.
-        """
-        try:
-            # Flatten all relevant weights into vectors
-            vec1 = self._flatten_weights(weights1)
-            vec2 = self._flatten_weights(weights2)
-            
-            if len(vec1) == 0 or len(vec2) == 0:
-                return float('inf')
-                
-            # Calculate cosine similarity
-            dot_product = np.dot(vec1, vec2)
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
-            
-            if norm1 == 0 or norm2 == 0:
-                return float('inf')
-                
-            cosine_sim = dot_product / (norm1 * norm2)
-            
-            # Convert to distance (1 - similarity)
-            return 1.0 - cosine_sim
-            
-        except Exception as e:
-            logger.error(f"Error in cosine distance calculation: {e}")
-            return float('inf')
-    
+            logger.error(f"Error calculating intra-family distance: {e}")
+            return 0.0
+
+################################################################################
+
     def _flatten_weights(self, weights: Dict[str, Any]) -> np.ndarray:
         """
         Flatten relevant model weights into a single vector.
@@ -303,27 +353,3 @@ class ModelDistanceCalculator:
             if pattern in param_name:
                 return True
         return False
-    
-    def _detect_model_type(self, 
-                          weights1: Dict[str, Any], 
-                          weights2: Dict[str, Any]) -> ModelType:
-        """
-        Automatically detect model type based on weight patterns.
-        
-        LoRA models typically have specific naming patterns like 'lora_A', 'lora_B'
-        """
-        try:
-            all_params = set(weights1.keys()) | set(weights2.keys())
-            
-            # Check for LoRA-specific patterns
-            lora_patterns = ['lora_A', 'lora_B', '.lora.', '_lora_']
-            for param in all_params:
-                for pattern in lora_patterns:
-                    if pattern in param:
-                        return ModelType.LORA
-                        
-            return ModelType.FULL_FINETUNED
-            
-        except Exception as e:
-            logger.error(f"Error detecting model type: {e}")
-            return ModelType.FULL_FINETUNED

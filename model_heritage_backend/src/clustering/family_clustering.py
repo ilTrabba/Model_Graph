@@ -12,9 +12,11 @@ import uuid
 import safetensors.torch
 import os
 
+from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from enum import Enum
+from datetime import datetime
 from sklearn.cluster import DBSCAN, KMeans
 from safetensors import safe_open
 from ..db_entities.entity import Model, Family
@@ -218,7 +220,6 @@ class FamilyClusteringSystem:
         try:
             # Load model weights if not provided
             if model_weights is None:
-                from src.mother_algorithm.mother_utils import load_model_weights
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     logger.error(f"Failed to load weights for model {model.id}")
@@ -240,7 +241,6 @@ class FamilyClusteringSystem:
             if confidence >= 0.2:
                 # Assign to existing family
                 self._add_model_to_family(model, best_family_id)
-                #centroid2=self.calculate_family_centroid(family_id)  questa è sbagliata
                 return best_family_id, confidence
             else:
                 # Create new family with the model weights
@@ -278,7 +278,6 @@ class FamilyClusteringSystem:
             valid_models = []
             
             for model in models:
-                from src.mother_algorithm.mother_utils import load_model_weights
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
                     model_weights[model.id] = weights
@@ -331,7 +330,6 @@ class FamilyClusteringSystem:
             # Load weights for all family models
             family_weights = []
             for model in family_models:
-                from src.mother_algorithm.mother_utils import load_model_weights
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
                     family_weights.append(weights)
@@ -723,43 +721,6 @@ class FamilyClusteringSystem:
             logger.error(f"Error updating family assignments: {e}")
             return {}
     
-    def _calculate_intra_family_distance(self, family_models: List[Model]) -> float:
-        """
-        Calculate average intra-family distance.
-        """
-        try:
-            if len(family_models) < 2:
-                return 0.0
-            
-            # Load weights for all models
-            model_weights = {}
-            for model in family_models:
-                from src.mother_algorithm.mother_utils import load_model_weights
-                weights = load_model_weights(model.file_path)
-                if weights is not None:
-                    model_weights[model.id] = weights
-            
-            if len(model_weights) < 2:
-                return 0.0
-            
-            # Calculate pairwise distances
-            distances = []
-            model_ids = list(model_weights.keys())
-            
-            for i in range(len(model_ids)):
-                for j in range(i + 1, len(model_ids)):
-                    dist = self.distance_calculator.calculate_distance(
-                        model_weights[model_ids[i]],
-                        model_weights[model_ids[j]]
-                    )
-                    distances.append(dist)
-            
-            return np.mean(distances) if distances else 0.0
-            
-        except Exception as e:
-            logger.error(f"Error calculating intra-family distance: {e}")
-            return 0.0
-    
     def _calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.
@@ -797,8 +758,6 @@ class FamilyClusteringSystem:
     def _update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
         """Update Centroid node metadata with enhanced attributes"""
         try:
-            from datetime import datetime
-            
             # Extract layer keys from centroid
             layer_keys = list(centroid.keys()) if centroid else []
             

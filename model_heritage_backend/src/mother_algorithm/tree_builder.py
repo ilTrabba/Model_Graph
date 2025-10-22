@@ -11,38 +11,28 @@ import networkx as nx
 
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
+from src.clustering.distance_calculator import ModelDistanceCalculator
 from src.db_entities.entity import Model
 from src.db_entities.entity import ModelQuery
+from src.mother_algorithm.mdst import MDST
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
     calc_ku, 
-    calculate_l2_distance,
-    build_tree
+    compute_lambda,
+    fallback_directed_mst,
+    calculate_confidence_scores,
+    _normalize_parent_child_orientation
 )
 
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()
+mdst = MDST()
 
 class TreeBuildingMethod(Enum):
     """Available tree building methods"""
     MOTHER = "mother"          # Full MoTHer algorithm with kurtosis
     DISTANCE_ONLY = "distance" # Distance-based minimum spanning tree only
     KURTOSIS_ONLY = "kurtosis" # Kurtosis-based ordering only
-
-#da spulciare bene
-def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
-    """
-    Ensure edges are oriented parent -> child.
-    If the tree has no nodes with in_degree == 0 but has sinks (out_degree == 0),
-    it likely means edges are child -> parent; in that case, reverse it.
-    """
-    if tree is None or tree.number_of_nodes() == 0:
-        return tree
-    roots = [n for n in tree.nodes if tree.in_degree(n) == 0]
-    sinks = [n for n in tree.nodes if tree.out_degree(n) == 0]
-    if len(roots) == 0 and len(sinks) >= 1:
-        return nx.reverse(tree, copy=True)
-    return tree
 
 class MoTHerTreeBuilder:
     """
@@ -57,7 +47,8 @@ class MoTHerTreeBuilder:
     
     def __init__(self,
                  lambda_param: float = 0.3, # parametro c, non lambda, da rinominare ovunque
-                 method: TreeBuildingMethod = TreeBuildingMethod.MOTHER):
+                 method: TreeBuildingMethod = TreeBuildingMethod.MOTHER,
+                 distance_calculator: ModelDistanceCalculator = ModelDistanceCalculator()):
         """
         Initialize the tree builder.
         
@@ -68,7 +59,8 @@ class MoTHerTreeBuilder:
         """
         self.lambda_param = lambda_param
         self.method = method
-        
+        self.distance_calculator = distance_calculator
+
         logger.info(f"Initialized MoTHerTreeBuilder with method: {method}, lambda: {lambda_param}")
     
     def build_family_tree(self, 
@@ -171,7 +163,7 @@ class MoTHerTreeBuilder:
             for i in range(n_models):
                 for j in range(i, n_models):
                     if i != j:
-                        dist = calculate_l2_distance(
+                        dist = self.distance_calculator.calculate_l2_distance(
                             model_weights[model_ids[i]], 
                             model_weights[model_ids[j]]
                         )
@@ -183,7 +175,7 @@ class MoTHerTreeBuilder:
                         
             
             # Apply MoTHer algorithm using existing implementation
-            tree, confidence_scores = build_tree(
+            tree, confidence_scores = self.build_tree(
                 ku_values=kurtosis_values,
                 distance_matrix=distance_matrix,
                 lambda_param=self.lambda_param
@@ -196,6 +188,75 @@ class MoTHerTreeBuilder:
             logger.error(f"Error building MoTHer tree: {e}")
             return nx.DiGraph(), {}
     
+    def build_tree(self, ku_values: List[float], 
+               distance_matrix: np.ndarray, 
+               lambda_param: float) -> Tuple[nx.DiGraph, Dict[int, float]]:
+        """
+        Build directed tree using MoTHer algorithm with Chu-Liu-Edmonds MDST
+        """
+        n = len(ku_values)
+        
+        if n < 2:
+            logger.warning("Cannot build tree with fewer than 2 models")
+            return nx.DiGraph(), {}
+        
+        if n == 2:
+
+            # Higher kurtosis = parent (original model, less fine-tuned)
+            if ku_values[0] > ku_values[1]:
+                parent, child = 0, 1
+            else:
+                parent, child = 1, 0
+                
+            tree = nx.DiGraph()
+            tree.add_edge(parent, child)
+            return tree, {parent: 0.8, child: 0.7}
+        
+        logger.debug(f"Building tree with {n} models using Chu-Liu-Edmonds algorithm")
+
+        true_lambda = compute_lambda(distance_matrix)
+        
+        # Create weighted directed graph
+        G = nx.DiGraph()
+        G.add_nodes_from(range(n))
+        
+        # Calculate edge weights combining distance and kurtosis
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+
+                    # Distance component (normalized)
+                    distance_cost = distance_matrix[i, j]
+                    
+                    # Higher kurtosis models should be parents
+                    # Based on paper: fine-tuning reduces kurtosis (fewer outliers)
+                    # A (high kurtosis, original) -> B (low kurtosis, fine-tuned)
+                    kurtosis_diff = ku_values[i] - ku_values[j]  # parent_ku - child_ku
+                    
+                    # If i has higher kurtosis than j, this is a good parent->child relationship
+                    if kurtosis_diff > 0:
+                        kurtosis_cost = 0 #-abs(kurtosis_diff)  # Negative cost = preferred
+                    else:
+                        kurtosis_cost = abs(kurtosis_diff) * 2  # Penalty for bad direction
+                    
+                    # Combine costs using lambda parameter
+                    edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
+                    
+                    G.add_edge(i, j, weight=edge_weight)
+
+        # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
+        try:
+            spanning_tree = mdst.chu_liu_edmonds_algorithm(G,np.argmax(ku_values))
+            logger.debug(f"Chu-Liu-Edmonds completed: {spanning_tree.number_of_nodes()} nodes, {spanning_tree.number_of_edges()} edges")
+        except Exception as e:
+            logger.warning(f"Chu-Liu-Edmonds failed ({e}), using fallback")
+            spanning_tree = fallback_directed_mst(G)
+        
+        # Calculate confidence scores
+        confidence_scores = calculate_confidence_scores(spanning_tree, G, ku_values)
+        
+        return spanning_tree, confidence_scores
+
     def _build_distance_tree(self, 
                            models: List[Model], 
                            model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
@@ -212,7 +273,7 @@ class MoTHerTreeBuilder:
             for i in range(n_models):
                 for j in range(n_models):
                     if i != j:
-                        dist = calculate_l2_distance(
+                        dist = self.distance_calculator.calculate_l2_distance(
                             model_weights[model_ids[i]], 
                             model_weights[model_ids[j]]
                         )
@@ -221,7 +282,7 @@ class MoTHerTreeBuilder:
                         distance_matrix[i, j] = float('inf')
             
             # Use MoTHer tree builder with lambda=0 (distance only)
-            tree, confidence_scores = build_tree(
+            tree, confidence_scores = self.build_tree(
                 ku_values=[0.0] * n_models,  # Dummy kurtosis values
                 distance_matrix=distance_matrix,
                 lambda_param=0.0  # Distance only
@@ -257,7 +318,7 @@ class MoTHerTreeBuilder:
             np.fill_diagonal(distance_matrix, float('inf'))
             
             # Use MoTHer tree builder with lambda=1 (kurtosis only)
-            tree, confidence_scores = build_tree(
+            tree, confidence_scores = self.build_tree(
                 ku_values=kurtosis_values,
                 distance_matrix=distance_matrix,
                 lambda_param=1.0  # Kurtosis only
@@ -330,7 +391,6 @@ class MoTHerTreeBuilder:
             logger.error(f"Error converting confidence to model IDs: {e}")
             return {}
 
-    
     def get_tree_statistics(self, tree: nx.DiGraph) -> Dict[str, Any]:
         """
         Calculate statistics for a genealogical tree.

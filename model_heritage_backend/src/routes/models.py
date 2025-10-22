@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from src.db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
+from src.clustering.model_management import ModelManagementSystem
 
 logger = logging.getLogger(__name__)
 models_bp = Blueprint('models', __name__)
@@ -19,8 +20,6 @@ ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 def new_model_handler(model_data):
     """Use the new clustering system for family assignment and parent finding"""
     try:
-        # Import clustering system (with graceful fallback if dependencies missing)
-        from src.clustering.model_management import ModelManagementSystem
         
         # Initialize the management system
         mgmt_system = ModelManagementSystem()

@@ -114,7 +114,6 @@ class Model:
         
         return lineage
 
-
 class Family:
     """Proxy class for Family operations using Neo4j backend"""
     
@@ -161,7 +160,6 @@ class Family:
             'updated_at': self.updated_at
         }
 
-
 class ModelManager:
     """Manager class that provides SQLAlchemy-like query interface for models"""
     
@@ -186,7 +184,6 @@ class ModelManager:
             from flask import abort
             abort(404)
         return model
-
 
 class ModelQuery:
     """Query-like interface for models to maintain compatibility"""
@@ -253,7 +250,6 @@ class ModelQuery:
         """Count models matching filters"""
         return len(self.all())
 
-
 class FamilyManager:
     """Manager class that provides SQLAlchemy-like query interface for families"""
     
@@ -279,7 +275,6 @@ class FamilyManager:
             from flask import abort
             abort(404)
         return family
-
 
 class FamilyQuery:
     """Query-like interface for families to maintain compatibility"""
