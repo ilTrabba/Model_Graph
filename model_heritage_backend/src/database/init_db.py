@@ -6,11 +6,11 @@ Neo4j-only architecture - initializes Neo4j constraints and indexes.
 import os
 import sys
 
-# Add the project root to the Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
 from src.main import app
 from src.services.neo4j_service import neo4j_service
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 def init_database():
     """Initialize the Neo4j database constraints and indexes."""

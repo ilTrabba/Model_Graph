@@ -1,13 +1,12 @@
-from flask import Blueprint, request, jsonify, current_app
-from werkzeug.utils import secure_filename
 import os
 import hashlib
 import uuid
-from datetime import datetime, timezone
-import json
 import logging
 
-from src.db_entities.entity import Model, Family
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.utils import secure_filename
+from datetime import datetime, timezone
+from src.db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 

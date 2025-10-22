@@ -2,9 +2,6 @@ import os
 import sys
 import logging
 
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.config import Config
@@ -12,6 +9,8 @@ from src.routes.user import user_bp
 from src.routes.models import models_bp
 from src.routes.graph import graph_bp
 from src.services.neo4j_service import neo4j_service
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING)

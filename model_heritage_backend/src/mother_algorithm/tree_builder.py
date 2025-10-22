@@ -8,9 +8,9 @@ It leverages the existing MoTHer implementation to create heritage trees within 
 import logging
 import numpy as np
 import networkx as nx
+
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
-
 from src.db_entities.entity import Model
 from src.db_entities.entity import ModelQuery
 from src.mother_algorithm.mother_utils import (
@@ -19,7 +19,6 @@ from src.mother_algorithm.mother_utils import (
     calculate_l2_distance,
     build_tree
 )
-
 
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()

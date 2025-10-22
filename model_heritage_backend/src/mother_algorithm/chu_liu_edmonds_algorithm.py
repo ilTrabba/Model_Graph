@@ -3,9 +3,9 @@ MoTHer Algorithm Main Implementation
 Replaces the find_parent_stub function with sophisticated heritage detection
 """
 
-import re
 import logging
 import networkx as nx
+
 from typing import Tuple, Dict
 from src.db_entities.entity import ModelQuery
 

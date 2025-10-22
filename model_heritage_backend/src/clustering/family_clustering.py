@@ -9,18 +9,18 @@ import logging
 import numpy as np
 import torch
 import uuid
+import safetensors.torch
 import os
+
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from enum import Enum
 from sklearn.cluster import DBSCAN, KMeans
-from sklearn.metrics.pairwise import pairwise_distances
-import safetensors.torch
 from safetensors import safe_open
 from ..db_entities.entity import Model, Family
 from ..db_entities.entity import FamilyQuery, ModelQuery
 from src.services.neo4j_service import neo4j_service
-from .distance_calculator import ModelDistanceCalculator, DistanceMetric
+from .distance_calculator import ModelDistanceCalculator
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

@@ -8,10 +8,10 @@ to family assignment and tree reconstruction.
 
 import logging
 import numpy as np
-import networkx as nx
-from typing import Dict, List, Optional, Tuple, Any
+
+from typing import Dict, Any
 from datetime import datetime, timezone
-from src.db_entities.entity import Model, Family
+from src.db_entities.entity import Model
 from src.db_entities.entity import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric

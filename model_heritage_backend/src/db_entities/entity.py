@@ -3,11 +3,10 @@ Model and Family proxy classes for Neo4j-only architecture.
 These classes provide the same interface as the previous SQLAlchemy models
 but use Neo4j as the backend through neo4j_service.
 """
-
-from typing import Dict, Any, List, Optional
-from datetime import datetime
-from ..services.neo4j_service import neo4j_service
 import logging
+
+from typing import List, Optional
+from ..services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
 

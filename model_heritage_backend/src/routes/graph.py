@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
-from src.services.neo4j_service import neo4j_service
-from src.db_entities.entity import Model, Family
 import logging
+
+from flask import Blueprint, jsonify
+from src.services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
 
