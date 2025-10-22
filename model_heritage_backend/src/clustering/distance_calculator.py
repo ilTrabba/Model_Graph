@@ -59,7 +59,7 @@ class ModelDistanceCalculator:
         self.layer_filter = layer_filter or _get_layer_kinds()
         #logger.info(f"Initialized ModelDistanceCalculator with metric: {default_metric}")
 
-    def calculate_l2_distance(weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
+    def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """Calculate L2 distance between two sets of model weights"""
         try:
             layer_kinds = _get_layer_kinds()
