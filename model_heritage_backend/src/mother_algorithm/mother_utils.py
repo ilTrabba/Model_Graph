@@ -11,7 +11,6 @@ import networkx as nx
 
 from scipy import stats
 from typing import Dict, List, Tuple, Optional, Any
-from . import chu_liu_edmonds_algorithm
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +198,8 @@ def build_tree(ku_values: List[float],
     """
     Build directed tree using MoTHer algorithm with Chu-Liu-Edmonds MDST
     """
+    from .chu_liu_edmonds_algorithm import chu_liu_edmonds_algorithm
+    
     n = len(ku_values)
     
     if n < 2:
