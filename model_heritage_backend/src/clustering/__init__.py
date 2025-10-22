@@ -14,7 +14,7 @@ Components:
 
 from .distance_calculator import ModelDistanceCalculator
 from .family_clustering import FamilyClusteringSystem  
-from .tree_builder import MoTHerTreeBuilder
+from src.mother_algorithm.tree_builder import MoTHerTreeBuilder
 from .model_management import ModelManagementSystem
 
 __all__ = [

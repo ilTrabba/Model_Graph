@@ -8,9 +8,6 @@ import logging
 import networkx as nx
 from typing import Tuple, Dict
 from src.db_entities.entity import ModelQuery
-from src.mother_algorithm.mother_utils import (
-    load_model_weights, calc_ku, calculate_l2_distance, build_tree
-)
 
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()
