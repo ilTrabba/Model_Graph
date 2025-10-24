@@ -12,6 +12,7 @@ from src.db_entities.entity import ModelQuery
 logger = logging.getLogger(__name__)
 model_query = ModelQuery()
 
+# Minimum Directed Spanning Tree (MDST) using Chu-Liu-Edmonds algorithm
 class MDST:
     
     def __init__(self):

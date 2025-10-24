@@ -253,60 +253,6 @@ class FamilyClusteringSystem:
             family_id = self._create_new_family(model, model_weights)
             return family_id, 0.0
     
-    def recluster_all_families(self, 
-                             force_recalculate: bool = False) -> Dict[str, List[str]]:
-        """
-        Recluster all models into families using current settings.
-        
-        Args:
-            force_recalculate: Whether to force recalculation of all distances
-            
-        Returns:
-            Dictionary mapping family_id -> list of model_ids
-        """
-        try:
-            logger.info("Starting complete family reclustering")
-            
-            # Get all processed models
-            models = model_query.filter_by(status='ok').all()
-            if len(models) < self.min_family_size:
-                logger.warning("Not enough models for meaningful clustering")
-                return {}
-            
-            # Load all model weights
-            model_weights = {}
-            valid_models = []
-            
-            for model in models:
-                weights = load_model_weights(model.file_path)
-                if weights is not None:
-                    model_weights[model.id] = weights
-                    valid_models.append(model)
-                else:
-                    logger.warning(f"Failed to load weights for model {model.id}")
-            
-            if len(valid_models) < self.min_family_size:
-                logger.warning("Not enough valid models for clustering")
-                return {}
-            
-            # Calculate pairwise distances
-            distance_matrix = self.distance_calculator.calculate_matrix_pairwise_distances(
-                model_weights
-            )
-            
-            # Perform clustering
-            cluster_labels = self._perform_clustering(distance_matrix, valid_models)
-            
-            # Update family assignments
-            new_families = self._update_family_assignments(valid_models, cluster_labels, model_weights)
-            
-            logger.info(f"Reclustering complete. Created {len(new_families)} families")
-            return new_families
-            
-        except Exception as e:
-            logger.error(f"Error during family reclustering: {e}")
-            return {}
-    
     def calculate_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
         """
         Calculate the centroid (average weights) for a family.
@@ -579,55 +525,6 @@ class FamilyClusteringSystem:
         except Exception as e:
             logger.error(f"Error adding model to family: {e}")
     
-    def _perform_clustering(self, 
-                          distance_matrix: np.ndarray, 
-                          models: List[Model]) -> np.ndarray:
-        """
-        Perform clustering on the distance matrix.
-        
-        Returns:
-            Array of cluster labels for each model
-        """
-        try:
-            if self.clustering_method == ClusteringMethod.DBSCAN:
-                clustering = DBSCAN(
-                    metric='precomputed',
-                    eps=self.family_threshold,
-                    min_samples=self.min_family_size
-                )
-                labels = clustering.fit_predict(distance_matrix)
-                
-            elif self.clustering_method == ClusteringMethod.KMEANS:
-                # Estimate number of clusters
-                n_clusters = max(1, len(models) // 5)  # Rough heuristic
-                clustering = KMeans(n_clusters=n_clusters, random_state=42)
-                # Convert distance to similarity for KMeans
-                similarity_matrix = 1.0 / (1.0 + distance_matrix)
-                labels = clustering.fit_predict(similarity_matrix)
-                
-            elif self.clustering_method == ClusteringMethod.THRESHOLD:
-                # Simple threshold-based clustering
-                labels = self._threshold_clustering(distance_matrix)
-                
-            else:
-                # AUTO: choose best method based on data
-                if len(models) < 10:
-                    labels = self._threshold_clustering(distance_matrix)
-                else:
-                    clustering = DBSCAN(
-                        metric='precomputed',
-                        eps=self.family_threshold,
-                        min_samples=self.min_family_size
-                    )
-                    labels = clustering.fit_predict(distance_matrix)
-            
-            return labels
-            
-        except Exception as e:
-            logger.error(f"Error performing clustering: {e}")
-            # Fallback: each model in its own cluster
-            return np.arange(len(models))
-    
     def _threshold_clustering(self, distance_matrix: np.ndarray) -> np.ndarray:
         """
         Simple threshold-based clustering.
@@ -659,68 +556,6 @@ class FamilyClusteringSystem:
             logger.error(f"Error in threshold clustering: {e}")
             return np.arange(distance_matrix.shape[0])
 
-    # chiamata solo in una funzione re-cluster
-    def _update_family_assignments(self,
-                                    models: List[Model],
-                                    cluster_labels: np.ndarray,
-                                    model_weights: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, List[str]]:
-        """
-        Update database with new family assignments.
-        
-        Args:
-            models: List of models to assign
-            cluster_labels: Cluster labels for each model 
-            model_weights: Dictionary mapping model_id -> model weights for centroid creation
-        """
-        try:
-            # Create new families and assign models
-            families = {}
-            label_to_family_id = {}
-            model_updates = []  # Track model updates to batch them
-            
-            for i, (model, label) in enumerate(zip(models, cluster_labels)):
-                if label == -1:  # Noise/unassigned
-                    # Create individual family
-                    weights = model_weights.get(model.id) if model_weights else None
-                    family_id = self._create_new_family(model, weights)
-                    model_updates.append((model.id, {'family_id': family_id}))
-                    families[family_id] = [model.id]
-                else:
-                    # Get or create family for this cluster
-                    if label not in label_to_family_id:
-                        family_id = f"family_{str(uuid.uuid4())[:8]}"
-                        label_to_family_id[label] = family_id
-                        families[family_id] = []
-                        
-                        # Create family record in Neo4j
-                        family_data = {
-                            'id': family_id,
-                            'structural_pattern_hash': model.structural_hash,
-                            'member_count': 0,
-                            'avg_intra_distance': 0.0,
-                            'created_at': datetime.now(timezone.utc),
-                            'updated_at': datetime.now(timezone.utc)
-                        }
-                        neo4j_service.create_or_update_family(family_data)
-                    
-                    family_id = label_to_family_id[label]
-                    model_updates.append((model.id, {'family_id': family_id}))
-                    families[family_id].append(model.id)
-            
-            # Update all models with their family assignments
-            for model_id, updates in model_updates:
-                neo4j_service.update_model(model_id, updates)
-            
-            # Update family statistics
-            for family_id in families.keys():
-                self.update_family_statistics(family_id)
-            
-            return families
-            
-        except Exception as e:
-            logger.error(f"Error updating family assignments: {e}")
-            return {}
-    
     def _calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.

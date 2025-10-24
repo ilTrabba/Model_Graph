@@ -12,8 +12,6 @@ import torch
 from typing import Dict, List, Optional, Any
 from ..db_entities.entity import Model
 from enum import Enum
-
-# Import existing MoTHer utilities
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
     _get_layer_kinds,
@@ -57,7 +55,6 @@ class ModelDistanceCalculator:
         """
         self.default_metric = default_metric
         self.layer_filter = layer_filter or _get_layer_kinds()
-        #logger.info(f"Initialized ModelDistanceCalculator with metric: {default_metric}")
 
     def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """Calculate L2 distance between two sets of model weights"""
@@ -132,6 +129,7 @@ class ModelDistanceCalculator:
             common_params = set(weights1.keys()) & set(weights2.keys())
             
             for param_name in common_params:
+
                 # Filter relevant layers
                 if not self._should_include_layer(param_name):
                     continue
@@ -240,8 +238,8 @@ class ModelDistanceCalculator:
         except Exception as e:
             logger.error(f"Error calculating distance: {e}")
             return float('inf')
-    
-    #calulate distances of all pairs of models in a family
+
+    # Calculate distances of all pairs of models in a family (usabile in altri punti del codice)
     def calculate_matrix_pairwise_distances(self,
                                    models_weights: Dict[str, Dict[str, Any]],
                                    metric: Optional[DistanceMetric] = None) -> np.ndarray:

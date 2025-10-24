@@ -65,7 +65,7 @@ class ModelManagementSystem:
         
         logger.info("Initialized ModelManagementSystem with components")
     
-    def process_new_model(self, model: Model) -> Dict[str, Any]:
+    def process_new_model(self, model_data) -> Dict[str, Any]:
         """
         Complete processing pipeline for a new model.
         
@@ -82,15 +82,19 @@ class ModelManagementSystem:
             Dictionary with processing results
         """
         try:
-            logger.info(f"Starting complete processing for model {model.id}")
+            
+            # Create a proxy object for compatibility with clustering system
+            model_proxy = Model(**model_data)
+            
+            logger.info(f"Starting complete processing for model {model_proxy.id}")
             
             # Step 1: Assign to family
-            family_id, family_confidence = self.family_clustering.assign_model_to_family(model)
+            family_id, family_confidence = self.family_clustering.assign_model_to_family(model_proxy)
             
             # Update model with family assignment
-            neo4j_service.update_model(model.id, {'family_id': family_id})
+            neo4j_service.update_model(model_proxy.id, {'family_id': family_id})
             
-            logger.info(f"Assigned model {model.id} to family {family_id} with confidence {family_confidence:.3f}")
+            logger.info(f"Assigned model {model_proxy.id} to family {family_id} with confidence {family_confidence:.3f}")
             
             # Step 2: Build complete family tree and update all relationships
             # Get all existing family models
@@ -100,7 +104,7 @@ class ModelManagementSystem:
             ).all()
             
             # Include the new model in the tree building process
-            all_family_models = existing_family_models + [model]
+            all_family_models = existing_family_models + [model_proxy]
             
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
             
@@ -127,7 +131,7 @@ class ModelManagementSystem:
                         })
                         
                         # If this is our newly added model, store its parent info for response
-                        if family_model.id == model.id:
+                        if family_model.id == model_proxy.id:
                             parent_id = new_parent_id
                             parent_confidence = new_confidence
                             
@@ -140,7 +144,7 @@ class ModelManagementSystem:
                         })
                         
                         # If this is our newly added model, store its root status for response
-                        if family_model.id == model.id:
+                        if family_model.id == model_proxy.id:
                             parent_id = None
                             parent_confidence = 0.0
                             
@@ -150,24 +154,24 @@ class ModelManagementSystem:
             else:   #num_nodes == 1
                 logger.info(f"Tree building for family {family_id}, with only one model")
                 
-                neo4j_service.update_model(model.id, {
+                neo4j_service.update_model(model_proxy.id, {
                     'parent_id': None,
                     'confidence_score': 0.0
                 })
-                logger.info(f"Model {model.id} assigned as root in family {family_id}")
+                logger.info(f"Model {model_proxy.id} assigned as root in family {family_id}")
             
 
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
             
             # Step 4: Mark as processed
-            neo4j_service.update_model(model.id, {
+            neo4j_service.update_model(model_proxy.id, {
                 'status': 'ok',
                 'processed_at': datetime.now(timezone.utc).isoformat()
             })
             
             return {
-                'model_id': model.id,
+                'model_id': model_proxy.id,
                 'family_id': family_id,
                 'family_confidence': family_confidence,
                 'parent_id': parent_id,
@@ -178,151 +182,19 @@ class ModelManagementSystem:
             }
             
         except Exception as e:
-            logger.error(f"Error processing model {model.id}: {e}")
+            logger.error(f"Error processing model {model_proxy.id}: {e}")
             
             # Mark model as error state
-            neo4j_service.update_model(model.id, {
+            neo4j_service.update_model(model_proxy.id, {
                 'status': 'error',
                 'processed_at': datetime.now(timezone.utc)
             })
             
             return {
-                'model_id': model.id,
+                'model_id': model_proxy.id,
                 'status': 'error',
                 'error': str(e)
             }
-    
-    # viene chiamata esclusivamente in recluster_all_models e in una route connessa
-    def rebuild_family_tree(self, family_id: str) -> Dict[str, Any]:
-        """
-        Rebuild the genealogical tree for a family and update all parent relationships.
-        
-        Args:
-            family_id: ID of the family to rebuild
-            
-        Returns:
-            Dictionary with rebuild results
-        """
-        try:
-            logger.info(f"Rebuilding tree for family {family_id}")
-            
-            # Get family models
-            family_models = model_query.filter_by(
-                family_id=family_id,
-                status='ok'
-            ).all()
-            
-            if len(family_models) < 2:
-                logger.warning(f"Family {family_id} has insufficient models for tree building")
-                return {'status': 'skipped', 'reason': 'insufficient_models'}
-            
-            # Build new tree
-            tree, confidence_scores = self.tree_builder.build_family_tree(family_id, family_models)
-            
-            if tree.number_of_nodes() == 0:
-                logger.error(f"Failed to build tree for family {family_id}")
-                return {'status': 'error', 'reason': 'tree_build_failed'}
-            
-            # Update parent relationships based on tree
-            updated_count = 0
-            for model in family_models:
-                predecessors = list(tree.predecessors(model.id))
-                
-                if predecessors:
-                    # Model has a parent
-                    new_parent_id = predecessors[0]
-                    new_confidence = confidence_scores.get(model.id, 0.0)
-                    
-                    if model.parent_id != new_parent_id or abs((model.confidence_score or 0.0) - new_confidence) > 0.01:
-                        neo4j_service.update_model(model.id, {
-                            'parent_id': new_parent_id,
-                            'confidence_score': new_confidence
-                        })
-                        updated_count += 1
-                        logger.debug(f"Updated parent for {model.id}: {new_parent_id} (confidence: {new_confidence:.3f})")
-                else:
-                    # Model is a root
-                    if model.parent_id is not None:
-                        neo4j_service.update_model(model.id, {
-                            'parent_id': None,
-                            'confidence_score': 0.0
-                        })
-                        updated_count += 1
-                        logger.debug(f"Set {model.id} as root model")
-            
-            # Update family statistics
-            self.family_clustering.update_family_statistics(family_id)
-            
-            # Validate tree
-            is_valid, issues = self.tree_builder.validate_tree(tree)
-            
-            # Get tree statistics
-            tree_stats = self.tree_builder.get_tree_statistics(tree)
-            
-            logger.info(f"Rebuilt tree for family {family_id}: {updated_count} relationships updated")
-            
-            return {
-                'status': 'success',
-                'family_id': family_id,
-                'models_updated': updated_count,
-                'tree_valid': is_valid,
-                'tree_issues': issues,
-                'tree_statistics': tree_stats
-            }
-            
-        except Exception as e:
-            logger.error(f"Error rebuilding tree for family {family_id}: {e}")
-            return {'status': 'error', 'error': str(e)}
-    
-    def recluster_all_models(self) -> Dict[str, Any]:
-        """
-        Perform complete reclustering of all models in the system.
-        
-        This will:
-        1. Recluster all models into families
-        2. Rebuild all family trees
-        3. Update all relationships
-        
-        Returns:
-            Dictionary with reclustering results
-        """
-        try:
-            logger.info("Starting complete system reclustering")
-            
-            # Step 1: Recluster families
-            new_families = self.family_clustering.recluster_all_families()
-            
-            if not new_families:
-                logger.warning("Family reclustering returned no results")
-                return {'status': 'error', 'reason': 'family_clustering_failed'}
-            
-            family_count = len(new_families)
-            logger.info(f"Reclustering created {family_count} families")
-            
-            # Step 2: Rebuild trees for all families
-            tree_results = []
-            for family_id in new_families.keys():
-                tree_result = self.rebuild_family_tree(family_id)
-                tree_results.append(tree_result)
-            
-            # Count successes
-            successful_trees = sum(1 for result in tree_results if result.get('status') == 'success')
-            total_updates = sum(result.get('models_updated', 0) for result in tree_results)
-            
-            logger.info(f"Reclustering complete: {family_count} families, {successful_trees} trees rebuilt, {total_updates} relationships updated")
-            
-            return {
-                'status': 'success',
-                'families_created': family_count,
-                'trees_rebuilt': successful_trees,
-                'total_relationship_updates': total_updates,
-                'family_details': new_families,
-                'tree_results': tree_results
-            }
-            
-        except Exception as e:
-            logger.error(f"Error during complete reclustering: {e}")
-            return {'status': 'error', 'error': str(e)}
     
     def get_family_genealogy(self, family_id: str) -> Dict[str, Any]:
         """

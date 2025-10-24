@@ -6,7 +6,6 @@ import logging
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
-from src.db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
@@ -16,36 +15,6 @@ models_bp = Blueprint('models', __name__)
 
 MODEL_FOLDER = Config.MODEL_FOLDER
 ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
-
-def new_model_handler(model_data):
-    """Use the new clustering system for family assignment and parent finding"""
-    try:
-        
-        # Initialize the management system
-        mgmt_system = ModelManagementSystem()
-        
-        # Create a proxy object for compatibility with clustering system
-        model_proxy = Model(**model_data)
-        
-        # Process the model through the complete pipeline
-        result = mgmt_system.process_new_model(model_proxy)
-        
-        if result.get('status') == 'success':
-            return result.get('family_id'), result.get('parent_id'), result.get('parent_confidence', 0.0)
-        else:
-            current_app.logger.error(f"Clustering system failed: {result.get('error')}")
-            # Fallback to stub implementation
-            return error_handler(model_data)
-            
-    except ImportError as e:
-        current_app.logger.warning(f"Clustering system not available, using fallback: {e}")
-        return error_handler(model_data)
-    except Exception as e:
-        current_app.logger.error(f"Clustering system failed, using fallback: {e}")
-        return error_handler(model_data)
-
-def error_handler(model_data):
-    return logger.error(f"Test error")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -74,6 +43,10 @@ def extract_weight_signature_stub(file_path):
     }
     
     return signature
+
+def error_handler(model_data):
+    return logger.error(f"Test error")
+    # Fallback stub implementation
 
 @models_bp.route('/models', methods=['GET'])
 def list_models():
@@ -159,31 +132,17 @@ def upload_model():
         if not neo4j_service.upsert_model(model_data):
             raise Exception("Failed to save model to Neo4j")
         
-        # Use new clustering system for family assignment and parent finding
-        family_id, parent_id, confidence = new_model_handler(model_data)
+        mgmt_system = ModelManagementSystem()
+        result = mgmt_system.process_new_model(model_data)
+
+        if result.get('status') != 'success':
+            raise Exception(f"Clustering processing failed: {result.get('error', 'Unknown error')}")
         
-        # Update model with results
-        model_updates = {
-            'family_id': family_id,
-            'status': 'ok',
-            'processed_at': datetime.now(timezone.utc).isoformat()
-        }
-        
-        #if parent_id:
-        #    model_updates['parent_id'] = parent_id
-        #    model_updates['confidence_score'] = confidence
-        
-        # Update the model in Neo4j
-        #if not neo4j_service.update_model(model_id, model_updates):
-            #raise Exception("Failed to update model in Neo4j")
+        family_id = result.get('family_id')
         
         # Create family relationship if family was assigned
         if family_id:
             neo4j_service.create_belongs_to_relationship(model_id, family_id)
-        
-        # Create parent-child relationship if parent was found
-        #if parent_id:
-            #neo4j_service.create_parent_child_relationship(parent_id, model_id, confidence)
         
         # Get final model data for response
         final_model_data = neo4j_service.get_model_by_id(model_id)
@@ -244,67 +203,6 @@ def get_stats():
     stats = neo4j_service.get_stats()
     return jsonify(stats)
 
-# New clustering API endpoints
-
-@models_bp.route('/clustering/recluster', methods=['POST'])
-def recluster_all():
-    """Perform complete reclustering of all models"""
-    try:
-        from src.clustering.model_management import ModelManagementSystem
-        
-        mgmt_system = ModelManagementSystem()
-        result = mgmt_system.recluster_all_models()
-        
-        if result.get('status') == 'success':
-            return jsonify({
-                'status': 'success',
-                'message': 'Reclustering completed successfully',
-                'families_created': result.get('families_created', 0),
-                'trees_rebuilt': result.get('trees_rebuilt', 0),
-                'total_updates': result.get('total_relationship_updates', 0)
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'error': result.get('error', 'Unknown error during reclustering')
-            }), 500
-            
-    except Exception as e:
-        current_app.logger.error(f"Reclustering failed: {e}")
-        return jsonify({'error': f'Reclustering failed: {str(e)}'}), 500
-
-@models_bp.route('/families/<family_id>/tree/rebuild', methods=['POST'])
-def rebuild_family_tree(family_id):
-    """Rebuild genealogical tree for a specific family"""
-    try:
-        from src.clustering.model_management import ModelManagementSystem
-        
-        mgmt_system = ModelManagementSystem()
-        result = mgmt_system.rebuild_family_tree(family_id)
-        
-        if result.get('status') == 'success':
-            return jsonify({
-                'status': 'success',
-                'message': f'Tree rebuilt for family {family_id}',
-                'models_updated': result.get('models_updated', 0),
-                'tree_valid': result.get('tree_valid', False),
-                'tree_statistics': result.get('tree_statistics', {})
-            })
-        elif result.get('status') == 'skipped':
-            return jsonify({
-                'status': 'skipped',
-                'message': result.get('reason', 'Tree rebuild skipped')
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'error': result.get('error', 'Unknown error during tree rebuild')
-            }), 500
-            
-    except Exception as e:
-        current_app.logger.error(f"Tree rebuild failed for family {family_id}: {e}")
-        return jsonify({'error': f'Tree rebuild failed: {str(e)}'}), 500
-
 @models_bp.route('/families/<family_id>/genealogy', methods=['GET'])
 def get_family_genealogy(family_id):
     """Get complete genealogy information for a family"""
@@ -358,36 +256,3 @@ def get_clustering_statistics():
     except Exception as e:
         current_app.logger.error(f"Failed to get clustering statistics: {e}")
         return jsonify({'error': f'Failed to get statistics: {str(e)}'}), 500
-
-@models_bp.route('/models/<model_id>/reprocess', methods=['POST'])
-def reprocess_model(model_id):
-    """Reprocess a model through the clustering pipeline"""
-    try:
-        model_data = neo4j_service.get_model_by_id(model_id)
-        if not model_data:
-            return jsonify({'error': 'Model not found'}), 404
-        
-        from src.clustering.model_management import ModelManagementSystem
-        
-        mgmt_system = ModelManagementSystem()
-        model_proxy = Model(**model_data)
-        result = mgmt_system.process_new_model(model_proxy)
-        
-        if result.get('status') == 'success':
-            return jsonify({
-                'status': 'success',
-                'message': f'Model {model_id} reprocessed successfully',
-                'family_id': result.get('family_id'),
-                'parent_id': result.get('parent_id'),
-                'confidence': result.get('parent_confidence', 0.0)
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'error': result.get('error', 'Unknown error during reprocessing')
-            }), 500
-            
-    except Exception as e:
-        current_app.logger.error(f"Reprocessing failed for model {model_id}: {e}")
-        return jsonify({'error': f'Reprocessing failed: {str(e)}'}), 500
-

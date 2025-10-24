@@ -43,7 +43,7 @@ def _get_layer_kinds() -> List[str]:
         '.bias'     # Any layer with bias
     ]
 
-#da spulciare bene (forse da eliminare)
+# da spulciare bene (forse da eliminare)
 def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """
     Ensure edges are oriented parent -> child.
@@ -253,8 +253,8 @@ CORE_ARCHITECTURAL_PREFIXES = [
     'classifier.',
 ]
 
-#pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES) - potenzialmente da togliere
-#regex = re.compile(rf'.*?({pattern_str}.*)')
+# pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES) - potenzialmente da togliere
+# regex = re.compile(rf'.*?({pattern_str}.*)')
 def normalize_key(key: str) -> str:
     """
     Restituisce la sottostringa a partire dal primo prefisso architetturale trovato.
