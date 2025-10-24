@@ -11,6 +11,7 @@ import networkx as nx
 
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
+from src.log_handler import logHandler
 from src.clustering.distance_calculator import ModelDistanceCalculator
 from src.db_entities.entity import Model
 from src.db_entities.entity import ModelQuery
@@ -21,7 +22,7 @@ from src.mother_algorithm.mother_utils import (
     compute_lambda,
     fallback_directed_mst,
     calculate_confidence_scores,
-    _normalize_parent_child_orientation
+    normalize_parent_child_orientation
 )
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ class MoTHerTreeBuilder:
             models = sorted(models, key=lambda m: m.id)
             
             if len(models) < 2:
-                logger.warning(f"Family {family_id} has insufficient models for tree building")
+                logHandler.warning_handler(f"Family {family_id} has insufficient models for tree building", "build_family_tree")
                 return nx.DiGraph(), {}
             
             logger.info(f"Building tree for family {family_id} with {len(models)} models")
@@ -105,10 +106,10 @@ class MoTHerTreeBuilder:
                     model_weights[model.id] = weights
                     valid_models.append(model)
                 else:
-                    logger.warning(f"Failed to load weights for model {model.id}")
+                    logHandler.warning_handler(f"Failed to load weights for model {model.id}", "build_family_tree")
             
             if len(valid_models) < 2:
-                logger.warning(f"Insufficient valid models for tree building in family {family_id}")
+                logHandler.warning_handler(f"Insufficient valid models for tree building in family {family_id}", "build_family_tree")
                 return nx.DiGraph(), {}
 
             # Deterministic ordering also for valid-only set
@@ -116,29 +117,28 @@ class MoTHerTreeBuilder:
             
             # Build tree using selected method
             if self.method == TreeBuildingMethod.MOTHER:
-                tree, confidence_scores = self._build_mother_tree(valid_models, model_weights)
+                tree, confidence_scores = self.build_mother_tree(valid_models, model_weights)
             elif self.method == TreeBuildingMethod.DISTANCE_ONLY:
-                tree, confidence_scores = self._build_distance_tree(valid_models, model_weights)
+                tree, confidence_scores = self.build_distance_tree(valid_models, model_weights)
             elif self.method == TreeBuildingMethod.KURTOSIS_ONLY:
-                tree, confidence_scores = self._build_kurtosis_tree(valid_models, model_weights)
+                tree, confidence_scores = self.build_kurtosis_tree(valid_models, model_weights)
             else:
-                raise ValueError(f"Unknown tree building method: {self.method}")
+                raise Exception(f"Unknown tree building method: {self.method}")
             
             # Convert node indices to model IDs
-            tree_with_ids = self._convert_tree_to_model_ids(tree, valid_models)
-            confidence_with_ids = self._convert_confidence_to_model_ids(confidence_scores, valid_models)
+            tree_with_ids = self.convert_tree_to_model_ids(tree, valid_models)
+            confidence_with_ids = self.convert_confidence_to_model_ids(confidence_scores, valid_models)
 
             # Normalize orientation to parent -> child for end-to-end consistency
-            tree_with_ids = _normalize_parent_child_orientation(tree_with_ids)
-            
-            logger.info(f"Built tree for family {family_id}: {tree_with_ids.number_of_nodes()} nodes, {tree_with_ids.number_of_edges()} edges")
+            tree_with_ids = normalize_parent_child_orientation(tree_with_ids)
+        
             return tree_with_ids, confidence_with_ids
             
         except Exception as e:
-            logger.error(f"Error building family tree for {family_id}: {e}")
+            logHandler.error_handler(f"Error building family tree for {family_id}: {e}", "build_family_tree")
             return nx.DiGraph(), {}
     
-    def _build_mother_tree(self, 
+    def build_mother_tree(self, 
                           models: List[Model], 
                           model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
@@ -153,8 +153,9 @@ class MoTHerTreeBuilder:
                 ku = calc_ku(model_weights[model.id])
                 kurtosis_values.append(ku)
                 model_ids.append(model.id)
+
                 logger.debug(f"Model {model.id} kurtosis: {ku:.4f}")
-                print(f"Modello: {model.id} -> kurtosi: {ku:.4f}")
+                print(f"Model: {model.id} -> kurtosis: {ku:.4f}")
             
             # Build distance matrix
             n_models = len(models)
@@ -173,7 +174,6 @@ class MoTHerTreeBuilder:
                     else:
                         distance_matrix[i, j] = 0
                         
-            
             # Apply MoTHer algorithm using existing implementation
             tree, confidence_scores = self.build_tree(
                 ku_values=kurtosis_values,
@@ -181,11 +181,11 @@ class MoTHerTreeBuilder:
                 lambda_param=self.lambda_param
             )
             
-            logger.info(f"MoTHer tree built with {tree.number_of_nodes()} nodes")
+            logger.info(f"✅ MoTHer tree built with {tree.number_of_nodes()} nodes")
             return tree, confidence_scores
             
         except Exception as e:
-            logger.error(f"Error building MoTHer tree: {e}")
+            logHandler.error_handler(e, "build_mother_tree")
             return nx.DiGraph(), {}
     
     def build_tree(self, ku_values: List[float], 
@@ -257,7 +257,7 @@ class MoTHerTreeBuilder:
         
         return spanning_tree, confidence_scores
 
-    def _build_distance_tree(self, 
+    def build_distance_tree(self, 
                            models: List[Model], 
                            model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
@@ -295,7 +295,7 @@ class MoTHerTreeBuilder:
             logger.error(f"Error building distance tree: {e}")
             return nx.DiGraph(), {}
     
-    def _build_kurtosis_tree(self, 
+    def build_kurtosis_tree(self, 
                            models: List[Model], 
                            model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
@@ -331,7 +331,7 @@ class MoTHerTreeBuilder:
             logger.error(f"Error building kurtosis tree: {e}")
             return nx.DiGraph(), {}
     
-    def _convert_tree_to_model_ids(self, 
+    def convert_tree_to_model_ids(self, 
                                   tree: nx.DiGraph, 
                                   models: List[Model]) -> nx.DiGraph:
         """
@@ -371,7 +371,7 @@ class MoTHerTreeBuilder:
             logger.error(f"Error converting tree to model IDs: {e}")
             return nx.DiGraph()
     
-    def _convert_confidence_to_model_ids(self, 
+    def convert_confidence_to_model_ids(self, 
                                        confidence_scores: Dict[int, float], 
                                        models: List[Model]) -> Dict[str, float]:
         """

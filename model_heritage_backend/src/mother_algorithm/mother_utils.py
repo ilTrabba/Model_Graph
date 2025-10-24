@@ -11,6 +11,7 @@ import networkx as nx
 
 from scipy import stats
 from typing import Dict, List, Optional, Any
+from src.log_handler import logHandler
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def _get_layer_kinds() -> List[str]:
     ]
 
 # da spulciare bene (forse da eliminare)
-def _normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
+def normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """
     Ensure edges are oriented parent -> child.
     If the tree has no nodes with in_degree == 0 but has sinks (out_degree == 0),
@@ -76,8 +77,7 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
             
         return weights
     except Exception as e:
-        logger.error(f"Failed to load model weights from {file_path}: {e}")
-        return None
+        logHandler.error_handler(e, "load_model_weights", {"file_path": file_path})
 
 def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
     """Calculate kurtosis of model weights (only 2D square tensors)."""

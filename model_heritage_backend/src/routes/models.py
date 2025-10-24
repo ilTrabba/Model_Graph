@@ -6,12 +6,14 @@ import logging
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
+from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
 
 logger = logging.getLogger(__name__)
 models_bp = Blueprint('models', __name__)
+mgmt_system = ModelManagementSystem()
 
 MODEL_FOLDER = Config.MODEL_FOLDER
 ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
@@ -44,10 +46,6 @@ def extract_weight_signature_stub(file_path):
     
     return signature
 
-def error_handler(model_data):
-    return logger.error(f"Test error")
-    # Fallback stub implementation
-
 @models_bp.route('/models', methods=['GET'])
 def list_models():
     """List all models with optional search"""
@@ -76,6 +74,7 @@ def get_model(model_id):
 
 @models_bp.route('/models', methods=['POST'])
 def upload_model():
+
     """Upload and process new model"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -132,11 +131,10 @@ def upload_model():
         if not neo4j_service.upsert_model(model_data):
             raise Exception("Failed to save model to Neo4j")
         
-        mgmt_system = ModelManagementSystem()
         result = mgmt_system.process_new_model(model_data)
 
         if result.get('status') != 'success':
-            raise Exception(f"Clustering processing failed: {result.get('error', 'Unknown error')}")
+            raise Exception(f"System failed (model status is not success): {result.get('error', 'Unknown error')}")
         
         family_id = result.get('family_id')
         
@@ -159,10 +157,8 @@ def upload_model():
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Remove model record if created in Neo4j
-        # Note: In a production system, you might want more sophisticated cleanup
-        current_app.logger.error(f"Model upload failed for {model_id}: {e}")
-        
+        logHandler.error_handler(e, "upload_model", f"Model upload failed for {model_id}: {e}")
+                
         return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 @models_bp.route('/families', methods=['GET'])

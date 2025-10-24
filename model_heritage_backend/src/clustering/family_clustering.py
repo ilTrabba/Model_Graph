@@ -12,12 +12,12 @@ import uuid
 import safetensors.torch
 import os
 
+from src.log_handler import logHandler
 from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from enum import Enum
 from datetime import datetime
-from sklearn.cluster import DBSCAN, KMeans
 from safetensors import safe_open
 from ..db_entities.entity import Model, Family
 from ..db_entities.entity import FamilyQuery, ModelQuery
@@ -97,7 +97,6 @@ class FamilyClusteringSystem:
             centroid_path = self.get_centroid_file_path(family_id)
             logger.info(f"Target path: {centroid_path}")
             logger.info(f"Absolute target path: {os.path.abspath(centroid_path)}")
-            logger.info(f"Directory exists: {os.path.exists(os.path.dirname(centroid_path))}")
             
             # Ensure centroids directory exists
             os.makedirs(os.path.dirname(centroid_path), exist_ok=True)
@@ -222,36 +221,32 @@ class FamilyClusteringSystem:
             if model_weights is None:
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
-                    logger.error(f"Failed to load weights for model {model.id}")
-                    return self._create_new_family(model, None), 0.0
+                    raise Exception("Model weights could not be loaded")
             
             # Get all existing models with the same structural pattern
-            candidate_families = self._find_candidate_families(model)
+            candidate_families = self.find_candidate_families(model)
             
             if not candidate_families:
-                # No candidate families, create new one with the model weights
-                family_id = self._create_new_family(model, model_weights)
+                # No candidate families, create a new one with the model weights for the centroid
+                family_id = self.create_new_family(model, model_weights)
                 return family_id, 1.0
             
             # Calculate distances to family centroids
-            best_family_id, confidence = self._find_best_family_match(
+            best_family_id, confidence = self.find_best_family_match(
                 model, model_weights, candidate_families
             )
             
             if confidence >= 0.2:
                 # Assign to existing family
-                self._add_model_to_family(model, best_family_id)
+                self.add_model_to_family(model, best_family_id)
                 return best_family_id, confidence
             else:
                 # Create new family with the model weights
-                family_id = self._create_new_family(model, model_weights)
+                family_id = self.create_new_family(model, model_weights)
                 return family_id, 1.0
                 
         except Exception as e:
-            logger.error(f"Error assigning model {model.id} to family: {e}")
-            # Fallback: create new family
-            family_id = self._create_new_family(model, model_weights)
-            return family_id, 0.0
+            logHandler.error_handler(e, "assign_model_to_family")
     
     def calculate_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -298,7 +293,7 @@ class FamilyClusteringSystem:
                         #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                         
                         # Update enhanced Centroid node with metadata
-                        self._update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
+                        self.update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
                         
                         neo4j_service.create_has_centroid_relationship(family_id)
                 except Exception as neo4j_error:
@@ -366,7 +361,7 @@ class FamilyClusteringSystem:
             logger.error(f"Error updating family statistics for {family_id}: {e}")
             return False
     
-    def _find_candidate_families(self, model: Model) -> List[Family]:
+    def find_candidate_families(self, model: Model) -> List[Family]:
         """
         Find candidate families for a model based on structural similarity.
         """
@@ -376,10 +371,9 @@ class FamilyClusteringSystem:
             return family_query.all()
             
         except Exception as e:
-            logger.error(f"Error finding candidate families: {e}")
-            return []
+            logHandler.error_handler(e, "find_candidate_families")
     
-    def _find_best_family_match(self,
+    def find_best_family_match(self,
                                model: Model,
                                model_weights: Dict[str, Any],
                                candidate_families: List[Family]) -> Tuple[str, float]:
@@ -394,18 +388,19 @@ class FamilyClusteringSystem:
             best_distance = float('inf')
             
             for family in candidate_families:
-                #prendere centroide già esistente della famiglia corrente con un if
-                centroid_path = os.path.join("weights", "centroids", f"{family.id}.safetensors")
-                esiste_centroide = Path(centroid_path).exists()
-                print(f"{esiste_centroide}")
+                centroid = None
 
+                # prendere centroide già esistente della famiglia corrente con un if
+                centroid_path = os.path.join("weights", "centroids", f"{family.id}.safetensors")
 
                 if os.path.exists(centroid_path):
                     try:
                         with safe_open(centroid_path, framework="pt") as f:
+
                             # Create a dictionary to hold the tensors
                             centroid_data = {}
                             for key in f.keys():
+
                                 # Load each tensor and add it to the dictionary
                                 # .clone() is often good practice to ensure you have an independent copy
                                 centroid_data[key] = f.get_tensor(key).clone()
@@ -414,12 +409,9 @@ class FamilyClusteringSystem:
                         centroid = centroid_data
 
                     except Exception as e:
-                        print(f"Error loading safetensors file: {e}")
-                        centroid = None
+                        logHandler.error_handler(e, "find_best_family_match", "Error loading safetensors file")
                 else:
-                    # Calculate distance to family centroid
-                    #centroid = self.calculate_family_centroid(family.id)
-                    logger.info("centroid do not exist in the system")
+                    logHandler.error_handler(f"Centroid file does not exist for family {family.id}", "find_best_family_match")
 
                 if centroid is None:
                     continue
@@ -438,18 +430,18 @@ class FamilyClusteringSystem:
         
             # Convert distance to confidence score
             print(f"{self.family_threshold}")
+
             value1 = best_distance / 4.2
-            value2 = 1- value1
+            value2 = 1 - value1
             confidence = max (0.0, value2)
             confidence = min (1.0, confidence)
             
             return best_family_id, confidence
             
         except Exception as e:
-            logger.error(f"Error finding best family match: {e}")
-            return "", 0.0
+            logHandler.error_handler(e, "find_best_family_match")
     
-    def _create_new_family(self, model: Model, model_weights: Optional[Dict[str, Any]] = None) -> str:
+    def create_new_family(self, model: Model, model_weights: Optional[Dict[str, Any]] = None) -> str:
         """
         Create a new family for the model.
         
@@ -494,26 +486,25 @@ class FamilyClusteringSystem:
                             #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                             
                             # Update enhanced Centroid node with metadata
-                            self._update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
+                            self.update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
                             
                             neo4j_service.create_has_centroid_relationship(family_id)
                     except Exception as neo4j_error:
-                        logger.warning(f"Failed to update Neo4j centroid for new family {family_id}: {neo4j_error}")
+                        logHandler.error_handler(neo4j_error, "create_new_family", "Failed to update Neo4j centroid for new family")
                     
                     logger.info(f"✅ Initial centroid created and saved for family {family_id}")
                 else:
-                    logger.warning(f"No valid weights found to create centroid for family {family_id}")
+                    logHandler.error_handler(f"No valid weights found to create centroid for family {family_id}", "create_new_family")
             else:
-                logger.info(f"No model weights provided - centroid will be created later for family {family_id}")
-            
-            logger.info(f"Created new family {family_id} for model {model.id}")
+                logHandler.error_handler(f"No model weights provided, family {family_id} could not be created", "create_new_family")
+
+            logger.info(f"✅ Created new family {family_id} for model {model.id}")
             return family_id
             
         except Exception as e:
-            logger.error(f"Error creating new family: {e}")
-            return f"family_{str(uuid.uuid4())[:8]}"
+            logHandler.error_handler(e, "create_new_family", "Generic error creating new family")
     
-    def _add_model_to_family(self, model: Model, family_id: str):
+    def add_model_to_family(self, model: Model, family_id: str):
         """
         Add a model to an existing family and update statistics.
         """
@@ -523,7 +514,7 @@ class FamilyClusteringSystem:
             logger.info(f"Added model {model.id} to family {family_id}")
             
         except Exception as e:
-            logger.error(f"Error adding model to family: {e}")
+            logHandler.error_handler(e, "add_model_to_family", f"Error adding model {model.id} to family {family_id}")
     
     def _threshold_clustering(self, distance_matrix: np.ndarray) -> np.ndarray:
         """
@@ -590,7 +581,7 @@ class FamilyClusteringSystem:
             logger.error(f"Error calculating weights centroid: {e}")
             return {}
     
-    def _update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
+    def update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
         """Update Centroid node metadata with enhanced attributes"""
         try:
             # Extract layer keys from centroid
@@ -617,7 +608,7 @@ class FamilyClusteringSystem:
                     'version': '1.1'  # Updated version
                 })
                 
-            logger.info(f"Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
+            logger.info(f"✅ Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
             
         except Exception as e:
             logger.error(f"Failed to update centroid metadata for family {family_id}: {e}")

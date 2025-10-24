@@ -10,6 +10,8 @@ import numpy as np
 import torch
 
 from typing import Dict, List, Optional, Any
+
+from src.log_handler import logHandler
 from ..db_entities.entity import Model
 from enum import Enum
 from src.mother_algorithm.mother_utils import (
@@ -110,7 +112,7 @@ class ModelDistanceCalculator:
             return total_distance / param_count
             
         except Exception as e:
-            logger.error(f"Error calculating L2 distance: {e}")
+            logHandler.error_handler(e, "calculate_l2_distance")
             return float('inf')
 
     def calculate_matrix_rank_distance(self,
@@ -226,17 +228,17 @@ class ModelDistanceCalculator:
             logger.debug(f"Using metric: {metric} for model comparison")
             
             if metric == DistanceMetric.L2_DISTANCE:
-                logger.info("params: " + str((model1_weights)) + " " + str((model2_weights)))
+                #logger.info("params: " + str((model1_weights)) + " " + str((model2_weights)))
                 return self.calculate_l2_distance(model1_weights, model2_weights)
             elif metric == DistanceMetric.MATRIX_RANK:
                 return self.calculate_matrix_rank_distance(model1_weights, model2_weights)
             elif metric == DistanceMetric.COSINE_SIMILARITY:
                 return self.calculate_cosine_distance(model1_weights, model2_weights)
             else:
-                raise ValueError(f"Unsupported distance metric: {metric}")
+                raise Exception(f"Unsupported distance metric: {metric}")
                 
         except Exception as e:
-            logger.error(f"Error calculating distance: {e}")
+            logHandler.error_handler(e, "calculate_distance")
             return float('inf')
 
     # Calculate distances of all pairs of models in a family (usabile in altri punti del codice)
@@ -274,13 +276,13 @@ class ModelDistanceCalculator:
                             metric
                         )
                         distance_matrix[i, j] = dist
-                        distance_matrix[j, i] = dist  # Symmetric
+                        distance_matrix[j, i] = dist
                     
-            logger.info(f"Calculated {n_models}x{n_models} distance matrix")
+            logger.debug(f"Calculated {n_models}x{n_models} distance matrix")
             return distance_matrix
             
         except Exception as e:
-            logger.error(f"Error calculating pairwise distances: {e}")
+            logHandler.error_handler(e, "calculate_matrix_pairwise_distances")
             return np.array([[]])
     
     def _calculate_intra_family_distance(self, family_models: List[Model]) -> float:

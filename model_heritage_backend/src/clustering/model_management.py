@@ -11,6 +11,7 @@ import numpy as np
 
 from typing import Dict, Any
 from datetime import datetime, timezone
+from src.log_handler import logHandler
 from src.db_entities.entity import Model
 from src.db_entities.entity import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
@@ -82,11 +83,10 @@ class ModelManagementSystem:
             Dictionary with processing results
         """
         try:
-            
             # Create a proxy object for compatibility with clustering system
             model_proxy = Model(**model_data)
             
-            logger.info(f"Starting complete processing for model {model_proxy.id}")
+            logger.info(f"Uploading model {model_proxy.id}")
             
             # Step 1: Assign to family
             family_id, family_confidence = self.family_clustering.assign_model_to_family(model_proxy)
@@ -94,7 +94,7 @@ class ModelManagementSystem:
             # Update model with family assignment
             neo4j_service.update_model(model_proxy.id, {'family_id': family_id})
             
-            logger.info(f"Assigned model {model_proxy.id} to family {family_id} with confidence {family_confidence:.3f}")
+            logger.info(f"✅ Assigned model {model_proxy.id} to family {family_id} with confidence {family_confidence:.3f}")
             
             # Step 2: Build complete family tree and update all relationships
             # Get all existing family models
@@ -158,7 +158,7 @@ class ModelManagementSystem:
                     'parent_id': None,
                     'confidence_score': 0.0
                 })
-                logger.info(f"Model {model_proxy.id} assigned as root in family {family_id}")
+                logger.info(f"✅ Model {model_proxy.id} assigned as root in family {family_id}")
             
 
             # Step 3: Update family statistics
@@ -179,10 +179,9 @@ class ModelManagementSystem:
                 'tree_nodes': family_tree.number_of_nodes(),
                 'tree_edges': family_tree.number_of_edges(),
                 'status': 'success'
-            }
-            
+            }    
         except Exception as e:
-            logger.error(f"Error processing model {model_proxy.id}: {e}")
+            logHandler.error_handler(e, "process_new_model")
             
             # Mark model as error state
             neo4j_service.update_model(model_proxy.id, {

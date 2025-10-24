@@ -2,6 +2,7 @@ import logging
 
 from neo4j import GraphDatabase
 from typing import List, Dict, Any, Optional
+from src.log_handler import logHandler
 from ..config import Config
 
 logger = logging.getLogger(__name__)
@@ -178,7 +179,7 @@ class Neo4jService:
                 return result.single() is not None
                 
         except Exception as e:
-            logger.error(f"Failed to update model {model_id}: {e}")
+            logHandler.error_handler(e, "update_model", f"Failed to update model {model_id}: {e}")
             return False
     
     def get_all_models(self, search: str = None) -> List[Dict[str, Any]]:
@@ -294,8 +295,10 @@ class Neo4jService:
             return {'parent': None, 'children': []}
     
     def create_family(self, family_data: Dict[str, Any]) -> bool:
+        
         """Create a new family and automatically create its centroid"""
         success = self.create_or_update_family(family_data)
+
         if success:
             # Automatically create centroid with proper metadata
             family_id = family_data['id']

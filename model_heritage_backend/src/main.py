@@ -12,8 +12,10 @@ from src.services.neo4j_service import neo4j_service
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# Configure logging
-logging.basicConfig(level=logging.WARNING)
+# Mostra INFO e superiori (INFO, WARNING, ERROR, CRITICAL)
+logging.basicConfig(level=logging.INFO)
+# Imposta il livello di logging per il driver Neo4j a WARNING per ridurre il rumore nei log
+logging.getLogger("neo4j").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
