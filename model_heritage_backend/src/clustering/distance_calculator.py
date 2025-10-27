@@ -241,51 +241,8 @@ class ModelDistanceCalculator:
             logHandler.error_handler(e, "calculate_distance")
             return float('inf')
 
-    # Calculate distances of all pairs of models in a family (usabile in altri punti del codice)
-    def calculate_matrix_pairwise_distances(self,
-                                   models_weights: Dict[str, Dict[str, Any]],
-                                   metric: Optional[DistanceMetric] = None) -> np.ndarray:
-        """
-        Calculate pairwise distance matrix for multiple models.
-        
-        Args:
-            models_weights: Dictionary mapping model_id -> weights_dict
-            metric: Distance metric to use
-            
-        Returns:
-            NxN distance matrix where N is number of models
-        """
-        try:
-            model_ids = list(models_weights.keys())
-            n_models = len(model_ids)
-            
-            if n_models < 2:
-                logger.warning("Need at least 2 models for distance calculation")
-                return np.array([[]])
-                
-            distance_matrix = np.zeros((n_models, n_models))
-            
-            for i in range(n_models):
-                for j in range(n_models):
-                    if i == j:
-                        distance_matrix[i, j] = 0.0
-                    elif i < j:  # Calculate only upper triangle
-                        dist = self.calculate_distance(
-                            models_weights[model_ids[i]],
-                            models_weights[model_ids[j]],
-                            metric
-                        )
-                        distance_matrix[i, j] = dist
-                        distance_matrix[j, i] = dist
-                    
-            logger.debug(f"Calculated {n_models}x{n_models} distance matrix")
-            return distance_matrix
-            
-        except Exception as e:
-            logHandler.error_handler(e, "calculate_matrix_pairwise_distances")
-            return np.array([[]])
-    
-    def _calculate_intra_family_distance(self, family_models: List[Model]) -> float:
+   
+    def calculate_intra_family_distance(self, family_models: List[Model]) -> float:
         """
         Calculate average intra-family distance.
         """

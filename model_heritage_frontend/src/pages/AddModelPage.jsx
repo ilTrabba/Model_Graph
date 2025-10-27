@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +36,21 @@ export default function AddModelPage() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleReset = () => {
+    setFormData({
+      name: '',
+      description: '',
+      file: null
+    });
+    setError(null);
+    setSuccess(null);
+    // Reset anche l'input file
+    const fileInput = document.getElementById('file');
+    if (fileInput) {
+      fileInput.value = '';
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -131,10 +146,22 @@ export default function AddModelPage() {
               </div>
               
               {formData.file && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                  <FileText className="h-4 w-4" />
-                  <span>{formData.file.name}</span>
-                  <span className="text-gray-400">({formatFileSize(formData.file.size)})</span>
+                <div className="flex items-center justify-between space-x-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-4 w-4" />
+                    <span>{formData.file.name}</span>
+                    <span className="text-gray-400">({formatFileSize(formData.file.size)})</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReset}
+                    className="h-10 w-10 p-0 hover:bg-red-50 hover:text-red-600"
+                    title="Remove file"
+                  >
+                    <Trash2 className="h-7 w-7" />
+                  </Button>
                 </div>
               )}
             </div>
