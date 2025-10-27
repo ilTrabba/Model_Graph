@@ -152,7 +152,7 @@ class ModelManagementSystem:
                 
                 logger.info(f"Updated tree relationships for family {family_id} with {family_tree.number_of_nodes()} nodes")
             else:   #num_nodes == 1
-                logger.info(f"Tree building for family {family_id}, with only one model")
+                logger.info(f"=== TREE BUILDING FOR FAMILY {family_id}, WITH ONLY ONE MODEL ===")
                 
                 neo4j_service.update_model(model_proxy.id, {
                     'parent_id': None,

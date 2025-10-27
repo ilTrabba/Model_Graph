@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Function to print colored messages
 print_status() {
-    echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"
+    echo -e "${BLUE}ℹ️  [$(date +'%H:%M:%S')]${NC} $1"
 }
 
 print_success() {
@@ -59,7 +59,7 @@ fi
 
 print_success "Virtual environment '$GLOBAL_VENV_NAME' found"
 source "$GLOBAL_VENV_NAME"/bin/activate
-print_info "Activated virtual environment for backend"
+print_success "Activated virtual environment for backend"
 
 
 # --- Run Backend in background ---
@@ -131,7 +131,7 @@ cleanup() {
         kill $BACKEND_PID 2>/dev/null
         print_success "Backend stopped"
     else
-        print_info "Backend already stopped"
+        print_success "Backend already stopped"
     fi
     
     if kill -0 $FRONTEND_PID 2>/dev/null; then

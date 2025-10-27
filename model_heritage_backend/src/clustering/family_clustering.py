@@ -100,7 +100,7 @@ class FamilyClusteringSystem:
             
             # Ensure centroids directory exists
             os.makedirs(os.path.dirname(centroid_path), exist_ok=True)
-            logger.info(f"Directory created/verified: {os.path.dirname(centroid_path)}")
+            logger.info(f"✅ Directory created/verified: {os.path.dirname(centroid_path)}")
             
             # Prepare metadata for SafeTensors
             metadata = {
