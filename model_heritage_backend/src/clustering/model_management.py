@@ -195,6 +195,7 @@ class ModelManagementSystem:
                 'error': str(e)
             }
     
+    # Potenzialmente utile per la realizzazione di una box-view della genealogia di un modello (andrà cambiata)
     def get_family_genealogy(self, family_id: str) -> Dict[str, Any]:
         """
         Get complete genealogy information for a family.
@@ -269,6 +270,7 @@ class ModelManagementSystem:
             logger.error(f"Error getting family genealogy for {family_id}: {e}")
             return {'error': str(e)}
     
+    # Potenzialmente utile per la realizzazione di una box-view della genealogia di un modello (andrà cambiata)
     def get_model_lineage(self, model_id: str) -> Dict[str, Any]:
         """
         Get complete lineage information for a specific model.

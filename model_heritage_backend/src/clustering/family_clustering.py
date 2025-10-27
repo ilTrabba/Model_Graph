@@ -279,7 +279,7 @@ class FamilyClusteringSystem:
                 return None
             
             # Calculate centroid by averaging weights
-            centroid = self._calculate_weights_centroid(family_weights)
+            centroid = self.calculate_weights_centroid(family_weights)
             
             # Save centroid to file for incremental updates
             if centroid:
@@ -516,38 +516,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "add_model_to_family", f"Error adding model {model.id} to family {family_id}")
     
-    def _threshold_clustering(self, distance_matrix: np.ndarray) -> np.ndarray:
-        """
-        Simple threshold-based clustering.
-        """
-        try:
-            n_models = distance_matrix.shape[0]
-            labels = np.full(n_models, -1)  # -1 means unassigned
-            current_label = 0
-            
-            for i in range(n_models):
-                if labels[i] == -1:  # Unassigned
-                    # Start new cluster
-                    cluster_members = [i]
-                    
-                    # Find all models within threshold
-                    for j in range(i + 1, n_models):
-                        if labels[j] == -1 and distance_matrix[i, j] <= self.family_threshold:
-                            cluster_members.append(j)
-                    
-                    # Assign cluster label if meets minimum size
-                    if len(cluster_members) >= self.min_family_size:
-                        for member in cluster_members:
-                            labels[member] = current_label
-                        current_label += 1
-            
-            return labels
-            
-        except Exception as e:
-            logger.error(f"Error in threshold clustering: {e}")
-            return np.arange(distance_matrix.shape[0])
-
-    def _calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.
         """

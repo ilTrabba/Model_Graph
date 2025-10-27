@@ -15,7 +15,7 @@ from src.log_handler import logHandler
 
 logger = logging.getLogger(__name__)
 
-def _get_layer_kinds() -> List[str]:
+def get_layer_kinds() -> List[str]:
     """Get layer types for analysis"""
     return [
         # Transformer attention layers
@@ -82,7 +82,7 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
 def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
     """Calculate kurtosis of model weights (only 2D square tensors)."""
     try:
-        layer_kinds = _get_layer_kinds()
+        layer_kinds = get_layer_kinds()
         all_weights = []
         
         for param_name, param_tensor in weights.items():

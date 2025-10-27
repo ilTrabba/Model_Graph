@@ -10,13 +10,12 @@ import numpy as np
 import torch
 
 from typing import Dict, List, Optional, Any
-
 from src.log_handler import logHandler
 from ..db_entities.entity import Model
 from enum import Enum
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
-    _get_layer_kinds,
+    get_layer_kinds,
     normalize_key
 )
 
@@ -56,12 +55,12 @@ class ModelDistanceCalculator:
             layer_filter: List of layer patterns to include. If None, uses default patterns.
         """
         self.default_metric = default_metric
-        self.layer_filter = layer_filter or _get_layer_kinds()
+        self.layer_filter = layer_filter or get_layer_kinds()
 
     def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """Calculate L2 distance between two sets of model weights"""
         try:
-            layer_kinds = _get_layer_kinds()
+            layer_kinds = get_layer_kinds()
             total_distance = 0.0
             param_count = 0
 
@@ -241,7 +240,7 @@ class ModelDistanceCalculator:
             logHandler.error_handler(e, "calculate_distance")
             return float('inf')
 
-   
+    # Funzione potenzialmente utile per la realizzazione della soglia adattiva (non usata ma per ora lasciarla)
     def calculate_intra_family_distance(self, family_models: List[Model]) -> float:
         """
         Calculate average intra-family distance.
