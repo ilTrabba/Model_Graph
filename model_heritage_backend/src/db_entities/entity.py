@@ -208,6 +208,12 @@ class ModelQuery:
     def order_by(self, field):
         """Order by field (handled in execution)"""
         return self
+
+    def get_all_models_by_family_id(self, family_id: str, status: Optional[str] = None) -> List[Model]:
+        """Get all models in a specific family"""
+        models_data = neo4j_service.get_family_models(family_id, status=status)
+        models = [Model(**data) for data in models_data] 
+        return models
     
     def all(self) -> List[Model]:
         """Get all models matching filters"""

@@ -82,7 +82,7 @@ class MoTHerTreeBuilder:
         try:
             # Get family models if not provided
             if models is None:
-                models = model_query.filter_by(
+                models = model_query.get_all_models_by_family_id(
                     family_id=family_id,
                     status='ok'
                 ).all()

@@ -453,32 +453,44 @@ class Neo4jService:
             return result[0]['family']
         return None
 
-    
-    def get_family_models(self, family_id: str) -> List[Dict[str, Any]]:
-        """Get all models in a specific family"""
+    def get_family_models(self, family_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all models in a specific family (new version)
+        
+        Args:
+            family_id: The family ID to filter by
+            status: Optional status filter ('ok', 'failed', etc.)
+        """
         if not self.driver:
             return []
-        
+
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
-                query = """
-                MATCH (m:Model {family_id: $family_id})
-                RETURN m
-                ORDER BY m.created_at
-                """
-                result = session.run(query, {'family_id': family_id})
-                
+                # Query dinamica in base alla presenza di status
+                if status:
+                    query = """
+                    MATCH (n)-[:BELONGS_TO]->(f:Family {id: $family_id})
+                    WHERE n.status = $status
+                    RETURN n
+                    """
+                    result = session.run(query, {'family_id': family_id, 'status': status})
+                else:
+                    query = """
+                    MATCH (n)-[:BELONGS_TO]->(f:Family {id: $family_id})
+                    RETURN n
+                    """
+                    result = session.run(query, {'family_id': family_id})
+
                 models = []
                 for record in result:
-                    model_props = dict(record['m'])
+                    model_props = dict(record['n'])
                     models.append(model_props)
-                
+
                 return models
-                
+
         except Exception as e:
-            logger.error(f"Failed to get models for family {family_id}: {e}")
+            logHandler.error_handler(f"Failed to get models for family {family_id}: {e}", "get_family_models_new")
             return []
-    
+
     def get_stats(self) -> Dict[str, int]:
         """Get system statistics"""
         if not self.driver:

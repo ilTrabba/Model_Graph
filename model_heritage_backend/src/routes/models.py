@@ -174,19 +174,14 @@ def list_families():
 @models_bp.route('/families/<family_id>/models', methods=['GET'])
 def get_family_models(family_id):
     """Get all models in a family"""
-    # Get family data
-    families = neo4j_service.get_all_families()
-    family_data = None
-    for f in families:
-        if f.get('id') == family_id:
-            family_data = f
-            break
-    
+
+    # Verify family exists
+    family_data = neo4j_service.get_family_by_id(family_id)
     if not family_data:
         return jsonify({'error': 'Family not found'}), 404
     
     # Get models in family
-    models_data = neo4j_service.get_family_models(family_id)
+    models_data = neo4j_service.get_family_models(family_id, status='ok')
     
     return jsonify({
         'family': family_data,
