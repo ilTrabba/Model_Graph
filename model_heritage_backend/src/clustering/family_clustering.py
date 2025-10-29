@@ -13,6 +13,7 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
+from typing import Union
 from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
@@ -20,15 +21,11 @@ from enum import Enum
 from datetime import datetime
 from safetensors import safe_open
 from ..db_entities.entity import Model, Family
-from ..db_entities.entity import FamilyQuery, ModelQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-family_query = FamilyQuery()
-model_query = ModelQuery()
 
 class ClusteringMethod(Enum):
     """Available clustering methods"""
@@ -224,16 +221,18 @@ class FamilyClusteringSystem:
                     raise Exception("Model weights could not be loaded")
             
             # Get all existing models with the same structural pattern
-            candidate_families = self.find_candidate_families(model)
-            
-            if not candidate_families:
+            candidate_families_data = self.find_candidate_families(model)
+
+            if not candidate_families_data:
                 # No candidate families, create a new one with the model weights for the centroid
                 family_id = self.create_new_family(model, model_weights)
                 return family_id, 1.0
             
+            candidate_families = [Family(**data) for data in candidate_families_data]
+            
             # Calculate distances to family centroids
             best_family_id, confidence = self.find_best_family_match(
-                model, model_weights, candidate_families
+                model_weights, candidate_families
             )
             
             if confidence >= 0.2:
@@ -260,10 +259,9 @@ class FamilyClusteringSystem:
         """
         try:
             # Get all models in the family
-            family_models = model_query.filter_by(
+            family_models = neo4j_service.get_family_models(
                 family_id=family_id, 
-                status='ok'
-            ).all()
+                status='ok')
             
             if not family_models:
                 return None
@@ -317,15 +315,14 @@ class FamilyClusteringSystem:
             True if successfully updated, False otherwise
         """
         try:
-            family = family_query.get(family_id)
+            family = neo4j_service.get_family_by_id(family_id)
             if not family:
                 return False
             
             # Get family models
-            family_models = model_query.filter_by(
+            family_models = neo4j_service.get_family_models(
                 family_id=family_id,
-                status='ok'
-            ).all()
+                status='ok')
             
             # Update member count
             member_count = len(family_models)
@@ -368,15 +365,14 @@ class FamilyClusteringSystem:
         try:
             # For now, consider all families as candidates
             # In future versions, could filter by structural_hash or other criteria
-            return family_query.all()
+            return neo4j_service.get_all_families()
             
         except Exception as e:
             logHandler.error_handler(e, "find_candidate_families")
     
     def find_best_family_match(self,
-                               model: Model,
                                model_weights: Dict[str, Any],
-                               candidate_families: List[Family]) -> Tuple[str, float]:
+                               candidate_families: List[Union[Family, Dict[str, Any]]]) -> Tuple[str, float]:
         """
         Find the best family match for a model.
         

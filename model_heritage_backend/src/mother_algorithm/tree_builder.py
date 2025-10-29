@@ -11,10 +11,10 @@ import networkx as nx
 
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
+from src.services.neo4j_service import neo4j_service
 from src.log_handler import logHandler
 from src.clustering.distance_calculator import ModelDistanceCalculator
 from src.db_entities.entity import Model
-from src.db_entities.entity import ModelQuery
 from src.mother_algorithm.mdst import MDST
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
@@ -26,7 +26,6 @@ from src.mother_algorithm.mother_utils import (
 )
 
 logger = logging.getLogger(__name__)
-model_query = ModelQuery()
 mdst = MDST()
 
 class TreeBuildingMethod(Enum):
@@ -82,14 +81,15 @@ class MoTHerTreeBuilder:
         try:
             # Get family models if not provided
             if models is None:
-                models = model_query.get_all_models_by_family_id(
+                models = neo4j_service.get_family_models(
                     family_id=family_id,
                     status='ok'
-                ).all()
+                )
 
             # Deterministic ordering independent of insertion timing
-            models = sorted(models, key=lambda m: m.id)
-            
+            # models = sorted(models, key=lambda m: m.id)
+            models = sorted(models, key=lambda m: m['id'] if isinstance(m, dict) else m.id)
+
             if len(models) < 2:
                 logHandler.warning_handler(f"Family {family_id} has insufficient models for tree building", "build_family_tree")
                 return nx.DiGraph(), {}
@@ -99,7 +99,7 @@ class MoTHerTreeBuilder:
             # Load model weights
             model_weights: Dict[str, Any] = {}
             valid_models: List[Model] = []
-            
+
             for model in models:
                 weights = load_model_weights(model.file_path)
                 if weights is not None:
@@ -331,9 +331,13 @@ class MoTHerTreeBuilder:
             logger.error(f"Error building kurtosis tree: {e}")
             return nx.DiGraph(), {}
     
+    # Helper function to get id from either dict or object
+    def get_model_id(self, model):
+        return model['id'] if isinstance(model, dict) else model.id
+
     def convert_tree_to_model_ids(self, 
-                                  tree: nx.DiGraph, 
-                                  models: List[Model]) -> nx.DiGraph:
+                              tree: nx.DiGraph, 
+                              models: List[Model]) -> nx.DiGraph:
         """
         Convert tree with integer node indices to tree with model IDs.
         """
@@ -342,7 +346,7 @@ class MoTHerTreeBuilder:
                 return nx.DiGraph()
             
             # Create mapping from index to model ID
-            index_to_id = {i: models[i].id for i in range(len(models))}
+            index_to_id = {i: self.get_model_id(models[i]) for i in range(len(models))}
             
             # Create new tree with model IDs
             id_tree = nx.DiGraph()
@@ -370,10 +374,10 @@ class MoTHerTreeBuilder:
         except Exception as e:
             logger.error(f"Error converting tree to model IDs: {e}")
             return nx.DiGraph()
-    
+
     def convert_confidence_to_model_ids(self, 
-                                       confidence_scores: Dict[int, float], 
-                                       models: List[Model]) -> Dict[str, float]:
+                                    confidence_scores: Dict[int, float], 
+                                    models: List[Model]) -> Dict[str, float]:
         """
         Convert confidence scores with integer indices to model IDs.
         """
@@ -382,7 +386,7 @@ class MoTHerTreeBuilder:
             
             for index, confidence in confidence_scores.items():
                 if index < len(models):
-                    model_id = models[index].id
+                    model_id = self.get_model_id(models[index])
                     id_confidence[model_id] = confidence
             
             return id_confidence

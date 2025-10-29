@@ -13,16 +13,12 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 from src.log_handler import logHandler
 from src.db_entities.entity import Model
-from src.db_entities.entity import ModelQuery, FamilyQuery
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
 from src.mother_algorithm.tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
 
 logger = logging.getLogger(__name__)
-
-family_query = FamilyQuery()
-model_query = ModelQuery()
 
 class ModelManagementSystem:
     """
@@ -98,10 +94,9 @@ class ModelManagementSystem:
             
             # Step 2: Build complete family tree and update all relationships
             # Get all existing family models
-            existing_family_models = model_query.filter_by(
+            existing_family_models = neo4j_service.get_family_models(
                 family_id=family_id,
-                status='ok'
-            ).all()
+                status='ok')
             
             # Include the new model in the tree building process
             all_family_models = existing_family_models + [model_proxy]
@@ -208,15 +203,14 @@ class ModelManagementSystem:
         """
         try:
             # Get family info
-            family = family_query.get(family_id)
+            family = neo4j_service.get_family_by_id(family_id)
             if not family:
                 return {'error': 'Family not found'}
             
             # Get family models
-            family_models = model_query.filter_by(
+            family_models = neo4j_service.get_family_models(
                 family_id=family_id,
-                status='ok'
-            ).all()
+                status='ok')
             
             if not family_models:
                 return {
@@ -283,7 +277,7 @@ class ModelManagementSystem:
         """
         try:
             # Get model
-            model = model_query.get(model_id)
+            model = neo4j_service.get_model_by_id(model_id)
             if not model:
                 return {'error': 'Model not found'}
             
@@ -311,7 +305,7 @@ class ModelManagementSystem:
                         
                         if parent_edges:
                             parent_id = parent_edges[0]['source']
-                            parent_model = model_query.get(parent_id)
+                            parent_model = neo4j_service.get_model_by_id(parent_id)
                             if parent_model:
                                 ancestors.append(parent_model.to_dict())
                             current_id = parent_id
@@ -329,7 +323,7 @@ class ModelManagementSystem:
                         children = []
                         for edge in child_edges:
                             child_id = edge['target']
-                            child_model = model_query.get(child_id)
+                            child_model = neo4j_service.get_model_by_id(child_id)
                             if child_model:
                                 child_dict = child_model.to_dict()
                                 child_dict['children'] = find_children(child_id)
@@ -375,18 +369,21 @@ class ModelManagementSystem:
         """
         try:
             # Basic counts
-            total_models = model_query.count()
-            processed_models = model_query.filter_by(status='ok').count()
-            processing_models = model_query.filter_by(status='processing').count()
-            error_models = model_query.filter_by(status='error').count()
-            total_families = family_query.count()
+            total_models = neo4j_service.get_all_models()
+            total_models_size = total_models.count()
+
+            processed_models = neo4j_service.filtered_models(total_models, status='ok').count()
+            processing_models = neo4j_service.filtered_models(total_models, status='processing').count()
+            error_models = neo4j_service.filtered_models(total_models, status='error').count()
+
+            total_families = neo4j_service.get_all_families().count()
             
             # Family statistics
             family_sizes = []
-            families = family_query.all()
+            families = neo4j_service.get_all_families()
             
             for family in families:
-                family_model_count = model_query.filter_by(
+                family_model_count = neo4j_service.get_family_models(
                     family_id=family.id,
                     status='ok'
                 ).count()
@@ -397,25 +394,12 @@ class ModelManagementSystem:
             max_family_size = max(family_sizes) if family_sizes else 0
             min_family_size = min(family_sizes) if family_sizes else 0
             
-            # Parent/child statistics
-            models_with_parents = model_query.filter(
-                Model.parent_id.isnot(None),
-                Model.status == 'ok'
-            ).count()
-            
-            root_models = model_query.filter(
-                Model.parent_id.is_(None),
-                Model.status == 'ok'
-            ).count()
-            
             return {
                 'models': {
-                    'total': total_models,
+                    'total': total_models_size,
                     'processed': processed_models,
                     'processing': processing_models,
-                    'error': error_models,
-                    'with_parents': models_with_parents,
-                    'roots': root_models
+                    'error': error_models
                 },
                 'families': {
                     'total': total_families,
@@ -434,5 +418,4 @@ class ModelManagementSystem:
             }
             
         except Exception as e:
-            logger.error(f"Error getting system statistics: {e}")
-            return {'error': str(e)}
+            return logHandler.error_handler(f"Error getting system statistics: {e}", "get_system_statistics")

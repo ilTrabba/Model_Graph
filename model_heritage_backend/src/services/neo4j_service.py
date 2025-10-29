@@ -2,6 +2,7 @@ import logging
 
 from neo4j import GraphDatabase
 from typing import List, Dict, Any, Optional
+from src.db_entities.entity import Model
 from src.log_handler import logHandler
 from ..config import Config
 
@@ -77,6 +78,7 @@ class Neo4jService:
             logger.error(f"Failed to create Neo4j constraints and indexes: {e}")
             return False
     
+    ############### MODEL QUERY ############### 
     def upsert_model(self, model_data: Dict[str, Any]) -> bool:
         """Create or update a Model node using MERGE (unified method)"""
         if not self.driver:
@@ -136,16 +138,6 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to upsert model node: {e}")
             return False
-    
-    def create_or_update_model(self, model_data: Dict[str, Any], family_color: str) -> bool:
-        """Create or update a Model node (wrapper around upsert_model for compatibility)"""
-        model_data = dict(model_data)  # copy to avoid modifying original
-        model_data['color'] = family_color
-        return self.upsert_model(model_data)
-    
-    def create_model(self, model_data: Dict[str, Any]) -> bool:
-        """Create a Model node (wrapper around upsert_model)"""
-        return self.upsert_model(model_data)
     
     def update_model(self, model_id: str, updates: Dict[str, Any]) -> bool:
         """Update specific fields of a Model node"""
@@ -293,7 +285,12 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to get lineage for model {model_id}: {e}")
             return {'parent': None, 'children': []}
-    
+
+    def filtered_models(self, models: List[Dict[str, Any]], status: str) -> List[Dict[str, Any]]:
+        """Filter models by status"""
+        return [model for model in models if model.get('status') == status]
+
+    ############### FAMILY QUERY ############### 
     def create_family(self, family_data: Dict[str, Any]) -> bool:
         
         """Create a new family and automatically create its centroid"""
@@ -385,6 +382,7 @@ class Neo4jService:
             logger.error(f"Failed to create centroid node for family {family_id}: {e}")
             return False
     
+    # funzione potenzialmente utile per la gestione dei centroidi
     def create_or_update_family_centroid(self, family_id: str, centroid_embedding: Optional[List[float]] = None) -> bool:
         """Create or update a FamilyCentroid node with actual centroid data"""
         if not self.driver:
@@ -453,7 +451,7 @@ class Neo4jService:
             return result[0]['family']
         return None
 
-    def get_family_models(self, family_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_family_models(self, family_id: str, status: Optional[str] = None) -> List[Model]:
         """Get all models in a specific family (new version)
         
         Args:
@@ -482,11 +480,10 @@ class Neo4jService:
 
                 models = []
                 for record in result:
-                    model_props = dict(record['n'])
-                    models.append(model_props)
+                    model = Model(**record['n'])
+                    models.append(model)
 
                 return models
-
         except Exception as e:
             logHandler.error_handler(f"Failed to get models for family {family_id}: {e}", "get_family_models_new")
             return []
@@ -589,6 +586,7 @@ class Neo4jService:
             logger.error(f"Failed to create IS_CHILD_OF relationship: {e}")
             return False
     
+    # riusabile per box view
     def get_full_graph(self) -> Dict[str, Any]:
         """Get complete graph data for visualization"""
         if not self.driver:
@@ -745,7 +743,6 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to get family subgraph: {e}")
             return {'nodes': [], 'edges': [], 'error': str(e)}
-
 
 # Global instance
 neo4j_service = Neo4jService()
