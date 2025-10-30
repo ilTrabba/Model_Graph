@@ -103,6 +103,8 @@ class ModelManagementSystem:
             
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
             
+            
+
             # Update all model relationships based on the complete tree
             parent_id = None
             parent_confidence = 0.0
@@ -111,6 +113,8 @@ class ModelManagementSystem:
             
             if num_nodes > 0:
                 
+                neo4j_service.delete_family_relationships(family_id)
+
                 # Update relationships for all models in the family based on tree structure
                 for family_model in all_family_models:
                     predecessors = list(family_tree.predecessors(family_model.id))

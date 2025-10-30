@@ -382,6 +382,23 @@ class Neo4jService:
             logger.error(f"Failed to create centroid node for family {family_id}: {e}")
             return False
     
+    def delete_family_relationships(self, family_id: str) -> bool:
+        """Delete all IS_CHILD_OF relationships for models in a family (batch operation)"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model {family_id: $family_id})-[r:IS_CHILD_OF]->()
+                DELETE r
+                """
+                session.run(query, {'family_id': family_id})
+                return True
+        except Exception as e:
+            logHandler.error_handler(f"Failed to delete family relationships: {e}", "delete_family_relationships")
+            return False
+
     # funzione potenzialmente utile per la gestione dei centroidi
     def create_or_update_family_centroid(self, family_id: str, centroid_embedding: Optional[List[float]] = None) -> bool:
         """Create or update a FamilyCentroid node with actual centroid data"""
