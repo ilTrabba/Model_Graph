@@ -61,16 +61,25 @@ def list_models():
 
 @models_bp.route('/models/<model_id>', methods=['GET'])
 def get_model(model_id):
-    """Get specific model with lineage"""
-    model_data = neo4j_service.get_model_by_id(model_id)
-    if not model_data:
-        return jsonify({'error': 'Model not found'}), 404
-    
-    # Get lineage
-    lineage = neo4j_service.get_model_lineage(model_id)
-    model_data['lineage'] = lineage
-    
-    return jsonify(model_data)
+    """Get model details by ID"""
+    try:
+        model = neo4j_service.get_model_by_id(model_id)
+        
+        if not model:
+            return jsonify({'error': 'Model not found'}), 404
+        
+        # Convert Model object to dictionary
+        model_data = model.to_dict()
+        
+        # Get lineage information
+        lineage = neo4j_service.get_model_lineage(model_id)
+        model_data['lineage'] = lineage
+        
+        return jsonify(model_data)
+        
+    except Exception as e:
+        logHandler.error_handler(e, "get_model_by_id")
+        return jsonify({'error': 'Failed to retrieve model', 'details': str(e)}), 500
 
 @models_bp.route('/models', methods=['POST'])
 def upload_model():
@@ -143,8 +152,8 @@ def upload_model():
             neo4j_service.create_belongs_to_relationship(model_id, family_id)
         
         # Get final model data for response
-        final_model_data = neo4j_service.get_model_by_id(model_id)
-        
+        final_model_data = neo4j_service.get_model_by_id(model_id).to_dict()
+
         return jsonify({
             'model_id': model_id,
             'status': 'ok',

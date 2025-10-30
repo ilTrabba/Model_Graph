@@ -103,63 +103,39 @@ class ModelManagementSystem:
             
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
             
-            
-
             # Update all model relationships based on the complete tree
             parent_id = None
             parent_confidence = 0.0
-
             num_nodes = family_tree.number_of_nodes()
-            
-            if num_nodes > 0:
-                
-                neo4j_service.delete_family_relationships(family_id)
 
-                # Update relationships for all models in the family based on tree structure
-                for family_model in all_family_models:
-                    predecessors = list(family_tree.predecessors(family_model.id))
-                    
-                    if predecessors:
-                        # Model has a parent
-                        new_parent_id = predecessors[0]
-                        new_confidence = tree_confidence.get(family_model.id, 0.0)
-                        
-                        neo4j_service.update_model(family_model.id, {
-                            'parent_id': new_parent_id,
-                            'confidence_score': new_confidence
-                        })
-                        
-                        # If this is our newly added model, store its parent info for response
-                        if family_model.id == model_proxy.id:
-                            parent_id = new_parent_id
-                            parent_confidence = new_confidence
-                            
-                        logger.debug(f"Updated parent for {family_model.id}: {new_parent_id} (confidence: {new_confidence:.3f})")
-                    else:
-                        # Model is a root
-                        neo4j_service.update_model(family_model.id, {
-                            'parent_id': None,
-                            'confidence_score': 0.0
-                        })
-                        
-                        # If this is our newly added model, store its root status for response
-                        if family_model.id == model_proxy.id:
-                            parent_id = None
-                            parent_confidence = 0.0
-                            
-                        logger.debug(f"Set {family_model.id} as root model")
+            if num_nodes > 0:
+                # 🚀 ULTRA-OPTIMIZED: Single atomic query for tree rebuild
+                start_time = datetime.now(timezone.utc) 
+                success = neo4j_service.rebuild_family_tree_ultra(
+                    family_id, 
+                    family_tree, 
+                    tree_confidence
+                )
+                elapsed_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
                 
-                logger.info(f"Updated tree relationships for family {family_id} with {family_tree.number_of_nodes()} nodes")
-            else:   #num_nodes == 1
+                if not success:
+                    logger.error(f"Failed to rebuild tree for family {family_id}")
+                
+                # Extract parent info for the new model (for response only, no DB queries)
+                if family_tree.in_degree(model_proxy.id) > 0:
+                    predecessors = list(family_tree.predecessors(model_proxy.id))
+                    parent_id = predecessors[0]
+                    parent_confidence = tree_confidence.get(model_proxy.id, 0.0)
+                    logger.info(f"✅ Model {model_proxy.id} has parent {parent_id} (confidence: {parent_confidence:.3f})")
+                else:
+                    logger.info(f"✅ Model {model_proxy.id} is a root node")
+                
+                logger.info(f"⚡ Rebuilt family {family_id} tree with {family_tree.number_of_edges()} edges "
+                            f"in {elapsed_ms:.2f}ms using ONE atomic query")
+            else:
                 logger.info(f"=== TREE BUILDING FOR FAMILY {family_id}, WITH ONLY ONE MODEL ===")
-                
-                neo4j_service.update_model(model_proxy.id, {
-                    'parent_id': None,
-                    'confidence_score': 0.0
-                })
                 logger.info(f"✅ Model {model_proxy.id} assigned as root in family {family_id}")
             
-
             # Step 3: Update family statistics
             self.family_clustering.update_family_statistics(family_id)
             

@@ -1,6 +1,7 @@
 #General
 pnpm-lock.yaml
 package.json
+ModelHeritageEnv
 
 # Frontend
 model_heritage_frontend/pnpm-lock.yaml

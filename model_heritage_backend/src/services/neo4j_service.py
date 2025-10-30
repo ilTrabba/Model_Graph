@@ -162,16 +162,12 @@ class Neo4jService:
                 SET {', '.join(set_clauses)}
                 RETURN m
                 """
-
-                if "parent_id" in updates:
-                    parent_id = updates["parent_id"]
-                    neo4j_service.create_parent_child_relationship(parent_id, model_id, 0.7)
-
+                
                 result = session.run(query, params)
                 return result.single() is not None
                 
         except Exception as e:
-            logHandler.error_handler(e, "update_model", f"Failed to update model {model_id}: {e}")
+            logHandler.error_handler(e, "update_model", f"Failed to update model {model_id}: {e}", "update_model")
             return False
     
     def get_all_models(self, search: str = None) -> List[Dict[str, Any]]:
@@ -208,7 +204,7 @@ class Neo4jService:
             logger.error(f"Failed to get all models: {e}")
             return []
     
-    def get_model_by_id(self, model_id: str) -> Optional[Dict[str, Any]]:
+    def get_model_by_id(self, model_id: str) -> Optional[Model]:
         """Get a single model by ID"""
         if not self.driver:
             return None
@@ -223,11 +219,11 @@ class Neo4jService:
                 record = result.single()
                 
                 if record:
-                    return dict(record['m'])
+                    return Model(**record['m'])
                 return None
                 
         except Exception as e:
-            logger.error(f"Failed to get model {model_id}: {e}")
+            logHandler.error_handler(f"Failed to get model {model_id}: {e}", "get_model_by_id")
             return None
     
     def get_model_by_checksum(self, checksum: str) -> Optional[Dict[str, Any]]:
@@ -399,6 +395,86 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to delete family relationships: {e}", "delete_family_relationships")
             return False
 
+    def rebuild_family_tree_ultra(self, family_id: str, family_tree, tree_confidence: Dict[str, float]) -> bool:
+        """
+        Ultra-optimized single-query tree rebuild for maximum performance.
+        
+        Performance: O(1) - constant time regardless of tree size
+        Uses one atomic Cypher query to delete all old relationships and create all new ones.
+        
+        Args:
+            family_id: Family identifier
+            family_tree: NetworkX DiGraph representing the family tree structure
+            tree_confidence: Dictionary mapping child_id -> confidence score
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.driver:
+            return False
+        
+        # Handle edge case: no edges (only root nodes)
+        if family_tree.number_of_edges() == 0:
+            try:
+                with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                    query = """
+                    MATCH (m:Model {family_id: $family_id})-[r:IS_CHILD_OF]->()
+                    DELETE r
+                    """
+                    session.run(query, {'family_id': family_id})
+                    return True
+            except Exception as e:
+                logHandler.error_handler(f"Failed to clear relationships: {e}", "rebuild_family_tree_ultra")
+                return False
+        
+        # Extract edges from NetworkX DiGraph
+        edges_data = [
+            {
+                'child': parent_id,
+                'parent': child_id,
+                'confidence': tree_confidence.get(parent_id, 0.0)
+            }
+            for child_id, parent_id in family_tree.edges()
+        ]
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                # Single atomic query for maximum efficiency
+                query = """
+                // Step 1: Delete all existing IS_CHILD_OF relationships for this family
+                MATCH (m:Model {family_id: $family_id})-[r:IS_CHILD_OF]->()
+                DELETE r
+                
+                WITH count(r) as deleted_count
+                
+                // Step 2: Create all new relationships in one operation
+                UNWIND $edges AS edge
+                MATCH (child:Model {id: edge.child, family_id: $family_id})
+                MATCH (parent:Model {id: edge.parent, family_id: $family_id})
+                CREATE (child)-[:IS_CHILD_OF {
+                    confidence: edge.confidence,
+                    updated_at: datetime()
+                }]->(parent)
+                
+                RETURN deleted_count, count(*) as created_count
+                """
+                
+                result = session.run(query, {
+                    'family_id': family_id,
+                    'edges': edges_data
+                })
+                
+                record = result.single()
+                if record:
+                    logger.info(f"✅ Family {family_id}: {record['deleted_count']} relationships deleted, "
+                            f"{record['created_count']} relationships created in ONE atomic query")
+                
+                return True
+                
+        except Exception as e:
+            logHandler.error_handler(f"Ultra rebuild failed for family {family_id}: {e}", "rebuild_family_tree_ultra")
+            return False
+    
     # funzione potenzialmente utile per la gestione dei centroidi
     def create_or_update_family_centroid(self, family_id: str, centroid_embedding: Optional[List[float]] = None) -> bool:
         """Create or update a FamilyCentroid node with actual centroid data"""
@@ -459,14 +535,25 @@ class Neo4jService:
     
     def get_family_by_id(self, family_id: str) -> Optional[Dict]:
         """Get a single family from Neo4j by its ID."""
-        query = f"""
-        MATCH (f:Family {{id: $family_id}})
-        RETURN f AS family
-        """
-        result = self.execute_query(query, family_id=family_id)
-        if result:
-            return result[0]['family']
-        return None
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (f:Family {id: $family_id})
+                RETURN f
+                """
+                result = session.run(query, {'family_id': family_id})
+                record = result.single()
+                
+                if record:
+                    return dict(record['f'])
+                return None
+                
+        except Exception as e:
+            logHandler.error(f"Failed to get family {family_id}: {e}", "get_family_by_id")
+            return None
 
     def get_family_models(self, family_id: str, status: Optional[str] = None) -> List[Model]:
         """Get all models in a specific family (new version)
