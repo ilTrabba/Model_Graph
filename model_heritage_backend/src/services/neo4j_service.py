@@ -430,11 +430,11 @@ class Neo4jService:
         # Extract edges from NetworkX DiGraph
         edges_data = [
             {
-                'child': parent_id,
-                'parent': child_id,
+                'parent': parent_id,
+                'child': child_id,
                 'confidence': tree_confidence.get(parent_id, 0.0)
             }
-            for child_id, parent_id in family_tree.edges()
+            for parent_id, child_id in family_tree.edges()
         ]
         
         try:
