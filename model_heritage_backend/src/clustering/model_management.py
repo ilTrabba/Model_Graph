@@ -111,7 +111,7 @@ class ModelManagementSystem:
             if num_nodes > 0:
                 # 🚀 ULTRA-OPTIMIZED: Single atomic query for tree rebuild
                 start_time = datetime.now(timezone.utc) 
-                success = neo4j_service.rebuild_family_tree_ultra(
+                success = neo4j_service.atomic_rebuild_genealogy(
                     family_id, 
                     family_tree, 
                     tree_confidence

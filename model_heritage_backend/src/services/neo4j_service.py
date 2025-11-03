@@ -170,7 +170,7 @@ class Neo4jService:
             logHandler.error_handler(e, "update_model", f"Failed to update model {model_id}: {e}", "update_model")
             return False
     
-    def get_all_models(self, search: str = None) -> List[Dict[str, Any]]:
+    def get_all_models(self, search: str = None) -> List[Model]:
         """Get all models with optional search"""
         if not self.driver:
             return []
@@ -195,13 +195,12 @@ class Neo4jService:
                 
                 models = []
                 for record in result:
-                    model_props = dict(record['m'])
-                    models.append(model_props)
+                    models.append(Model(**record['m']))
                 
                 return models
                 
         except Exception as e:
-            logger.error(f"Failed to get all models: {e}")
+            logHandler.error_handler(e, "get_all_models")
             return []
     
     def get_model_by_id(self, model_id: str) -> Optional[Model]:
@@ -282,6 +281,7 @@ class Neo4jService:
             logger.error(f"Failed to get lineage for model {model_id}: {e}")
             return {'parent': None, 'children': []}
 
+    # tornare una lista di modelli (da cambiare)
     def filtered_models(self, models: List[Dict[str, Any]], status: str) -> List[Dict[str, Any]]:
         """Filter models by status"""
         return [model for model in models if model.get('status') == status]
@@ -395,7 +395,7 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to delete family relationships: {e}", "delete_family_relationships")
             return False
 
-    def rebuild_family_tree_ultra(self, family_id: str, family_tree, tree_confidence: Dict[str, float]) -> bool:
+    def atomic_rebuild_genealogy(self, family_id: str, family_tree, tree_confidence: Dict[str, float]) -> bool:
         """
         Ultra-optimized single-query tree rebuild for maximum performance.
         

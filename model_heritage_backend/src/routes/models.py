@@ -48,16 +48,24 @@ def extract_weight_signature_stub(file_path):
 
 @models_bp.route('/models', methods=['GET'])
 def list_models():
-    """List all models with optional search"""
-    search = request.args.get('search', '').strip()
-    
-    models_data = neo4j_service.get_all_models(search=search or None)
-    models_data.sort(key=lambda m: (m.get('name') or '').lower())
-    
-    return jsonify({
-        'models': models_data,
-        'total': len(models_data)
-    })
+    try:
+        """List all models with optional search"""
+        search = request.args.get('search', '').strip()
+        
+        models_data = neo4j_service.get_all_models(search=search or None)
+        models_data = sorted(models_data, key=lambda m: m.name.lower())
+
+        models = []
+        for m in models_data:
+            models.append(m.to_dict())
+        
+        return jsonify({
+            'models': models,
+            'total': len(models)
+        })
+    except Exception as e:
+        logHandler.error_handler(e, "list_models")
+        return jsonify({'error': 'Failed to retrieve models', 'details': str(e)}), 500
 
 @models_bp.route('/models/<model_id>', methods=['GET'])
 def get_model(model_id):
