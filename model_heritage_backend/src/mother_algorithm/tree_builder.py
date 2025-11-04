@@ -10,6 +10,7 @@ import numpy as np
 import networkx as nx
 
 from typing import Dict, List, Optional, Tuple, Any
+from numpy.typing import NDArray
 from enum import Enum
 from src.services.neo4j_service import neo4j_service
 from src.log_handler import logHandler
@@ -48,6 +49,7 @@ class MoTHerTreeBuilder:
     def __init__(self,
                  lambda_param: float = 0.3, # parametro c, non lambda, da rinominare ovunque
                  method: TreeBuildingMethod = TreeBuildingMethod.MOTHER,
+                 distance_matrix: NDArray[np.float64] = None,
                  distance_calculator: ModelDistanceCalculator = ModelDistanceCalculator()):
         """
         Initialize the tree builder.
@@ -59,6 +61,7 @@ class MoTHerTreeBuilder:
         """
         self.lambda_param = lambda_param
         self.method = method
+        self.distance_matrix = distance_matrix
         self.distance_calculator = distance_calculator
 
         logger.info(f"Initialized MoTHerTreeBuilder with method: {method}, lambda: {lambda_param}")
@@ -173,6 +176,8 @@ class MoTHerTreeBuilder:
 
                     else:
                         distance_matrix[i, j] = 0
+            
+            self.distance_matrix = distance_matrix
                         
             # Apply MoTHer algorithm using existing implementation
             tree, confidence_scores = self.build_tree(

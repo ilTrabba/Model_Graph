@@ -13,6 +13,7 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
+from numpy.typing import NDArray
 from typing import Union
 from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
@@ -23,7 +24,6 @@ from safetensors import safe_open
 from ..db_entities.entity import Model, Family
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -226,23 +226,28 @@ class FamilyClusteringSystem:
             if not candidate_families_data:
                 # No candidate families, create a new one with the model weights for the centroid
                 family_id = self.create_new_family(model, model_weights)
-                return family_id, 1.0
+                confidence = 1.0
             
-            candidate_families = [Family(**data) for data in candidate_families_data]
-            
-            # Calculate distances to family centroids
-            best_family_id, confidence = self.find_best_family_match(
-                model_weights, candidate_families
-            )
-            
-            if confidence >= 0.2:
-                # Assign to existing family
-                self.add_model_to_family(model, best_family_id)
-                return best_family_id, confidence
             else:
-                # Create new family with the model weights
-                family_id = self.create_new_family(model, model_weights)
-                return family_id, 1.0
+            
+                candidate_families = [Family(**data) for data in candidate_families_data]
+                
+                # Calculate distances to family centroids
+                best_family_id, confidence = self.find_best_family_match(
+                    model_weights, candidate_families
+                )
+                
+                if confidence >= 0.2:
+                    family_id = best_family_id
+                else:
+                    # Create new family with the model weights
+                    family_id = self.create_new_family(model, model_weights)
+                    confidence = 1.0
+            
+            # Update model with family assignment
+            neo4j_service.update_model(model.id, {'family_id': family_id})
+
+            return family_id,confidence
                 
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
@@ -304,7 +309,7 @@ class FamilyClusteringSystem:
             logger.error(f"Error calculating family centroid for {family_id}: {e}")
             return None
     
-    def update_family_statistics(self, family_id: str) -> bool:
+    def update_family_statistics(self, family_id: str, distance_matrix: NDArray[np.float64], num_edges: int) -> bool:
         """
         Update family statistics including member count and average intra-distance.
         
@@ -315,27 +320,21 @@ class FamilyClusteringSystem:
             True if successfully updated, False otherwise
         """
         try:
-            family = neo4j_service.get_family_by_id(family_id)
-            if not family:
-                return False
-            
-            # Get family models
-            family_models = neo4j_service.get_family_models(
-                family_id=family_id,
-                status='ok')
-            
-            # Update member count
-            member_count = len(family_models)
-            
+            # Somma solo la metà superiore (senza diagonale)
+            total_distance = np.sum(np.triu(distance_matrix, k=1))
+
             # Calculate average intra-family distance
-            if len(family_models) >= 2:
-                avg_distance = self._calculate_intra_family_distance(family_models)
+            if num_edges >= 1:
+                #avg_distance = self.distance_calculator.calculate_intra_family_distance(family_models)
+                avg_distance = total_distance / num_edges
             else:
                 avg_distance = 0.0
+
+            num_nodes = distance_matrix.shape[0]
             
             # Update family in Neo4j
             updates = {
-                'member_count': member_count,
+                'member_count': num_nodes,
                 'avg_intra_distance': avg_distance,
                 'updated_at': datetime.now(timezone.utc)
             }
@@ -345,17 +344,17 @@ class FamilyClusteringSystem:
             })
             
             # Trigger centroid recalculation for incremental updates
-            if len(family_models) >= 1:
+            if num_nodes >= 1:
                 try:
                     self.calculate_family_centroid(family_id)
                 except Exception as centroid_error:
                     logger.warning(f"Failed to update centroid for family {family_id}: {centroid_error}")
             
-            logger.info(f"Updated statistics for family {family_id}: {member_count} members, avg_distance: {avg_distance:.4f}")
+            logger.info(f"Updated statistics for family {family_id}: {num_nodes} members, avg_distance: {avg_distance:.4f}")
             return True
             
         except Exception as e:
-            logger.error(f"Error updating family statistics for {family_id}: {e}")
+            logHandler.error_handler(f"Error updating family statistics for {family_id}: {e}", "update_family_statistics")
             return False
     
     def find_candidate_families(self, model: Model) -> List[Family]:
@@ -500,18 +499,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "create_new_family", "Generic error creating new family")
     
-    def add_model_to_family(self, model: Model, family_id: str):
-        """
-        Add a model to an existing family and update statistics.
-        """
-        try:
-            # Update family statistics
-            self.update_family_statistics(family_id)
-            logger.info(f"Added model {model.id} to family {family_id}")
-            
-        except Exception as e:
-            logHandler.error_handler(e, "add_model_to_family", f"Error adding model {model.id} to family {family_id}")
-    
+   
     def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.

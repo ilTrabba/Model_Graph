@@ -274,7 +274,7 @@ class ModelDistanceCalculator:
             return np.mean(distances) if distances else 0.0
             
         except Exception as e:
-            logger.error(f"Error calculating intra-family distance: {e}")
+            logHandler.error_handler(f"Error calculating intra-family distance: {e}", "calculate_intra_family_distance")
             return 0.0
 
 ################################################################################

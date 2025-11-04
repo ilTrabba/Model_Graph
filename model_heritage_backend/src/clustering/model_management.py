@@ -57,7 +57,8 @@ class ModelManagementSystem:
         self.tree_builder = MoTHerTreeBuilder(
             #distance_calculator=self.distance_calculator,
             lambda_param=lambda_param,
-            method=tree_method
+            method=tree_method,
+            distance_matrix = None
         )
         
         logger.info("Initialized ModelManagementSystem with components")
@@ -87,9 +88,6 @@ class ModelManagementSystem:
             # Step 1: Assign to family
             family_id, family_confidence = self.family_clustering.assign_model_to_family(model_proxy)
             
-            # Update model with family assignment
-            neo4j_service.update_model(model_proxy.id, {'family_id': family_id})
-            
             logger.info(f"✅ Assigned model {model_proxy.id} to family {family_id} with confidence {family_confidence:.3f}")
             
             # Step 2: Build complete family tree and update all relationships
@@ -102,6 +100,9 @@ class ModelManagementSystem:
             all_family_models = existing_family_models + [model_proxy]
             
             family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
+
+            # number of edges in the family tree
+            num_edges = len(family_tree.edges)
             
             # Update all model relationships based on the complete tree
             parent_id = None
@@ -137,7 +138,7 @@ class ModelManagementSystem:
                 logger.info(f"✅ Model {model_proxy.id} assigned as root in family {family_id}")
             
             # Step 3: Update family statistics
-            self.family_clustering.update_family_statistics(family_id)
+            self.family_clustering.update_family_statistics(family_id, self.tree_builder.distance_matrix, num_edges)
             
             # Step 4: Mark as processed
             neo4j_service.update_model(model_proxy.id, {
