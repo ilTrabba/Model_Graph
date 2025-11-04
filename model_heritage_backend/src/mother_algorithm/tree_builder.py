@@ -23,7 +23,8 @@ from src.mother_algorithm.mother_utils import (
     compute_lambda,
     fallback_directed_mst,
     calculate_confidence_scores,
-    normalize_parent_child_orientation
+    normalize_parent_child_orientation,
+    update_family_statistics
 )
 
 logger = logging.getLogger(__name__)
@@ -120,7 +121,7 @@ class MoTHerTreeBuilder:
             
             # Build tree using selected method
             if self.method == TreeBuildingMethod.MOTHER:
-                tree, confidence_scores = self.build_mother_tree(valid_models, model_weights)
+                tree, confidence_scores = self.build_mother_tree(family_id, valid_models, model_weights)
             elif self.method == TreeBuildingMethod.DISTANCE_ONLY:
                 tree, confidence_scores = self.build_distance_tree(valid_models, model_weights)
             elif self.method == TreeBuildingMethod.KURTOSIS_ONLY:
@@ -131,7 +132,6 @@ class MoTHerTreeBuilder:
             # Convert node indices to model IDs
             tree_with_ids = self.convert_tree_to_model_ids(tree, valid_models)
             confidence_with_ids = self.convert_confidence_to_model_ids(confidence_scores, valid_models)
-
             # Normalize orientation to parent -> child for end-to-end consistency
             tree_with_ids = normalize_parent_child_orientation(tree_with_ids)
         
@@ -139,9 +139,10 @@ class MoTHerTreeBuilder:
             
         except Exception as e:
             logHandler.error_handler(f"Error building family tree for {family_id}: {e}", "build_family_tree")
-            return nx.DiGraph(), {}
+            return nx.DiGraph(), [], {}
     
     def build_mother_tree(self, 
+                          family_id: str,
                           models: List[Model], 
                           model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
@@ -187,6 +188,10 @@ class MoTHerTreeBuilder:
             )
             
             logger.info(f"✅ MoTHer tree built with {tree.number_of_nodes()} nodes")
+
+            # Update statistics
+            update_family_statistics(family_id, distance_matrix, tree.edges())
+
             return tree, confidence_scores
             
         except Exception as e:

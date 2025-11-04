@@ -13,7 +13,6 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
-from numpy.typing import NDArray
 from typing import Union
 from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
@@ -306,56 +305,8 @@ class FamilyClusteringSystem:
             return centroid
             
         except Exception as e:
-            logger.error(f"Error calculating family centroid for {family_id}: {e}")
+            logHandler.error_handler(f"Error calculating family centroid for {family_id}: {e}", "calculate_family_centroid")
             return None
-    
-    def update_family_statistics(self, family_id: str, distance_matrix: NDArray[np.float64], num_edges: int) -> bool:
-        """
-        Update family statistics including member count and average intra-distance.
-        
-        Args:
-            family_id: ID of the family to update
-            
-        Returns:
-            True if successfully updated, False otherwise
-        """
-        try:
-            # Somma solo la metà superiore (senza diagonale)
-            total_distance = np.sum(np.triu(distance_matrix, k=1))
-
-            # Calculate average intra-family distance
-            if num_edges >= 1:
-                #avg_distance = self.distance_calculator.calculate_intra_family_distance(family_models)
-                avg_distance = total_distance / num_edges
-            else:
-                avg_distance = 0.0
-
-            num_nodes = distance_matrix.shape[0]
-            
-            # Update family in Neo4j
-            updates = {
-                'member_count': num_nodes,
-                'avg_intra_distance': avg_distance,
-                'updated_at': datetime.now(timezone.utc)
-            }
-            neo4j_service.create_or_update_family({
-                'id': family_id,
-                **updates
-            })
-            
-            # Trigger centroid recalculation for incremental updates
-            if num_nodes >= 1:
-                try:
-                    self.calculate_family_centroid(family_id)
-                except Exception as centroid_error:
-                    logger.warning(f"Failed to update centroid for family {family_id}: {centroid_error}")
-            
-            logger.info(f"Updated statistics for family {family_id}: {num_nodes} members, avg_distance: {avg_distance:.4f}")
-            return True
-            
-        except Exception as e:
-            logHandler.error_handler(f"Error updating family statistics for {family_id}: {e}", "update_family_statistics")
-            return False
     
     def find_candidate_families(self, model: Model) -> List[Family]:
         """

@@ -98,11 +98,8 @@ class ModelManagementSystem:
             
             # Include the new model in the tree building process
             all_family_models = existing_family_models + [model_proxy]
-            
-            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
 
-            # number of edges in the family tree
-            num_edges = len(family_tree.edges)
+            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
             
             # Update all model relationships based on the complete tree
             parent_id = None
@@ -137,9 +134,12 @@ class ModelManagementSystem:
                 logger.info(f"=== TREE BUILDING FOR FAMILY {family_id}, WITH ONLY ONE MODEL ===")
                 logger.info(f"✅ Model {model_proxy.id} assigned as root in family {family_id}")
             
-            # Step 3: Update family statistics
-            self.family_clustering.update_family_statistics(family_id, self.tree_builder.distance_matrix, num_edges)
-            
+            # Step 3: Update cantroid statistics
+            if num_nodes > 1:
+                self.family_clustering.calculate_family_centroid(
+                    family_id, 
+                )
+
             # Step 4: Mark as processed
             neo4j_service.update_model(model_proxy.id, {
                 'status': 'ok',

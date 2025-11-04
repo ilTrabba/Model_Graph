@@ -3,15 +3,18 @@ MoTHer Algorithm Utilities
 Based on the paper "Unsupervised Model Tree Heritage Recovery" (ICLR 2025)
 """
 
+from datetime import datetime, timezone
 import logging
 import numpy as np
 import torch
 import safetensors
 import networkx as nx
 
+from numpy.typing import NDArray
 from scipy import stats
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from src.log_handler import logHandler
+from src.services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +148,36 @@ def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     mean_distance = np.sum(distance_matrix) / (n * n)
     lam = c * mean_distance
     return lam
+
+def update_family_statistics(family_id: str, distance_matrix: NDArray[np.float64], edge_list: List[Tuple[int, int]]) -> None:
+    """
+    Update family statistics based on the current distance matrix and selected edges.
+    """
+    try:
+        
+        total_distance = 0.0
+        num_nodes = distance_matrix.shape[0]
+
+        for i, j in edge_list:
+            total_distance += distance_matrix[i, j]
+
+        avg_distance = total_distance / (num_nodes - 1) if num_nodes > 1 else 0.0
+
+        # Update family in Neo4j
+        updates = {
+            'member_count': num_nodes,
+            'avg_intra_distance': avg_distance,
+            'updated_at': datetime.now(timezone.utc)
+        }
+        neo4j_service.create_or_update_family({
+            'id': family_id,
+            **updates
+        })
+
+        logger.info(f"Updated statistics for family {family_id}: {num_nodes} members, avg_distance: {avg_distance:.4f}")
+
+    except Exception as e:
+        logHandler.error_handler(f"Error updating distance matrix: {e}", "distance_matrix_updates")
 
 #################################################################################
 
