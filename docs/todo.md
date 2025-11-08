@@ -1,20 +1,20 @@
 OPERAZIONI PRELIMINARI DA FARE:
 
-   1.	Tradurre in inglese sia la presentazione pp che la relazione progettuale di Big Data, inviare tutto a Torlone
-   2.	Effettuare una pulizia completa del codice e comprendere il funzionamento generale (cicli ripetuti, ruolo di funzioni chiave, ecc...)
+   1.	✅ Tradurre in inglese sia la presentazione pp che la relazione progettuale di Big Data, inviare tutto a Torlone 
+   2.	✅ Effettuare una pulizia iniziale e completa del codice e comprendere il funzionamento generale (cicli ripetuti, ruolo di funzioni chiave, ecc...)
    3.	Aggiustamento del codice:
-      a.	Integrare un bottone di eliminazione file sulla form di inserimento dei modelli
-      b.	Risolvere l’errore legato alle relazioni errate rimanenti che persistono nel tempo (ricordare l’esempio dei 2 fratelli)
-      c.	Usare effettivamente il nodo family per le query
-      d.	Integrare l’aggiornamento del centroide
-      e.	Capire effettivamente quali layer sono utili alla causa (config serve?)
+      a.	✅ Integrare un bottone di eliminazione file sulla form di inserimento dei modelli
+      b.	✅ Risolvere l’errore legato alle relazioni errate rimanenti che persistono nel tempo (ricordare i 2 fratelli)
+      c.	✅ (Gabri) Usare effettivamente il nodo family per le query
+      d.	(Gabri) Integrare l’aggiornamento del centroide
+      e.	(Gabri) Capire effettivamente quali layer sono utili alla causa (config serve?)
       f.	Migrazione cloud per l’archiviazione dei parametri dei modelli (con annesse modifiche o adattamenti al codice)
-   4.	Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
+   4.	✅ (Gabri) Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
 
 NUOVI OBIETTIVI PROGETTUALI:
 
    1.	Eliminazione di un modello dal sistema (unica parziale soluzione a possibili errori di associazione tra modelli)
-   2.	Aggiungere dei nuovi campi nella form di inserimento di un modello nel sistema, aumentando così il dettaglio di una model card e allo stesso tempo facilitare potenzialmente il lavoro di un LLM.
+   2.	(Gabri) Aggiungere dei nuovi campi nella form di inserimento di un modello nel sistema, aumentando così il dettaglio di una model card e allo stesso tempo facilitare potenzialmente il lavoro di un LLM.
    3.	Realizzare una vista (box view), accessibile tramite model card singola o creando una sezione dedicata, che mostri la famiglia (ad albero) del relativo modello di interesse.
    4.	Creare un modello in grado di elaborare prompt in NL e interpretarlo come query cypher, utile per cercare modelli o interrogare la knowledge generale accumulata dal sistema. Inizialmente sarà necessario concentrarsi su query semplici e poi successivamente più complesse (facenti uso di tag dedicati)
    5.	Valutare l’utilizzo dell’ordinamento sorvolando problematiche legate all’uso parziale di metadati, quali i nomi dei layer, per il calcolo della distanza tra 2 modelli.

@@ -226,7 +226,6 @@ class FamilyClusteringSystem:
                 # No candidate families, create a new one with the model weights for the centroid
                 family_id = self.create_new_family(model, model_weights)
                 confidence = 1.0
-            
             else:
             
                 candidate_families = [Family(**data) for data in candidate_families_data]
@@ -246,8 +245,7 @@ class FamilyClusteringSystem:
             # Update model with family assignment
             neo4j_service.update_model(model.id, {'family_id': family_id})
 
-            return family_id,confidence
-                
+            return family_id, confidence
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
     
@@ -450,7 +448,6 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "create_new_family", "Generic error creating new family")
     
-   
     def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.
