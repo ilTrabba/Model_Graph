@@ -137,7 +137,8 @@ class ModelManagementSystem:
             # Step 3: Update cantroid statistics
             if num_nodes > 1:
                 self.family_clustering.calculate_family_centroid(
-                    family_id, 
+                    family_id,
+                    all_family_models
                 )
 
             # Step 4: Mark as processed

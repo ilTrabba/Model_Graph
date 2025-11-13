@@ -533,6 +533,31 @@ class Neo4jService:
             logger.error(f"Failed to get all families: {e}")
             return []
     
+    def get_all_centroids(self) -> List[Dict[str, Any]]:
+        """Get all centroids"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (c:Centroid)
+                RETURN c
+                ORDER BY c.created_at DESC
+                """
+                result = session.run(query)
+                
+                centroids = []
+                for record in result:
+                    centroid_props = dict(record['c'])
+                    centroids.append(centroid_props)
+                
+                return centroids
+                
+        except Exception as e:
+            logger.error(f"Failed to get all centroids: {e}")
+            return []
+    
     def get_family_by_id(self, family_id: str) -> Optional[Dict]:
         """Get a single family from Neo4j by its ID."""
         if not self.driver:

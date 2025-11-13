@@ -9,6 +9,7 @@ import logging
 import numpy as np
 import torch
 import uuid
+import re
 import safetensors.torch
 import os
 
@@ -23,6 +24,7 @@ from safetensors import safe_open
 from ..db_entities.entity import Model, Family
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
+
 
 logger = logging.getLogger(__name__)
 
@@ -219,11 +221,16 @@ class FamilyClusteringSystem:
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
             
+            # Recupero dei centroidi esistenti
+            # Se non ci sono centroidi candidati, creo una nuova famiglia con un nuovo centroide
+            # se ci sono centroidi candidati, calcolo la distanza e verifico se è sotto la soglia
+
             # Get all existing models with the same structural pattern
+            candidate_centroids = neo4j_service.get_all_centroids()
             candidate_families_data = self.find_candidate_families(model)
 
+            # If there aren't candidate families create a new one with the model weights for the centroid
             if not candidate_families_data:
-                # No candidate families, create a new one with the model weights for the centroid
                 family_id = self.create_new_family(model, model_weights)
                 confidence = 1.0
             else:
@@ -249,7 +256,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
     
-    def calculate_family_centroid(self, family_id: str) -> Optional[Dict[str, Any]]:
+    def calculate_family_centroid(self, family_id: str, family_models: List[Model]) -> Optional[Dict[str, Any]]:
         """
         Calculate the centroid (average weights) for a family.
         
@@ -261,9 +268,9 @@ class FamilyClusteringSystem:
         """
         try:
             # Get all models in the family
-            family_models = neo4j_service.get_family_models(
-                family_id=family_id, 
-                status='ok')
+            #family_models = neo4j_service.get_family_models(
+            #    family_id=family_id, 
+            #    status='ok')
             
             if not family_models:
                 return None
@@ -407,11 +414,9 @@ class FamilyClusteringSystem:
             }
             neo4j_service.create_family(family_data)
             
-            # Create initial centroid from the first model's weights if provided
             if model_weights:
                 logger.info(f"Creating initial centroid for family {family_id} from model {model.id}")
                 
-                # Use the first model's weights as the initial centroid
                 initial_centroid = {}
                 for param_name, tensor in model_weights.items():
                     if isinstance(tensor, torch.Tensor):
@@ -426,7 +431,7 @@ class FamilyClusteringSystem:
                     try:
                         if neo4j_service.is_connected():
                             # Create FamilyCentroid node (for backward compatibility)
-                            embedding = self.centroid_to_embedding(initial_centroid)
+                            # embedding = self.centroid_to_embedding(initial_centroid)
                             #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                             
                             # Update enhanced Centroid node with metadata
@@ -447,7 +452,7 @@ class FamilyClusteringSystem:
             
         except Exception as e:
             logHandler.error_handler(e, "create_new_family", "Generic error creating new family")
-    
+    '''
     def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calculate centroid by averaging model weights.
@@ -481,7 +486,296 @@ class FamilyClusteringSystem:
         except Exception as e:
             logger.error(f"Error calculating weights centroid: {e}")
             return {}
-    
+    '''
+
+    def normalize_safetensors_layers(slef, weights: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalizza i nomi dei layer di un singolo file safetensors.
+
+        Gestisce molteplici architetture Hugging Face (ViT, BERT, GPT, LLaMA, T5, 
+        Whisper, CLIP, Swin, ecc.) per garantire compatibilità cross-framework.
+
+        Operazioni applicate:
+        1. LayerNorm TensorFlow → PyTorch (.beta → .bias, .gamma → .weight)
+        2. Estrazione core strutturale (layer.X, block.X, h.X, etc.)
+        3. Rimozione prefissi di wrapping del modello
+        4. Normalizzazione abbreviazioni comuni
+        5. Pulizia finale
+        
+        Args:
+            weights: Dizionario {layer_name: tensor}
+
+        Returns:
+            Dizionario normalizzato {normalized_layer_name: tensor}
+            
+        Raises:
+            Nessuna eccezione; logga warning per collisioni
+        """
+        if not weights:
+            logger.warning("Input weights vuoto")
+            return {}
+
+        normalized_weights = {}
+
+        # =========================================================================
+        # PATTERN STRUTTURALI (ordinati per priorità/specificità)
+        # =========================================================================
+        structural_patterns = [
+            # Encoder-Decoder specifici (più specifici prima)
+            r'(encoder\.layer\.\d+)',
+            r'(decoder\.layer\.\d+)',
+            r'(encoder\.blocks\.\d+)',
+            r'(decoder\.blocks\.\d+)',
+            r'(encoder_block\.\d+)',
+            r'(decoder_block\.\d+)',
+            
+            # Transformer generici
+            r'(transformer\.h\.\d+)',
+            r'(transformer\.layers\.\d+)',
+            r'(transformer\.blocks\.\d+)',
+            r'(transformer_block\.\d+)',
+            
+            # Layer/Block generici (LLaMA, GPT, Mistral, etc.)
+            r'(model\.layers\.\d+)',
+            r'(model\.decoder\.layers\.\d+)',
+            r'(gpt_neox\.layers\.\d+)',
+            r'(layers\.\d+)',
+            r'(blocks\.\d+)',
+            r'(layer\.\d+)',
+            r'(block\.\d+)',
+            r'(h\.\d+)',
+            
+            # Vision Models (CLIP, ViT, Swin, SAM, etc.)
+            r'(vision_model\.encoder\.layers\.\d+)',
+            r'(visual\.encoder\.blocks\.\d+)',
+            r'(vision_tower\.blocks\.\d+)',
+            r'(backbone\.stages\.\d+)',
+            
+            # Altri pattern
+            r'(modules\.\d+)',
+            r'(block_list\.\d+)',
+        ]
+
+        # =========================================================================
+        # PREFISSI DA RIMUOVERE (ordinati alfabeticamente per manutenibilità)
+        # =========================================================================
+        known_prefixes = [
+            # Generici
+            'backbone.', 'base_model.', 'decoder.', 'discriminator.', 'encoder.',
+            'generator.', 'head.', 'model.', 'proj.', 'student.', 'teacher.', 
+            'transformer.', 'unet.', 'vae.',
+            
+            # Text Models
+            'bart.', 'bert.', 'bloom.', 'deberta.', 'distilbert.', 'falcon.', 
+            'gpt_neox.', 'gptj.', 'llama.', 'marian.', 'mistral.', 'mt5.', 
+            'opt.', 'roberta.', 't5.',
+            
+            # Vision Models
+            'beit.', 'clip.', 'clip_model.', 'clip_vision_model.', 'convnext.', 
+            'dino.', 'dinov2.', 'open_clip.', 'sam.', 'swin.', 'vit.',
+            
+            # Multimodal
+            'clip.', 'image_encoder.', 'speech_encoder_decoder.', 'text_encoder.', 
+            'text_model.', 'vision_model.', 'vision_tower.', 'visual.', 'whisper.',
+        ]
+
+        # =========================================================================
+        # ABBREVIAZIONI DA NORMALIZZARE
+        # =========================================================================
+        abbreviation_map = {
+            '.ln_f.': '.layernorm_final.',
+            '.ln_1.': '.layernorm_before.',
+            '.ln_2.': '.layernorm_after.',
+            '.ln.': '.layernorm.',
+            '.attn.': '.attention.',
+            '.mlp.': '.feedforward.',
+            '.c_attn.': '.attention.combined.',  
+            '.c_proj.': '.attention.projection.',
+            '.c_fc.': '.feedforward.fc.',
+        }
+
+        # =========================================================================
+        # NORMALIZZAZIONE
+        # =========================================================================
+        collision_count = 0
+        
+        for original_name, tensor in weights.items():
+            normalized_name = original_name
+
+            # Step 1: TensorFlow → PyTorch LayerNorm
+            normalized_name = normalized_name.replace('.beta', '.bias')
+            normalized_name = normalized_name.replace('.gamma', '.weight')
+
+            # Step 2: Cerca pattern strutturali (dal più specifico al generico)
+            core_name_found = False
+            for pattern in structural_patterns:
+                match = re.search(pattern, normalized_name)
+                if match:
+                    start_idx = match.start()
+                    normalized_name = normalized_name[start_idx:]
+                    core_name_found = True
+                    break
+
+            # Step 3: Se non trovato pattern, rimuovi prefissi noti
+            if not core_name_found:
+                for prefix in known_prefixes:
+                    if normalized_name.startswith(prefix):
+                        normalized_name = normalized_name[len(prefix):]
+                        break
+
+            # Step 4: Normalizza abbreviazioni comuni
+            for abbrev, expanded in abbreviation_map.items():
+                normalized_name = normalized_name.replace(abbrev, expanded)
+
+            # Step 5: Pulizia finale - rimuovi prefissi residui
+            # (potrebbe esserci dopo Step 2 se pattern non era all'inizio)
+            normalized_name = re.sub(
+                r'^(?:model|base_model|transformer)\.',
+                '',
+                normalized_name
+            )
+
+            # Step 6: Gestisci collisioni
+            if normalized_name in normalized_weights:
+                collision_count += 1
+                logger.warning(
+                    f"Collisione normalizzazione #{collision_count}: "
+                    f"'{original_name}' → '{normalized_name}' (già esistente). "
+                    f"Layer scartato."
+                )
+                continue
+
+            # Step 7: Aggiungi al risultato
+            normalized_weights[normalized_name] = tensor
+
+        # =========================================================================
+        # LOGGING FINALE
+        # =========================================================================
+        original_count = len(weights)
+        normalized_count = len(normalized_weights)
+        
+        if collision_count > 0:
+            logger.warning(
+                f"Normalizzazione completata con {collision_count} collisioni: "
+                f"{original_count} layer originali → {normalized_count} layer normalizzati "
+                f"({original_count - normalized_count} scartati)"
+            )
+        else:
+            logger.info(
+                f"Normalizzazione completata: "
+                f"{original_count} layer originali → {normalized_count} layer normalizzati"
+            )
+
+        return normalized_weights
+
+    def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Calcola il centroide (media) dei pesi di modelli della stessa famiglia.
+        
+        Questa funzione:
+        1. Trova i layer comuni presenti in TUTTI i modelli della famiglia relativa
+        2. Verifica che abbiano shape identico
+        3. Calcola la media elemento per elemento
+        
+        IMPORTANTE: Assume che i dizionari in weights_list siano già stati 
+        normalizzati con normalize_safetensors_layers().
+        
+        Args:
+            weights_list: Lista di dizionari normalizzati [{layer_name: tensor}, ...]
+            
+        Returns:
+            Dizionario centroide {layer_name: averaged_tensor} o {} se nessun layer comune valido
+        """
+        try:
+            # Step 1: Validazione input
+            if not weights_list:
+                logger.warning("Lista pesi vuota, impossibile calcolare centroide")
+                return {}
+            
+            logger.info(f"Calcolo centroide per {len(weights_list)} modelli")
+            
+            normalized_weights = [self.normalize_safetensors_layers(w) for w in weights_list]
+            
+            # Step 2: Trova layer comuni (presenti in TUTTI i modelli)
+            # Crea set di layer names per ogni modello
+            layer_sets = [set(weights.keys()) for weights in normalized_weights]
+            
+            # Intersezione: layer presenti in TUTTI i modelli
+            common_layers = set.intersection(*layer_sets) if layer_sets else set()
+            
+            logger.info(f"Layer comuni trovati: {len(common_layers)}")
+            
+            if not common_layers:
+                logger.warning("Nessun layer comune trovato tra i modelli")
+                return {}
+            
+            # Step 3: Verifica compatibilità shape e calcola media
+            centroid = {}
+            excluded_layers = []
+            
+            for layer_name in common_layers:
+                # Raccogli tutti i tensori per questo layer
+                tensors = []
+                shapes = []
+                
+                for weights in normalized_weights:
+                    tensor = weights[layer_name]
+                    
+                    # Assicurati che sia un tensore PyTorch
+                    if isinstance(tensor, torch.Tensor):
+                        tensors.append(tensor)
+                        shapes.append(tuple(tensor.shape))
+                    else:
+                        logger.warning(
+                            f"Layer '{layer_name}' in uno dei modelli non è un tensore PyTorch, "
+                            f"tipo: {type(tensor)}"
+                        )
+                        excluded_layers.append(layer_name)
+                        break
+                
+                # Se non abbiamo raccolto tensori da tutti i modelli, salta
+                if len(tensors) != len(normalized_weights):
+                    continue
+                
+                # Step 4: Verifica shape identico (strict)
+                first_shape = shapes[0]
+                if not all(shape == first_shape for shape in shapes):
+                    logger.warning(
+                        f"Layer '{layer_name}' escluso: shape incompatibili tra modelli. "
+                        f"Shapes trovati: {set(shapes)}"
+                    )
+                    excluded_layers.append(layer_name)
+                    continue
+                
+                # Step 5: Calcola media
+                # Converti in numpy per calcolo efficiente
+                numpy_tensors = [t.detach().cpu().numpy() for t in tensors]
+                
+                # Media elemento per elemento
+                avg_tensor = np.mean(numpy_tensors, axis=0)
+                
+                # Converti back a torch tensor
+                centroid[layer_name] = torch.from_numpy(avg_tensor)
+            
+            # Step 6: Logging finale
+            logger.info(
+                f"Centroide calcolato con successo: {len(centroid)} layer validi, "
+                f"{len(excluded_layers)} layer esclusi"
+            )
+            
+            if excluded_layers:
+                logger.info(f"Layer esclusi: {excluded_layers[:10]}{'...' if len(excluded_layers) > 10 else ''}")
+            
+            if not centroid:
+                logger.warning("Nessun layer compatibile trovato per il centroide")
+                return {}
+            
+            return centroid
+            
+        except Exception as e:
+            logger.error(f"Errore durante il calcolo del centroide: {e}", exc_info=True)
+            return {}
+
     def update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
         """Update Centroid node metadata with enhanced attributes"""
         try:
