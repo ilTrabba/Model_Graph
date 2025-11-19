@@ -220,19 +220,9 @@ class FamilyClusteringSystem:
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
-            
-            # Recupero dei centroidi esistenti
-            # Se non ci sono centroidi candidati, creo una nuova famiglia con un nuovo centroide
-            # se ci sono centroidi candidati, calcolo la distanza e verifico se è sotto la soglia
 
             # Get all existing models with the same structural pattern
             candidate_centroids = neo4j_service.get_all_centroids()
-            
-            '''
-            for centroid in candidate_centroids:
-                print(centroid.keys())
-            candidate_families_data = self.find_candidate_families(model)
-            '''
 
             # If there aren't candidate centroids create a new one with the model weights for the centroid
             if not candidate_centroids:
