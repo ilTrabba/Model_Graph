@@ -2,7 +2,10 @@ import os
 import hashlib
 import uuid
 import logging
+import tempfile
 
+from safetensors import safe_open
+from safetensors.torch import load_file, save_file
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
@@ -10,6 +13,8 @@ from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
+from src.utils.normalization_system import normalize_safetensors_layers
+from src.utils.normalization_system import save_layer_mapping_json
 
 logger = logging.getLogger(__name__)
 models_bp = Blueprint('models', __name__)
@@ -92,30 +97,63 @@ def get_model(model_id):
 @models_bp.route('/models', methods=['POST'])
 def upload_model():
 
-    """Upload and process new model"""
+    
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-    
+
     file = request.files['file']
+
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
-    
+
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type'}), 400
-    
-    # Get optional metadata
+
+    # Get metadata
     name = request.form.get('name', file.filename)
     description = request.form.get('description', '')
-    
-    # Generate unique model ID
     model_id = str(uuid.uuid4())
-    
+
+    # Leggi il file in memoria
+    file_bytes = file.read()
+
+    # Salva temporaneamente per estrarre i metadata
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_file:
+        tmp_file.write(file_bytes)
+        tmp_path = tmp_file.name
+
+    # Carica tensori e metadata
+    tensors_dict = load_file(tmp_path)
+    original_keys = list(tensors_dict.keys())
+    with safe_open(tmp_path, framework="pt", device="cpu") as f:
+        metadata = f.metadata()
+
+    # Rimuovi il file temporaneo
+    os.unlink(tmp_path)
+
+    try:
+        norm_tensors_dict = normalize_safetensors_layers(tensors_dict)
+    except ValueError as e:
+        return jsonify({'error': f'Normalization failed: {str(e)}'}), 400
+
+    normalized_keys = list(norm_tensors_dict.keys())
+
+    # Salva il mapping JSON (fingerprint)
+    num_layers = save_layer_mapping_json(
+        original_keys=original_keys,
+        normalized_keys=normalized_keys,
+        model_id=model_id,
+        original_filename=file.filename
+    )
+
     # Save file
     os.makedirs(MODEL_FOLDER, exist_ok=True)
     filename = secure_filename(f"{model_id}_{file.filename}")
     file_path = os.path.join(MODEL_FOLDER, filename)
-    file.save(file_path)
-    
+
+    # Salva il file con tensori normalizzati e metadata originali
+    save_file(norm_tensors_dict, file_path, metadata=metadata)
+
     try:
         # Calculate checksum
         checksum = calculate_file_checksum(file_path)
@@ -137,7 +175,7 @@ def upload_model():
             'file_path': file_path,
             'checksum': checksum,
             'total_parameters': signature['total_parameters'],
-            'layer_count': signature['layer_count'],
+            'layer_count': num_layers,
             'structural_hash': signature['structural_hash'],
             'status': 'processing',
             'weights_uri': 'weights/' + filename,

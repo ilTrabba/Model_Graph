@@ -227,19 +227,22 @@ class FamilyClusteringSystem:
 
             # Get all existing models with the same structural pattern
             candidate_centroids = neo4j_service.get_all_centroids()
+            
+            '''
+            for centroid in candidate_centroids:
+                print(centroid.keys())
             candidate_families_data = self.find_candidate_families(model)
+            '''
 
-            # If there aren't candidate families create a new one with the model weights for the centroid
-            if not candidate_families_data:
+            # If there aren't candidate centroids create a new one with the model weights for the centroid
+            if not candidate_centroids:
                 family_id = self.create_new_family(model, model_weights)
                 confidence = 1.0
             else:
-            
-                candidate_families = [Family(**data) for data in candidate_families_data]
                 
                 # Calculate distances to family centroids
                 best_family_id, confidence = self.find_best_family_match(
-                    model_weights, candidate_families
+                    model_weights, candidate_centroids
                 )
                 
                 if confidence >= 0.2:
@@ -327,7 +330,7 @@ class FamilyClusteringSystem:
     
     def find_best_family_match(self,
                                model_weights: Dict[str, Any],
-                               candidate_families: List[Union[Family, Dict[str, Any]]]) -> Tuple[str, float]:
+                               candidate_centroids: List[Dict[str, Any]]) -> Tuple[str, float]:
         """
         Find the best family match for a model.
         
@@ -338,11 +341,12 @@ class FamilyClusteringSystem:
             best_family_id = None
             best_distance = float('inf')
             
-            for family in candidate_families:
-                centroid = None
+            for centroid in candidate_centroids:
+                centroid_weights = None
 
                 # prendere centroide già esistente della famiglia corrente con un if
-                centroid_path = os.path.join("weights", "centroids", f"{family.id}.safetensors")
+                centroid_path = centroid["path"]
+                family_id = centroid["family_id"]
 
                 if os.path.exists(centroid_path):
                     try:
@@ -357,23 +361,23 @@ class FamilyClusteringSystem:
                                 centroid_data[key] = f.get_tensor(key).clone()
 
                         # Now, centroid_data is a dictionary with the loaded tensors
-                        centroid = centroid_data
+                        centroid_weights = centroid_data
 
                     except Exception as e:
                         logHandler.error_handler(e, "find_best_family_match", "Error loading safetensors file")
                 else:
-                    logHandler.error_handler(f"Centroid file does not exist for family {family.id}", "find_best_family_match")
+                    logHandler.error_handler(f"Centroid file does not exist for family {family_id}", "find_best_family_match")
 
-                if centroid is None:
+                if centroid_weights is None:
                     continue
                 
                 distance = self.distance_calculator.calculate_distance(
-                    model_weights, centroid
+                    model_weights, centroid_weights
                 )
                 
                 if distance < best_distance:
                     best_distance = distance
-                    best_family_id = family.id
+                    best_family_id = family_id
 
             
             if best_family_id is None:
@@ -488,7 +492,7 @@ class FamilyClusteringSystem:
             return {}
     '''
 
-    def normalize_safetensors_layers(slef, weights: Dict[str, Any]) -> Dict[str, Any]:
+    def normalize_safetensors_layers(self, weights: Dict[str, Any]) -> Dict[str, Any]:
         """
         Normalizza i nomi dei layer di un singolo file safetensors.
 

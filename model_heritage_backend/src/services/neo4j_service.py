@@ -82,7 +82,10 @@ class Neo4jService:
     def upsert_model(self, model_data: Dict[str, Any]) -> bool:
         """Create or update a Model node using MERGE (unified method)"""
         if not self.driver:
+            logger.error("Neo4j driver not initialized")
             return False
+        
+        model_id = model_data.get('id', 'UNKNOWN')
         
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
@@ -106,13 +109,13 @@ class Neo4jService:
                     m.created_at = $created_at,
                     m.processed_at = $processed_at,
                     m.color = $color
-                RETURN m
+                RETURN m.id as model_id, labels(m) as labels, properties(m) as props
                 """
                 
                 # Calculate file size in MB (rough estimate)
                 weights_size_mb = (model_data.get('total_parameters', 0) * 4) / (1024 * 1024)  # float32 assumption
                 
-                session.run(query, {
+                params = {
                     'id': model_data['id'],
                     'name': model_data.get('name', ''),
                     'description': model_data.get('description', ''),
@@ -132,11 +135,28 @@ class Neo4jService:
                     'created_at': model_data.get('created_at', ''),
                     'processed_at': model_data.get('processed_at', ''),
                     'color': model_data.get('color', 'gray')
-                })
+                }
                 
-            return True
+                logger.info(f"Attempting to upsert Model node with id: {model_id}")
+                logger.debug(f"Parameters: {params}")
+                
+                result = session.run(query, params)
+                record = result.single()
+                
+                if record:
+                    logger.info(
+                        f"✅ Model node upserted successfully: "
+                        f"id={record['model_id']}, "
+                        f"labels={record['labels']}, "
+                        f"status={record['props'].get('status')}"
+                    )
+                    return True
+                else:
+                    logger.error(f"❌ Model node upsert returned no record for id: {model_id}")
+                    return False
+                    
         except Exception as e:
-            logger.error(f"Failed to upsert model node: {e}")
+            logger.error(f"❌ Failed to upsert model node (id={model_id}): {e}", exc_info=True)
             return False
     
     def update_model(self, model_id: str, updates: Dict[str, Any]) -> bool:
