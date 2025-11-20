@@ -18,6 +18,41 @@ from src.services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
 
+# Aggiungi questa costante a livello di modulo (top del file)
+# Lista completa di pattern per layer da ESCLUDERE dal calcolo L2
+EXCLUDED_LAYER_PATTERNS = frozenset([
+    # Normalization layers
+    'layernorm', 'layer_norm', 'ln_', '.ln.', 
+    'batchnorm', 'batch_norm', 'bn', '.bn.',
+    'groupnorm', 'group_norm', 'gn',
+    'instancenorm', 'instance_norm',
+    'rmsnorm', 'rms_norm',
+    
+    # Embedding layers
+    'embed', 'embedding', 'embeddings',
+    'position_embed', 'positional_embed', 'pos_embed',
+    'token_embed', 'word_embed',
+    'patch_embed',
+    'wte', 'wpe',  # GPT-style embeddings
+    
+    # Head/Output layers
+    'lm_head', 'language_model_head',
+    'classifier', 'classification_head',
+    'head', 
+    'output_projection', 'output_proj',
+    'score', 'scorer',
+    'cls', 'pooler',
+    'prediction_head', 'pred_head',
+    'qa_outputs', 
+    'seq_relationship',
+    
+    # Additional output-specific patterns
+    'logits',
+    'final_layer',
+    'output_layer'
+])
+
+'''
 def get_layer_kinds() -> List[str]:
     """Get layer types for analysis"""
     return [
@@ -46,7 +81,7 @@ def get_layer_kinds() -> List[str]:
         '.weight',  # Any layer with weights
         '.bias'     # Any layer with bias
     ]
-
+'''
 # da spulciare bene (forse da eliminare)
 def normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """
@@ -82,6 +117,7 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logHandler.error_handler(e, "load_model_weights", {"file_path": file_path})
 
+'''
 def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
     """Calculate kurtosis of model weights (only 2D square tensors)."""
     try:
@@ -125,6 +161,82 @@ def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
     except Exception as e:
         logger.error(f"Error calculating kurtosis: {e}")
         return 0.0   
+'''
+def calc_ku(weights: Dict[str, Any]) -> float:
+    """
+    Calculate kurtosis of model weights (only 2D square tensors).
+    
+    Computes the kurtosis (excess kurtosis using Fisher definition) of weight
+    distributions, excluding normalization, embedding, and head layers.
+    Only considers square 2D matrices (e.g., attention projection matrices).
+    
+    Args:
+        weights: Dictionary of layer names to tensors (already normalized names)
+        
+    Returns:
+        Kurtosis value (float), or 0.0 if no valid weights found or error occurs
+        
+    Note:
+        - Excludes layers matching EXCLUDED_LAYER_PATTERNS (case-insensitive)
+        - Only includes 2D square matrices (shape[0] == shape[1])
+        - Uses Fisher definition (excess kurtosis, normal distribution = 0)
+    """
+    try:
+        all_weights = []
+        excluded_count = 0
+        shape_filtered_count = 0
+        
+        for param_name, param_tensor in weights.items():
+            # Convert to lowercase for case-insensitive matching
+            param_lower = param_name.lower()
+            
+            # Exclude normalization, embedding, and head layers
+            if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
+                excluded_count += 1
+                continue
+            
+            # Verify it's a tensor
+            if not isinstance(param_tensor, torch.Tensor):
+                continue
+            
+            # Only include 2D square matrices
+            if not (param_tensor.ndim == 2 and param_tensor.shape[0] == param_tensor.shape[1]):
+                shape_filtered_count += 1
+                continue
+            
+            # Flatten and add to collection
+            param_weights = param_tensor.detach().cpu().numpy().flatten()
+            all_weights.extend(param_weights)
+        
+        if not all_weights:
+            logger.warning(
+                f"No valid weights found for kurtosis calculation. "
+                f"Excluded: {excluded_count}, Shape filtered: {shape_filtered_count}"
+            )
+            return 0.0
+        
+        # Convert to numpy array
+        all_weights = np.array(all_weights)
+        
+        # Calculate kurtosis (using Fisher definition, excess kurtosis)
+        kurt = stats.kurtosis(all_weights, fisher=True)
+        
+        # Handle NaN/inf cases
+        if np.isnan(kurt) or np.isinf(kurt):
+            logger.warning("Kurtosis calculation resulted in NaN or Inf")
+            return 0.0
+        
+        logger.debug(
+            f"Kurtosis calculated: {kurt:.4f} "
+            f"({len(all_weights)} weights from square matrices, "
+            f"{excluded_count} layers excluded, {shape_filtered_count} shape filtered)"
+        )
+        
+        return float(kurt)
+        
+    except Exception as e:
+        logger.error(f"Error calculating kurtosis: {e}", exc_info=True)
+        return 0.0
 
 def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     """
@@ -276,6 +388,7 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
     
     return confidence_scores
 
+'''
 # lista di prefissi - potenzialmente da togliere
 CORE_ARCHITECTURAL_PREFIXES = [
     'encoder.',
@@ -298,3 +411,4 @@ def normalize_key(key: str) -> str:
         if idx != -1:
             return key[idx:]   # <-- qui tutta la sottostringa dal prefisso
     return key
+'''

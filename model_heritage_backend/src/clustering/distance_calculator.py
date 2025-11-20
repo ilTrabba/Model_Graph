@@ -15,8 +15,7 @@ from ..db_entities.entity import Model
 from enum import Enum
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
-    get_layer_kinds,
-    normalize_key
+    EXCLUDED_LAYER_PATTERNS
 )
 
 logger = logging.getLogger(__name__)
@@ -55,8 +54,9 @@ class ModelDistanceCalculator:
             layer_filter: List of layer patterns to include. If None, uses default patterns.
         """
         self.default_metric = default_metric
-        self.layer_filter = layer_filter or get_layer_kinds()
+        #self.layer_filter = layer_filter or get_layer_kinds()
 
+    '''
     def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """Calculate L2 distance between two sets of model weights"""
         try:
@@ -65,11 +65,11 @@ class ModelDistanceCalculator:
             param_count = 0
 
             # Normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
-            weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
-            weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
+            # weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
+            # weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
             
             # Get common parameters
-            common_params = set(weights1_normalized.keys()) & set(weights2_normalized.keys())
+            common_params = set(weights1.keys()) & set(weights2.keys())
             logger.debug(f"Common Parameters: {common_params}")
             
             for param_name in common_params:
@@ -113,7 +113,88 @@ class ModelDistanceCalculator:
         except Exception as e:
             logHandler.error_handler(e, "calculate_l2_distance")
             return float('inf')
+    '''
 
+    def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
+        """
+        Calculate L2 distance between two sets of model weights.
+        
+        Only includes structural layers (attention, feedforward, convolutions, etc.)
+        and excludes normalization, embedding, and head layers.
+        
+        Args:
+            weights1: First model's normalized weights
+            weights2: Second model's normalized weights
+            
+        Returns:
+            Average L2 distance across common parameters, or inf if no valid layers
+        """
+        try:
+            # Get common parameters (intersection)
+            common_params = set(weights1.keys()) & set(weights2.keys())
+            
+            if not common_params:
+                logger.warning("No common parameters found between models")
+                return float('inf')
+            
+            logger.debug(f"Found {len(common_params)} common parameters")
+            
+            total_distance = 0.0
+            param_count = 0
+            excluded_count = 0
+            
+            for param_name in common_params:
+                # Convert to lowercase once for case-insensitive matching
+                param_lower = param_name.lower()
+                
+                # Exclude layers matching any pattern in blacklist
+                if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
+                    excluded_count += 1
+                    continue
+                
+                tensor1 = weights1[param_name]
+                tensor2 = weights2[param_name]
+                
+                # Verify both are tensors
+                if not (isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor)):
+                    logger.debug(f"Skipping {param_name}: not both tensors")
+                    continue
+                
+                # Ensure same shape
+                if tensor1.shape != tensor2.shape:
+                    logger.warning(
+                        f"Shape mismatch for {param_name}: "
+                        f"{tensor1.shape} vs {tensor2.shape}"
+                    )
+                    continue
+                
+                # Calculate L2 distance
+                diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+                l2_dist = np.linalg.norm(diff.flatten())
+                total_distance += l2_dist
+                param_count += 1
+            
+            # Log statistics
+            logger.info(
+                f"L2 distance calculation: {param_count} layers included, "
+                f"{excluded_count} layers excluded (normalization/embedding/head)"
+            )
+            
+            if param_count == 0:
+                logger.warning("No valid layers found for distance calculation")
+                return float('inf')
+            
+            # Return average L2 distance
+            avg_distance = total_distance / param_count
+            logger.debug(f"Average L2 distance: {avg_distance:.6f}")
+            
+            return avg_distance
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate L2 distance: {e}", exc_info=True)
+            return float('inf')
+
+    # Potenzialmente da eliminare poichè non usata (in pratica mai usata)
     def calculate_matrix_rank_distance(self,
                                       weights1: Dict[str, Any],
                                       weights2: Dict[str, Any]) -> float:
@@ -132,8 +213,8 @@ class ModelDistanceCalculator:
             for param_name in common_params:
 
                 # Filter relevant layers
-                if not self._should_include_layer(param_name):
-                    continue
+                # if not self._should_include_layer(param_name):
+                #     continue
                     
                 tensor1 = weights1[param_name]
                 tensor2 = weights2[param_name]
@@ -166,6 +247,7 @@ class ModelDistanceCalculator:
             logger.error(f"Error in matrix rank distance calculation: {e}")
             return float('inf')
     
+    # Potenzialmente da eliminare poichè non usata (in pratica mai usata)
     def calculate_cosine_distance(self,
                                  weights1: Dict[str, Any],
                                  weights2: Dict[str, Any]) -> float:
@@ -279,6 +361,7 @@ class ModelDistanceCalculator:
 
 ################################################################################
 
+    '''
     def _flatten_weights(self, weights: Dict[str, Any]) -> np.ndarray:
         """
         Flatten relevant model weights into a single vector.
@@ -309,3 +392,4 @@ class ModelDistanceCalculator:
             if pattern in param_name:
                 return True
         return False
+    '''

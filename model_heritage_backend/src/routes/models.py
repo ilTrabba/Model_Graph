@@ -96,7 +96,6 @@ def get_model(model_id):
 
 @models_bp.route('/models', methods=['POST'])
 def upload_model():
-
     
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -164,7 +163,7 @@ def upload_model():
             os.remove(file_path)  # Clean up duplicate file
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
-        # Extract weight signature
+        # FIXME: Extract weight signature
         signature = extract_weight_signature_stub(file_path)
 
         # Create model record
