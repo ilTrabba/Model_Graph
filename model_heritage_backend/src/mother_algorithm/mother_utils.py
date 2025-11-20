@@ -52,36 +52,6 @@ EXCLUDED_LAYER_PATTERNS = frozenset([
     'output_layer'
 ])
 
-'''
-def get_layer_kinds() -> List[str]:
-    """Get layer types for analysis"""
-    return [
-        # Transformer attention layers
-        'self_attn.q_proj',
-        'self_attn.k_proj', 
-        'self_attn.v_proj',
-        'self_attn.o_proj',
-        'mlp.gate_proj',
-        'mlp.up_proj',
-        'mlp.down_proj',
-        'attention.q_proj',
-        'attention.k_proj',
-        'attention.v_proj',
-        'attention.out_proj',
-        'feed_forward.w1',
-        'feed_forward.w2',
-        'feed_forward.w3',
-        # Common dense/linear layers
-        'linear1',
-        'linear2',
-        'dense',
-        'fc1',
-        'fc2',
-        # Generic layer patterns (for simple models)
-        '.weight',  # Any layer with weights
-        '.bias'     # Any layer with bias
-    ]
-'''
 # da spulciare bene (forse da eliminare)
 def normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
     """
@@ -117,51 +87,6 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logHandler.error_handler(e, "load_model_weights", {"file_path": file_path})
 
-'''
-def calc_ku(weights: Dict[str, Any], layer_kind: Optional[str] = None) -> float:
-    """Calculate kurtosis of model weights (only 2D square tensors)."""
-    try:
-        layer_kinds = get_layer_kinds()
-        all_weights = []
-        
-        for param_name, param_tensor in weights.items():
-            # Filter by layer kind if specified
-            if layer_kind:
-                if layer_kind not in param_name:
-                    continue
-            else:
-                # Include all weight and bias parameters for analysis (then shape-filter below)
-                if not any(lk in param_name for lk in layer_kinds) and 'weight' not in param_name and 'bias' not in param_name:
-                    continue
-                    
-            if isinstance(param_tensor, torch.Tensor):
-                # Only include 2D square matrices
-                if not (param_tensor.ndim == 2 and param_tensor.shape[0] == param_tensor.shape[1]):
-                    continue
-
-                # Flatten and convert to numpy
-                param_weights = param_tensor.detach().cpu().numpy().flatten()
-                all_weights.extend(param_weights)
-        
-        if not all_weights:
-            logger.warning(f"No weights found for analysis in model parameters: {list(weights.keys())}")
-            return 0.0
-            
-        all_weights = np.array(all_weights)
-        
-        # Calculate kurtosis (using Fisher definition, excess kurtosis)
-        kurt = stats.kurtosis(all_weights, fisher=True)
-        
-        # Handle NaN/inf cases
-        if np.isnan(kurt) or np.isinf(kurt):
-            return 0.0
-            
-        return float(kurt)
-        
-    except Exception as e:
-        logger.error(f"Error calculating kurtosis: {e}")
-        return 0.0   
-'''
 def calc_ku(weights: Dict[str, Any]) -> float:
     """
     Calculate kurtosis of model weights (only 2D square tensors).
@@ -187,6 +112,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
         shape_filtered_count = 0
         
         for param_name, param_tensor in weights.items():
+
             # Convert to lowercase for case-insensitive matching
             param_lower = param_name.lower()
             
@@ -291,7 +217,7 @@ def update_family_statistics(family_id: str, distance_matrix: NDArray[np.float64
     except Exception as e:
         logHandler.error_handler(f"Error updating distance matrix: {e}", "distance_matrix_updates")
 
-#################################################################################
+############################# FUNZIONI DI SUPPORTO CHE ANDRANNO FIXATE (NON IMPORTANTI) ##################################
 
 def fallback_directed_mst(G: nx.DiGraph) -> nx.DiGraph:
     """
@@ -387,28 +313,3 @@ def calculate_confidence_scores(tree: nx.DiGraph, original_graph: nx.DiGraph,
                 confidence_scores[node] = 0.4  # Default for orphaned nodes
     
     return confidence_scores
-
-'''
-# lista di prefissi - potenzialmente da togliere
-CORE_ARCHITECTURAL_PREFIXES = [
-    'encoder.',
-    'decoder.',
-    'transformer',
-    'embeddings.',
-    'backbone.',
-    'classifier.',
-]
-
-# pattern_str = '|'.join(re.escape(p) for p in CORE_ARCHITECTURAL_PREFIXES) - potenzialmente da togliere
-# regex = re.compile(rf'.*?({pattern_str}.*)')
-def normalize_key(key: str) -> str:
-    """
-    Restituisce la sottostringa a partire dal primo prefisso architetturale trovato.
-    Se nessun prefisso è presente, ritorna la chiave originale.
-    """
-    for prefix in CORE_ARCHITECTURAL_PREFIXES:
-        idx = key.find(prefix)
-        if idx != -1:
-            return key[idx:]   # <-- qui tutta la sottostringa dal prefisso
-    return key
-'''

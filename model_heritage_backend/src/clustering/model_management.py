@@ -55,7 +55,6 @@ class ModelManagementSystem:
             clustering_method=clustering_method
         )
         self.tree_builder = MoTHerTreeBuilder(
-            #distance_calculator=self.distance_calculator,
             lambda_param=lambda_param,
             method=tree_method,
             distance_matrix = None

@@ -54,66 +54,7 @@ class ModelDistanceCalculator:
             layer_filter: List of layer patterns to include. If None, uses default patterns.
         """
         self.default_metric = default_metric
-        #self.layer_filter = layer_filter or get_layer_kinds()
-
-    '''
-    def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
-        """Calculate L2 distance between two sets of model weights"""
-        try:
-            layer_kinds = get_layer_kinds()
-            total_distance = 0.0
-            param_count = 0
-
-            # Normalize parameters (weights.key), in the future will be done only 1 time for each model, when it is inserted into the system
-            # weights1_normalized = {normalize_key(key): value for key, value in weights1.items()}
-            # weights2_normalized = {normalize_key(key): value for key, value in weights2.items()}
-            
-            # Get common parameters
-            common_params = set(weights1.keys()) & set(weights2.keys())
-            logger.debug(f"Common Parameters: {common_params}")
-            
-            for param_name in common_params:
-
-                # Include all weight and bias parameters for distance calculation
-                should_include = False
-                for lk in layer_kinds:
-                    if lk in param_name:
-                        should_include = True
-                        break
-                
-                # Also include if it's a weight or bias parameter
-                if 'weight' in param_name or 'bias' in param_name:
-                    should_include = True
-                    
-                if not should_include:
-                    continue
-                    
-                tensor1 = weights1_normalized[param_name]
-                tensor2 = weights2_normalized[param_name]
-                
-                if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
-
-                    # Ensure same shape
-                    if tensor1.shape != tensor2.shape:
-                        logger.warning(f"Shape mismatch for {param_name}: {tensor1.shape} vs {tensor2.shape}")
-                        continue
-
-                    # Calculate L2 distance
-                    diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
-                    l2_dist = np.linalg.norm(diff.flatten())
-                    total_distance += l2_dist
-                    param_count += 1
-            
-            if param_count == 0:
-                return float('inf')
-                
-            # Return average L2 distance
-            return total_distance / param_count
-            
-        except Exception as e:
-            logHandler.error_handler(e, "calculate_l2_distance")
-            return float('inf')
-    '''
+        # self.layer_filter = layer_filter or get_layer_kinds()
 
     def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """
@@ -144,6 +85,7 @@ class ModelDistanceCalculator:
             excluded_count = 0
             
             for param_name in common_params:
+
                 # Convert to lowercase once for case-insensitive matching
                 param_lower = param_name.lower()
                 
@@ -309,7 +251,6 @@ class ModelDistanceCalculator:
             logger.debug(f"Using metric: {metric} for model comparison")
             
             if metric == DistanceMetric.L2_DISTANCE:
-                #logger.info("params: " + str((model1_weights)) + " " + str((model2_weights)))
                 return self.calculate_l2_distance(model1_weights, model2_weights)
             elif metric == DistanceMetric.MATRIX_RANK:
                 return self.calculate_matrix_rank_distance(model1_weights, model2_weights)
@@ -358,38 +299,3 @@ class ModelDistanceCalculator:
         except Exception as e:
             logHandler.error_handler(f"Error calculating intra-family distance: {e}", "calculate_intra_family_distance")
             return 0.0
-
-################################################################################
-
-    '''
-    def _flatten_weights(self, weights: Dict[str, Any]) -> np.ndarray:
-        """
-        Flatten relevant model weights into a single vector.
-        """
-        try:
-            all_weights = []
-            
-            for param_name, tensor in weights.items():
-                if not self._should_include_layer(param_name):
-                    continue
-                    
-                if isinstance(tensor, torch.Tensor):
-                    flattened = tensor.detach().cpu().numpy().flatten()
-                    all_weights.extend(flattened)
-                    
-            return np.array(all_weights)
-            
-        except Exception as e:
-            logger.error(f"Error flattening weights: {e}")
-            return np.array([])
-    
-    #se utilizzeremo l'ordinamento invece del nome dei layer, allora non servirà più questa funzione (forse)
-    def _should_include_layer(self, param_name: str) -> bool:
-        """
-        Check if a parameter should be included based on layer filtering.
-        """
-        for pattern in self.layer_filter:
-            if pattern in param_name:
-                return True
-        return False
-    '''

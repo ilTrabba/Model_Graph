@@ -260,11 +260,6 @@ class FamilyClusteringSystem:
             Dictionary representing the family centroid weights
         """
         try:
-            # Get all models in the family
-            #family_models = neo4j_service.get_family_models(
-            #    family_id=family_id, 
-            #    status='ok')
-            
             if not family_models:
                 return None
             
@@ -288,9 +283,9 @@ class FamilyClusteringSystem:
                 # Update Neo4j centroid node with actual embedding and metadata
                 try:
                     if neo4j_service.is_connected():
+
                         # Update embedding in FamilyCentroid (for backward compatibility)
                         embedding = self.centroid_to_embedding(centroid)
-                        #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                         
                         # Update enhanced Centroid node with metadata
                         self.update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
@@ -414,6 +409,7 @@ class FamilyClusteringSystem:
                 initial_centroid = {}
                 for param_name, tensor in model_weights.items():
                     if isinstance(tensor, torch.Tensor):
+
                         # Create a copy of the tensor for the centroid
                         initial_centroid[param_name] = tensor.detach().clone()
                 
@@ -424,9 +420,6 @@ class FamilyClusteringSystem:
                     # Update Neo4j centroid node
                     try:
                         if neo4j_service.is_connected():
-                            # Create FamilyCentroid node (for backward compatibility)
-                            # embedding = self.centroid_to_embedding(initial_centroid)
-                            #neo4j_service.create_or_update_family_centroid(family_id, embedding)
                             
                             # Update enhanced Centroid node with metadata
                             self.update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
@@ -446,41 +439,6 @@ class FamilyClusteringSystem:
             
         except Exception as e:
             logHandler.error_handler(e, "create_new_family", "Generic error creating new family")
-    '''
-    def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Calculate centroid by averaging model weights.
-        """
-        try:
-            if not weights_list:
-                return {}
-            
-            # Get common parameters across all models
-            common_params = set(weights_list[0].keys())
-            for weights in weights_list[1:]:
-                common_params &= set(weights.keys())
-            
-            centroid = {}
-            
-            for param_name in common_params:
-                # Collect all tensors for this parameter
-                tensors = []
-                for weights in weights_list:
-                    tensor = weights[param_name]
-                    if isinstance(tensor, torch.Tensor):
-                        tensors.append(tensor.detach().cpu().numpy())
-                
-                if tensors:
-                    # Average the tensors
-                    avg_tensor = np.mean(tensors, axis=0)
-                    centroid[param_name] = torch.from_numpy(avg_tensor)
-            
-            return centroid
-            
-        except Exception as e:
-            logger.error(f"Error calculating weights centroid: {e}")
-            return {}
-    '''
 
     def normalize_safetensors_layers(self, weights: Dict[str, Any]) -> Dict[str, Any]:
         """
