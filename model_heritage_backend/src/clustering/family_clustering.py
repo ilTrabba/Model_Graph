@@ -14,19 +14,20 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
-from typing import Union
 from src.mother_algorithm.mother_utils import load_model_weights
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from enum import Enum
 from datetime import datetime
 from safetensors import safe_open
-from ..db_entities.entity import Model, Family
+from ..db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
 
-
 logger = logging.getLogger(__name__)
+
+# Costante per soglia chunking automatico
+CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
 
 class ClusteringMethod(Enum):
     """Available clustering methods"""
@@ -107,7 +108,7 @@ class FamilyClusteringSystem:
                 'version': '1.0',
                 'layer_count': str(len(centroid)),
                 'layer_keys': str(list(centroid.keys())),
-                'distance_metric': 'cosine',
+                'distance_metric': 'L2',
                 'format': 'safetensors'
             }
             
@@ -174,33 +175,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
-    
-    def centroid_to_embedding(self, centroid: Dict[str, Any]) -> List[float]:
-        try:
-            if not centroid:
-                return [0.0]
-            
-            # Create a compact signature instead of full weights
-            signature = []
-            
-            for param_name, tensor in centroid.items():
-                if isinstance(tensor, torch.Tensor):
-                    # Use statistical measures instead of raw weights
-                    tensor_np = tensor.detach().cpu().numpy()
-                    stats = [
-                        float(tensor_np.mean()),
-                        float(tensor_np.std()),
-                        float(tensor_np.min()),
-                        float(tensor_np.max()),
-                        float(tensor_np.shape[0] if len(tensor_np.shape) > 0 else 1)
-                    ]
-                    signature.extend(stats)
-            
-            return signature[:100]  # Limit to 100 values max
-        except Exception as e:
-            logger.error(f"Error converting centroid to embedding: {e}")
-            return [0.0]
-        
+
     def assign_model_to_family(self, 
                              model: Model,
                              model_weights: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
@@ -249,7 +224,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
     
-    def calculate_family_centroid(self, family_id: str, family_models: List[Model]) -> Optional[Dict[str, Any]]:
+    def calculate_family_centroid(self, family_id: str, new_model_path: str) -> Optional[Dict[str, Any]]:
         """
         Calculate the centroid (average weights) for a family.
         
@@ -260,58 +235,41 @@ class FamilyClusteringSystem:
             Dictionary representing the family centroid weights
         """
         try:
-            if not family_models:
+            if not family_id:
                 return None
             
-            # Load weights for all family models
-            family_weights = []
-            for model in family_models:
-                weights = load_model_weights(model.file_path)
-                if weights is not None:
-                    family_weights.append(weights)
-            
-            if not family_weights:
+            # Load weights for the new model
+            new_model_weights = load_model_weights(new_model_path)
+            if not new_model_weights:
                 return None
             
+            current_centroid = neo4j_service.get_centroid_by_family_id(family_id)
+
             # Calculate centroid by averaging weights
-            centroid = self.calculate_weights_centroid(family_weights)
+            updated_centroid = self.calculate_weights_centroid(current_centroid, new_model_weights)
             
             # Save centroid to file for incremental updates
-            if centroid:
-                self.save_family_centroid(family_id, centroid)
+            if updated_centroid:
+                self.save_family_centroid(family_id, updated_centroid)
                 
                 # Update Neo4j centroid node with actual embedding and metadata
                 try:
                     if neo4j_service.is_connected():
 
-                        # Update embedding in FamilyCentroid (for backward compatibility)
-                        embedding = self.centroid_to_embedding(centroid)
-                        
                         # Update enhanced Centroid node with metadata
-                        self.update_centroid_metadata(neo4j_service, family_id, centroid, len(family_weights))
+                        self.update_centroid_metadata(neo4j_service, family_id)
                         
+                        # FIXME: Probabilmente inutile
                         neo4j_service.create_has_centroid_relationship(family_id)
                 except Exception as neo4j_error:
-                    logger.warning(f"Failed to update Neo4j centroid for family {family_id}: {neo4j_error}")
+                    logHandler.warning_handler(f"Failed to update Neo4j centroid for family {family_id}: {neo4j_error}", "calculate_family_centroid")
             
-            logger.info(f"Calculated centroid for family {family_id} with {len(family_weights)} models")
-            return centroid
+            logger.info(f"Calculated centroid for {family_id}")
+            return updated_centroid
             
         except Exception as e:
-            logHandler.error_handler(f"Error calculating family centroid for {family_id}: {e}", "calculate_family_centroid")
+            logHandler.error_handler(f"{e}", "calculate_family_centroid")
             return None
-    
-    def find_candidate_families(self, model: Model) -> List[Family]:
-        """
-        Find candidate families for a model based on structural similarity.
-        """
-        try:
-            # For now, consider all families as candidates
-            # In future versions, could filter by structural_hash or other criteria
-            return neo4j_service.get_all_families()
-            
-        except Exception as e:
-            logHandler.error_handler(e, "find_candidate_families")
     
     def find_best_family_match(self,
                                model_weights: Dict[str, Any],
@@ -422,7 +380,7 @@ class FamilyClusteringSystem:
                         if neo4j_service.is_connected():
                             
                             # Update enhanced Centroid node with metadata
-                            self.update_centroid_metadata(neo4j_service, family_id, initial_centroid, 1)
+                            self.update_centroid_metadata(neo4j_service, family_id, 1)
                             
                             neo4j_service.create_has_centroid_relationship(family_id)
                     except Exception as neo4j_error:
@@ -620,120 +578,183 @@ class FamilyClusteringSystem:
 
         return normalized_weights
 
-    def calculate_weights_centroid(self, weights_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    @torch.no_grad()
+    def calculate_weights_centroid(
+        self, 
+        current_centroid: Dict[str, Any], 
+        new_model_weights: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        Calcola il centroide (media) dei pesi di modelli della stessa famiglia.
+        Calcola centroide aggiornato aggiungendo un nuovo modello alla media esistente.
         
-        Questa funzione:
-        1. Trova i layer comuni presenti in TUTTI i modelli della famiglia relativa
-        2. Verifica che abbiano shape identico
-        3. Calcola la media elemento per elemento
+        Formula: centroid_new = (centroid_old * n + new_model) / (n + 1)
         
-        IMPORTANTE: Assume che i dizionari in weights_list siano già stati 
-        normalizzati con normalize_safetensors_layers().
+        Caratteristiche:
+        - Aggiornamento in-place di current_centroid
+        - Calcoli in float32 per massima precisione
+        - Chunking automatico per tensori grandi (>10M elementi)
+        - Solo layer comuni (nome esatto + shape identica)
+        - Layer non comuni nel centroide rimangono invariati
         
         Args:
-            weights_list: Lista di dizionari normalizzati [{layer_name: tensor}, ...]
+            current_centroid: Dizionario con centroide corrente (include 'model_count')
+            new_model_weights: Dizionario con pesi del nuovo modello
             
         Returns:
-            Dizionario centroide {layer_name: averaged_tensor} o {} se nessun layer comune valido
+            Centroide aggiornato (stesso oggetto di current_centroid, modificato in-place)
+            
+        Note:
+            - I nomi dei layer devono essere già normalizzati
+            - Gestisce automaticamente device mismatch
+            - Tensori non compatibili vengono esclusi (con logging)
         """
         try:
             # Step 1: Validazione input
-            if not weights_list:
-                logger.warning("Lista pesi vuota, impossibile calcolare centroide")
-                return {}
+            if not new_model_weights:
+                logger.warning("Pesi del nuovo modello vuoti, impossibile calcolare centroide")
+                return current_centroid
             
-            logger.info(f"Calcolo centroide per {len(weights_list)} modelli")
+            n = current_centroid.get('model_count', 0)
             
-            normalized_weights = [self.normalize_safetensors_layers(w) for w in weights_list]
+            if n <= 0:
+                logHandler.error_handler(f"model_count invalido nel centroide: {n}", "calculate_weights_centroid")
+                return current_centroid
             
-            # Step 2: Trova layer comuni (presenti in TUTTI i modelli)
-            # Crea set di layer names per ogni modello
-            layer_sets = [set(weights.keys()) for weights in normalized_weights]
+            # Step 2: Trova layer comuni (intersezione per nome esatto)
+            current_centroid_weights = load_model_weights(current_centroid['path'])
+
+            centroid_layers = set(current_centroid_weights.keys) 
+            new_model_layers = set(new_model_weights.keys())
+
+            common_layers = centroid_layers & new_model_layers
             
-            # Intersezione: layer presenti in TUTTI i modelli
-            common_layers = set.intersection(*layer_sets) if layer_sets else set()
-            
-            logger.info(f"Layer comuni trovati: {len(common_layers)}")
-            
-            if not common_layers:
-                logger.warning("Nessun layer comune trovato tra i modelli")
-                return {}
-            
-            # Step 3: Verifica compatibilità shape e calcola media
-            centroid = {}
-            excluded_layers = []
-            
-            for layer_name in common_layers:
-                # Raccogli tutti i tensori per questo layer
-                tensors = []
-                shapes = []
-                
-                for weights in normalized_weights:
-                    tensor = weights[layer_name]
-                    
-                    # Assicurati che sia un tensore PyTorch
-                    if isinstance(tensor, torch.Tensor):
-                        tensors.append(tensor)
-                        shapes.append(tuple(tensor.shape))
-                    else:
-                        logger.warning(
-                            f"Layer '{layer_name}' in uno dei modelli non è un tensore PyTorch, "
-                            f"tipo: {type(tensor)}"
-                        )
-                        excluded_layers.append(layer_name)
-                        break
-                
-                # Se non abbiamo raccolto tensori da tutti i modelli, salta
-                if len(tensors) != len(normalized_weights):
-                    continue
-                
-                # Step 4: Verifica shape identico (strict)
-                first_shape = shapes[0]
-                if not all(shape == first_shape for shape in shapes):
-                    logger.warning(
-                        f"Layer '{layer_name}' escluso: shape incompatibili tra modelli. "
-                        f"Shapes trovati: {set(shapes)}"
-                    )
-                    excluded_layers.append(layer_name)
-                    continue
-                
-                # Step 5: Calcola media
-                # Converti in numpy per calcolo efficiente
-                numpy_tensors = [t.detach().cpu().numpy() for t in tensors]
-                
-                # Media elemento per elemento
-                avg_tensor = np.mean(numpy_tensors, axis=0)
-                
-                # Converti back a torch tensor
-                centroid[layer_name] = torch.from_numpy(avg_tensor)
-            
-            # Step 6: Logging finale
             logger.info(
-                f"Centroide calcolato con successo: {len(centroid)} layer validi, "
-                f"{len(excluded_layers)} layer esclusi"
+                f"Layer: {len(centroid_layers)} nel centroide, "
+                f"{len(new_model_layers)} nel nuovo modello, "
+                f"{len(common_layers)} comuni"
             )
             
-            if excluded_layers:
-                logger.info(f"Layer esclusi: {excluded_layers[:10]}{'...' if len(excluded_layers) > 10 else ''}")
+            if not common_layers:
+                logger.warning("Nessun layer comune trovato tra centroide e nuovo modello")
+                return current_centroid
             
-            if not centroid:
-                logger.warning("Nessun layer compatibile trovato per il centroide")
-                return {}
+            # Step 3: Aggiorna layer comuni
+            updated_count = 0
+            excluded_count = 0
+            chunked_layers = []
             
-            return centroid
+            for layer_name in common_layers:
+                centroid_tensor = current_centroid[layer_name]
+                new_model_tensor = new_model_weights[layer_name]
+                
+                # Validazione 1: Entrambi devono essere tensori PyTorch
+                if not (isinstance(centroid_tensor, torch.Tensor) and 
+                        isinstance(new_model_tensor, torch.Tensor)):
+                    logger.warning(
+                        f"Layer '{layer_name}' escluso: non entrambi tensori PyTorch "
+                        f"(centroid: {type(centroid_tensor)}, new: {type(new_model_tensor)})"
+                    )
+                    excluded_count += 1
+                    continue
+                
+                # Validazione 2: Shape identiche
+                if centroid_tensor.shape != new_model_tensor.shape:
+                    logger.warning(
+                        f"Layer '{layer_name}' escluso: shape mismatch "
+                        f"({centroid_tensor.shape} vs {new_model_tensor.shape})"
+                    )
+                    excluded_count += 1
+                    continue
+                
+                # Validazione 3: Device matching
+                if centroid_tensor.device != new_model_tensor.device:
+                    logger.debug(
+                        f"Layer '{layer_name}': spostamento device "
+                        f"{new_model_tensor.device} → {centroid_tensor.device}"
+                    )
+                    new_model_tensor = new_model_tensor.to(centroid_tensor.device)
+                
+                # Conversione a float32 per calcoli (massima precisione)
+                original_dtype = centroid_tensor.dtype
+                if centroid_tensor.dtype != torch.float32:
+                    centroid_tensor = centroid_tensor.float()
+                if new_model_tensor.dtype != torch.float32:
+                    new_model_tensor = new_model_tensor.float()
+                
+                # Ottimizzazione: contiguous solo se necessario
+                if not centroid_tensor.is_contiguous():
+                    centroid_tensor = centroid_tensor.contiguous()
+                if not new_model_tensor.is_contiguous():
+                    new_model_tensor = new_model_tensor.contiguous()
+                
+                # Calcolo media con chunking automatico per tensori grandi
+                numel = centroid_tensor.numel()
+                
+                if numel > CENTROID_CHUNK_THRESHOLD:
+                    # CHUNKING: suddividi in blocchi per evitare OOM
+                    chunk_size = CENTROID_CHUNK_THRESHOLD
+                    num_chunks = (numel + chunk_size - 1) // chunk_size
+                    
+                    centroid_flat = centroid_tensor.view(-1)
+                    new_model_flat = new_model_tensor.view(-1)
+                    
+                    for chunk_old, chunk_new in zip(
+                        centroid_flat.split(chunk_size),
+                        new_model_flat.split(chunk_size)
+                    ):
+                        # Formula incrementale: (old * n + new) / (n + 1)
+                        chunk_old.mul_(n).add_(chunk_new).div_(n + 1)
+                    
+                    chunked_layers.append((layer_name, numel, num_chunks))
+                    
+                else:
+                    # NORMALE: aggiornamento diretto (in-place)
+                    centroid_tensor.mul_(n).add_(new_model_tensor).div_(n + 1)
+                
+                # Riconverti al dtype originale se necessario
+                if centroid_tensor.dtype != original_dtype:
+                    centroid_tensor = centroid_tensor.to(original_dtype)
+                
+                # Salva il layer aggiornato (in-place su current_centroid)
+                current_centroid[layer_name] = centroid_tensor
+                updated_count += 1
+            
+            # Step 4: Logging finale
+            logger.info(
+                f"✅ Centroide aggiornato: {updated_count} layer modificati, "
+                f"{excluded_count} layer esclusi, "
+                f"{len(centroid_layers) - len(common_layers)} layer invariati"
+            )
+            
+            if chunked_layers:
+                logger.info(f"Chunking applicato a {len(chunked_layers)} layer grandi:")
+                for layer_name, numel, num_chunks in chunked_layers[:5]:  # Primi 5
+                    logger.info(
+                        f"  - {layer_name}: {numel:,} elementi "
+                        f"({num_chunks} chunk da {CENTROID_CHUNK_THRESHOLD:,})"
+                    )
+            
+            if updated_count == 0:
+                logHandler.warning_handler("Nessun layer aggiornato: centroide invariato", "calculate_weights_centroid")
+            
+            return current_centroid
             
         except Exception as e:
-            logger.error(f"Errore durante il calcolo del centroide: {e}", exc_info=True)
-            return {}
+            logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
+            return current_centroid  
 
-    def update_centroid_metadata(self, neo4j_service, family_id: str, centroid: Dict[str, Any], model_count: int):
+    def update_centroid_metadata(self, neo4j_service, family_id: str, model_count: Optional[int] = None):
         """Update Centroid node metadata with enhanced attributes"""
         try:
+
+            centroid = neo4j_service.get_centroid_by_family_id(family_id)
+
             # Extract layer keys from centroid
             layer_keys = list(centroid.keys()) if centroid else []
             
+            if model_count is None:
+                model_count = centroid.get('model_count', 1) + 1
+
             # Update the Centroid node with metadata
             with neo4j_service.driver.session(database='neo4j') as session:
                 query = """
@@ -752,7 +773,7 @@ class FamilyClusteringSystem:
                     'model_count': model_count,
                     'updated_at': datetime.now(timezone.utc).isoformat(),
                     'distance_metric': 'cosine',
-                    'version': '1.1'  # Updated version
+                    'version': '1.1'  
                 })
                 
             logger.info(f"✅ Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")

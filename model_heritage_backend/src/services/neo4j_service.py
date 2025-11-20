@@ -578,6 +578,29 @@ class Neo4jService:
             logger.error(f"Failed to get all centroids: {e}")
             return []
     
+    def get_centroid_by_family_id(self, family_id: str) -> Optional[Dict]:
+        """Get a single centroid from Neo4j by its family's ID."""
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (f:Family {id: $family_id})-[:HAS_CENTROID]->(c:Centroid)
+                RETURN c
+                """
+                result = session.run(query, {'family_id': family_id})
+                record = result.single()
+                
+                if record:
+                    return dict(record['c'])
+                return None
+                
+        except Exception as e:
+            logHandler.error_handler(f"Failed to get centroid of: {family_id}: {e}", "get_centroid_by_family_id")
+            return None
+        return None
+
     def get_family_by_id(self, family_id: str) -> Optional[Dict]:
         """Get a single family from Neo4j by its ID."""
         if not self.driver:

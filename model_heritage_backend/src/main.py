@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Mostra INFO e superiori (INFO, WARNING, ERROR, CRITICAL)
 logging.basicConfig(level=logging.INFO)
+
 # Imposta il livello di logging per il driver Neo4j a WARNING per ridurre il rumore nei log
 logging.getLogger("neo4j").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)

@@ -137,7 +137,7 @@ class ModelManagementSystem:
             if num_nodes > 1:
                 self.family_clustering.calculate_family_centroid(
                     family_id,
-                    all_family_models
+                    model_proxy.file_path
                 )
 
             # Step 4: Mark as processed
