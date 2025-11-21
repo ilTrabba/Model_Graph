@@ -616,9 +616,10 @@ class FamilyClusteringSystem:
             
             n = current_centroid.get('model_count', 0)
             
+            # Non dovrebbe mai accadere
             if n <= 0:
-                logHandler.error_handler(f"model_count invalido nel centroide: {n}", "calculate_weights_centroid")
-                return current_centroid
+                return logHandler.error_handler(f"model_count invalido nel centroide: {n}", "calculate_weights_centroid")
+                 
             
             # Step 2: Trova layer comuni (intersezione per nome esatto)
             current_centroid_weights = load_model_weights(current_centroid['path'])
@@ -636,7 +637,7 @@ class FamilyClusteringSystem:
             
             if not common_layers:
                 logger.warning("Nessun layer comune trovato tra centroide e nuovo modello")
-                return current_centroid
+                return current_centroid_weights
             
             # Step 3: Aggiorna layer comuni
             updated_count = 0
@@ -644,7 +645,7 @@ class FamilyClusteringSystem:
             chunked_layers = []
             
             for layer_name in common_layers:
-                centroid_tensor = current_centroid[layer_name]
+                centroid_tensor = current_centroid_weights[layer_name]
                 new_model_tensor = new_model_weights[layer_name]
                 
                 # Validazione 1: Entrambi devono essere tensori PyTorch
@@ -716,7 +717,7 @@ class FamilyClusteringSystem:
                     centroid_tensor = centroid_tensor.to(original_dtype)
                 
                 # Salva il layer aggiornato (in-place su current_centroid)
-                current_centroid[layer_name] = centroid_tensor
+                current_centroid_weights[layer_name] = centroid_tensor
                 updated_count += 1
             
             # Step 4: Logging finale
@@ -737,11 +738,11 @@ class FamilyClusteringSystem:
             if updated_count == 0:
                 logHandler.warning_handler("Nessun layer aggiornato: centroide invariato", "calculate_weights_centroid")
             
-            return current_centroid
+            return current_centroid_weights
             
         except Exception as e:
             logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
-            return current_centroid  
+            return current_centroid_weights
 
     def update_centroid_metadata(self, neo4j_service, family_id: str, model_count: Optional[int] = None):
         """Update Centroid node metadata with enhanced attributes"""
