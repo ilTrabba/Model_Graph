@@ -624,7 +624,7 @@ class FamilyClusteringSystem:
             # Step 2: Trova layer comuni (intersezione per nome esatto)
             current_centroid_weights = load_model_weights(current_centroid['path'])
 
-            centroid_layers = set(current_centroid_weights.keys) 
+            centroid_layers = set(current_centroid_weights.keys()) 
             new_model_layers = set(new_model_weights.keys())
 
             common_layers = centroid_layers & new_model_layers
