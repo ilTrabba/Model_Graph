@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from src.log_handler import logHandler
 from src.db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
-from .distance_calculator import ModelDistanceCalculator, DistanceMetric
 from .family_clustering import FamilyClusteringSystem, ClusteringMethod
 from src.mother_algorithm.tree_builder import MoTHerTreeBuilder, TreeBuildingMethod
 
@@ -32,7 +31,6 @@ class ModelManagementSystem:
     """
     
     def __init__(self,
-                 distance_metric: DistanceMetric = DistanceMetric.AUTO,
                  family_threshold: float = 0.5,
                  clustering_method: ClusteringMethod = ClusteringMethod.THRESHOLD,
                  tree_method: TreeBuildingMethod = TreeBuildingMethod.MOTHER,
@@ -48,9 +46,8 @@ class ModelManagementSystem:
             lambda_param: Balance parameter for MoTHer algorithm
         """
         # Initialize components
-        self.distance_calculator = ModelDistanceCalculator(default_metric=distance_metric)
         self.family_clustering = FamilyClusteringSystem(
-            distance_calculator=self.distance_calculator,
+            distance_calculator = None,
             family_threshold=family_threshold,
             clustering_method=clustering_method
         )
@@ -390,7 +387,7 @@ class ModelManagementSystem:
                     'size_distribution': family_sizes
                 },
                 'clustering': {
-                    'distance_metric': str(self.distance_calculator.default_metric),
+                    #'distance_metric': str(self.distance_calculator.default_metric),
                     'family_threshold': self.family_clustering.family_threshold,
                     'clustering_method': str(self.family_clustering.clustering_method),
                     'tree_method': str(self.tree_builder.method),

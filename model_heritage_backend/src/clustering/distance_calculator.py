@@ -44,7 +44,7 @@ class ModelDistanceCalculator:
     """
     
     def __init__(self, 
-                 default_metric: DistanceMetric = DistanceMetric.AUTO,
+                 default_metric: DistanceMetric = DistanceMetric.COSINE_SIMILARITY,
                  layer_filter: Optional[List[str]] = None):
         """
         Initialize the distance calculator.
@@ -189,38 +189,106 @@ class ModelDistanceCalculator:
             logger.error(f"Error in matrix rank distance calculation: {e}")
             return float('inf')
     
-    # Potenzialmente da eliminare poichè non usata (in pratica mai usata)
-    def calculate_cosine_distance(self,
-                                 weights1: Dict[str, Any],
-                                 weights2: Dict[str, Any]) -> float:
+    def calculate_cosine_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
         """
-        Calculate cosine distance between model weights.
+        Calculate Cosine distance between two sets of model weights.
+        
+        Only includes structural layers (attention, feedforward, convolutions, etc.)
+        and excludes normalization, embedding, and head layers.
+        
+        Args:
+            weights1: First model's normalized weights
+            weights2: Second model's normalized weights
+            
+        Returns:
+            Average Cosine distance across common parameters, or inf if no valid layers
         """
         try:
-            # Flatten all relevant weights into vectors
-            vec1 = self._flatten_weights(weights1)
-            vec2 = self._flatten_weights(weights2)
+            # Get common parameters (intersection)
+            common_params = set(weights1.keys()) & set(weights2.keys())
             
-            if len(vec1) == 0 or len(vec2) == 0:
+            if not common_params:
+                logger.warning("No common parameters found between models")
                 return float('inf')
-                
-            # Calculate cosine similarity
-            dot_product = np.dot(vec1, vec2)
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
             
-            if norm1 == 0 or norm2 == 0:
+            logger.debug(f"Found {len(common_params)} common parameters")
+            
+            total_distance = 0.0
+            param_count = 0
+            excluded_count = 0
+            
+            for param_name in common_params:
+
+                # Convert to lowercase once for case-insensitive matching
+                param_lower = param_name.lower()
+                
+                # Exclude layers matching any pattern in blacklist
+                if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
+                    excluded_count += 1
+                    continue
+                
+                tensor1 = weights1[param_name]
+                tensor2 = weights2[param_name]
+                
+                # Verify both are tensors
+                if not (isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor)):
+                    logger.debug(f"Skipping {param_name}: not both tensors")
+                    continue
+                
+                # Ensure same shape
+                if tensor1.shape != tensor2.shape:
+                    logger.warning(
+                        f"Shape mismatch for {param_name}: "
+                        f"{tensor1.shape} vs {tensor2.shape}"
+                    )
+                    continue
+                
+                # Calculate Cosine distance
+                # Flatten tensors to 1D vectors
+                vec1 = tensor1.detach().cpu().numpy().flatten()
+                vec2 = tensor2.detach().cpu().numpy().flatten()
+                
+                # Calculate norms
+                norm1 = np.linalg.norm(vec1)
+                norm2 = np.linalg.norm(vec2)
+                
+                # Handle edge case: zero vectors (should be extremely rare in model weights)
+                if norm1 == 0 or norm2 == 0:
+                    logger.warning(f"Zero norm detected for {param_name}, skipping layer")
+                    continue
+                
+                # Calculate cosine similarity
+                dot_product = np.dot(vec1, vec2)
+                cosine_similarity = dot_product / (norm1 * norm2)
+                
+                # Convert to cosine distance (1 - similarity)
+                # Clamp similarity to [-1, 1] to handle numerical errors
+                cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)
+                cosine_dist = 1.0 - cosine_similarity
+                
+                total_distance += cosine_dist
+                param_count += 1
+            
+            # Log statistics
+            logger.info(
+                f"Cosine distance calculation: {param_count} layers included, "
+                f"{excluded_count} layers excluded (normalization/embedding/head)"
+            )
+            
+            if param_count == 0:
+                logger.warning("No valid layers found for distance calculation")
                 return float('inf')
-                
-            cosine_sim = dot_product / (norm1 * norm2)
             
-            # Convert to distance (1 - similarity)
-            return 1.0 - cosine_sim
+            # Return average Cosine distance
+            avg_distance = total_distance / param_count
+            logger.debug(f"Average Cosine distance: {avg_distance:.6f}")
+            
+            return avg_distance
             
         except Exception as e:
-            logger.error(f"Error in cosine distance calculation: {e}")
+            logger.error(f"Failed to calculate Cosine distance: {e}", exc_info=True)
             return float('inf')
-    
+
     def calculate_distance(self, 
                           model1_weights: Dict[str, Any],
                           model2_weights: Dict[str, Any],
