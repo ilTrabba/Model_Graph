@@ -1,16 +1,16 @@
 OPERAZIONI PRELIMINARI DA FARE:
 
-
    0. 🔍 Migrazione cloud per l’archiviazione dei parametri dei modelli (con annesse modifiche o adattamenti al codice)
    1.	✅ Tradurre in inglese sia la presentazione pp che la relazione progettuale di Big Data, inviare tutto a Torlone 
    2.	✅ Effettuare una pulizia iniziale e completa del codice e comprendere il funzionamento generale (cicli ripetuti, ruolo di funzioni chiave, ecc...)
    3.	Aggiustamento del codice:
       a.	✅ Integrare un bottone di eliminazione file sulla form di inserimento dei modelli
       b.	✅ Risolvere l’errore legato alle relazioni errate rimanenti che persistono nel tempo (ricordare i 2 fratelli)
-      c.	✅ (Gabri) Usare effettivamente il nodo family per le query
-      d.	✅ (Gabri) Integrare l’aggiornamento del centroide
-      e.	✅ (Gabri) Capire effettivamente quali layer sono utili alla causa (config serve?)
-   4.	✅ (Gabri) Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
+      c.	✅ Usare effettivamente il nodo family per le query
+      d.	✅ Integrare l’aggiornamento del centroide
+      e.	✅ Capire effettivamente quali layer sono utili alla causa (config serve?)
+   4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
+   5. ✅Valutazione generale del corretto flusso di esecuzione del sistema
 
 CLUSTERIZZAZIONE:
 
