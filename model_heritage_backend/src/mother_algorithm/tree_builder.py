@@ -33,9 +33,7 @@ mdst = MDST()
 class TreeBuildingMethod(Enum):
     """Available tree building methods"""
     MOTHER = "mother"          # Full MoTHer algorithm with kurtosis
-    DISTANCE_ONLY = "distance" # Distance-based minimum spanning tree only
-    KURTOSIS_ONLY = "kurtosis" # Kurtosis-based ordering only
-
+    
 class MoTHerTreeBuilder:
     """
     Build genealogical relationships within model families using the MoTHer algorithm.
@@ -122,10 +120,6 @@ class MoTHerTreeBuilder:
             # Build tree using selected method
             if self.method == TreeBuildingMethod.MOTHER:
                 tree, confidence_scores = self.build_mother_tree(family_id, valid_models, model_weights)
-            elif self.method == TreeBuildingMethod.DISTANCE_ONLY:
-                tree, confidence_scores = self.build_distance_tree(valid_models, model_weights)
-            elif self.method == TreeBuildingMethod.KURTOSIS_ONLY:
-                tree, confidence_scores = self.build_kurtosis_tree(valid_models, model_weights)
             else:
                 raise Exception(f"Unknown tree building method: {self.method}")
             
@@ -148,7 +142,9 @@ class MoTHerTreeBuilder:
         """
         Build tree using full MoTHer algorithm (kurtosis + distance).
         """
+        from src.clustering.distance_calculator import DistanceMetric
         try:
+            distance_metric = DistanceMetric.L2_DISTANCE
             # Calculate kurtosis for each model
             kurtosis_values = []
             model_ids = []
@@ -168,9 +164,10 @@ class MoTHerTreeBuilder:
             for i in range(n_models):
                 for j in range(i, n_models):
                     if i != j:
-                        dist = self.distance_calculator.calculate_l2_distance(
+                        dist = self.distance_calculator.calculate_distance(
                             model_weights[model_ids[i]], 
-                            model_weights[model_ids[j]]
+                            model_weights[model_ids[j]],
+                            distance_metric
                         )
                         distance_matrix[i, j] = dist
                         distance_matrix[j, i] = dist
@@ -267,80 +264,6 @@ class MoTHerTreeBuilder:
         
         return spanning_tree, confidence_scores
 
-    def build_distance_tree(self, 
-                           models: List[Model], 
-                           model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
-        """
-        Build tree using only distance information (minimum spanning tree).
-        """
-        try:
-            model_ids = [model.id for model in models]
-            n_models = len(models)
-            
-            # Build distance matrix
-            distance_matrix = np.zeros((n_models, n_models))
-            
-            for i in range(n_models):
-                for j in range(n_models):
-                    if i != j:
-                        dist = self.distance_calculator.calculate_l2_distance(
-                            model_weights[model_ids[i]], 
-                            model_weights[model_ids[j]]
-                        )
-                        distance_matrix[i, j] = dist
-                    else:
-                        distance_matrix[i, j] = float('inf')
-            
-            # Use MoTHer tree builder with lambda=0 (distance only)
-            tree, confidence_scores = self.build_tree(
-                ku_values=[0.0] * n_models,  # Dummy kurtosis values
-                distance_matrix=distance_matrix,
-                lambda_param=0.0  # Distance only
-            )
-            
-            logger.info(f"Distance-only tree built with {tree.number_of_nodes()} nodes")
-            return tree, confidence_scores
-            
-        except Exception as e:
-            logger.error(f"Error building distance tree: {e}")
-            return nx.DiGraph(), {}
-    
-    def build_kurtosis_tree(self, 
-                           models: List[Model], 
-                           model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
-        """
-        Build tree using only kurtosis information (highest kurtosis as root).
-        """
-        try:
-            # Calculate kurtosis for each model
-            kurtosis_values = []
-            model_ids = []
-            
-            for model in models:
-                ku = calc_ku(model_weights[model.id])
-                kurtosis_values.append(ku)
-                model_ids.append(model.id)
-            
-            n_models = len(models)
-            
-            # Create dummy distance matrix (uniform distances)
-            distance_matrix = np.ones((n_models, n_models))
-            np.fill_diagonal(distance_matrix, float('inf'))
-            
-            # Use MoTHer tree builder with lambda=1 (kurtosis only)
-            tree, confidence_scores = self.build_tree(
-                ku_values=kurtosis_values,
-                distance_matrix=distance_matrix,
-                lambda_param=1.0  # Kurtosis only
-            )
-            
-            logger.info(f"Kurtosis-only tree built with {tree.number_of_nodes()} nodes")
-            return tree, confidence_scores
-            
-        except Exception as e:
-            logger.error(f"Error building kurtosis tree: {e}")
-            return nx.DiGraph(), {}
-    
     # Helper function to get id from either dict or object
     def get_model_id(self, model):
         return model['id'] if isinstance(model, dict) else model.id

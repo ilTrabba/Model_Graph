@@ -280,7 +280,9 @@ class FamilyClusteringSystem:
         Returns:
             Tuple of (best_family_id, confidence_score)
         """
+        from src.clustering.distance_calculator import DistanceMetric
         try:
+            distance_metric = DistanceMetric.L2_DISTANCE
             best_family_id = None
             best_distance = float('inf')
             
@@ -315,7 +317,7 @@ class FamilyClusteringSystem:
                     continue
                 
                 distance = self.distance_calculator.calculate_distance(
-                    model_weights, centroid_weights
+                    model_weights, centroid_weights, distance_metric
                 )
                 
                 if distance < best_distance:

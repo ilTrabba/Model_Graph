@@ -12,10 +12,17 @@ OPERAZIONI PRELIMINARI DA FARE:
    4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
    5. ✅Valutazione generale del corretto flusso di esecuzione del sistema
 
+NOTE:
+   1. Come cambiare metrica utilizzata:
+       a. nel Clustering (family_clustering.py)-> in find_best_family_match, basta cambiare la metrica passata quando si chiama la funzione calculate_distance
+       b. in MoTHer (Tree_builder.py)-> stessa cosa, nella funzione build_mother_tree cambiare la metrica passata a  calculate_distance 
+   
+   
+
 CLUSTERIZZAZIONE:
 
    1. Effettuare merge con main branch su github per futuri sviluppi
-   2. Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
+   2. ✅Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
    3. Aggiungere campo foundations model come flag check o not nella form per modello
    4. Aggiungere campo a tendina della defaul metric da settare nella form per la fase di clustering in upload del modello (L2, cos, RMS-L2)
    5. Aggiungere un campo un po più tecnico per esperti per settare quali layer includere o meno nel calcolo della distanza durante la fase di clustering (backbone, backbone+embeddings+head)
@@ -23,6 +30,8 @@ CLUSTERIZZAZIONE:
    7. Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
    8. Realizzare una soglia adattiva e una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
    9. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
+
+
 
 MOTHER:
 

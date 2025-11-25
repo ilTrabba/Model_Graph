@@ -23,9 +23,10 @@ logger = logging.getLogger(__name__)
 class DistanceMetric(Enum):
     """Available distance metrics for model comparison"""
     L2_DISTANCE = "l2_distance"
-    MATRIX_RANK = "matrix_rank"
     COSINE_SIMILARITY = "cosine_similarity"
-    AUTO = "auto"  # Automatically choose based on model type
+    HYBRID_DISTANCE = "hybrid_distance"
+    RMS_L2_DISTANCE = "RMS_L2"
+    MAE = "MAE"
 
 class ModelType(Enum):
     """Model types for optimized distance calculation"""
@@ -56,153 +57,129 @@ class ModelDistanceCalculator:
         self.default_metric = default_metric
         # self.layer_filter = layer_filter or get_layer_kinds()
 
-    def calculate_l2_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
+    def calculate_l2_layer_distance(self, tensor1: torch.Tensor, tensor2: torch.Tensor) -> float:
         """
-        Calculate L2 distance between two sets of model weights.
-        
-        Only includes structural layers (attention, feedforward, convolutions, etc.)
-        and excludes normalization, embedding, and head layers.
+        Calculate L2 distance between two tensors (single layer).
         
         Args:
-            weights1: First model's normalized weights
-            weights2: Second model's normalized weights
+            tensor1: First tensor
+            tensor2: Second tensor
             
         Returns:
-            Average L2 distance across common parameters, or inf if no valid layers
+            L2 distance as float
         """
-        try:
-            # Get common parameters (intersection)
-            common_params = set(weights1.keys()) & set(weights2.keys())
-            
-            if not common_params:
-                logger.warning("No common parameters found between models")
-                return float('inf')
-            
-            logger.debug(f"Found {len(common_params)} common parameters")
-            
-            total_distance = 0.0
-            param_count = 0
-            excluded_count = 0
-            
-            for param_name in common_params:
+        diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+        l2_dist = np.linalg.norm(diff.flatten())
+        return l2_dist
 
-                # Convert to lowercase once for case-insensitive matching
-                param_lower = param_name.lower()
-                
-                # Exclude layers matching any pattern in blacklist
-                if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
-                    excluded_count += 1
-                    continue
-                
-                tensor1 = weights1[param_name]
-                tensor2 = weights2[param_name]
-                
-                # Verify both are tensors
-                if not (isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor)):
-                    logger.debug(f"Skipping {param_name}: not both tensors")
-                    continue
-                
-                # Ensure same shape
-                if tensor1.shape != tensor2.shape:
-                    logger.warning(
-                        f"Shape mismatch for {param_name}: "
-                        f"{tensor1.shape} vs {tensor2.shape}"
-                    )
-                    continue
-                
-                # Calculate L2 distance
-                diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
-                l2_dist = np.linalg.norm(diff.flatten())
-                total_distance += l2_dist
-                param_count += 1
-            
-            # Log statistics
-            logger.info(
-                f"L2 distance calculation: {param_count} layers included, "
-                f"{excluded_count} layers excluded (normalization/embedding/head)"
-            )
-            
-            if param_count == 0:
-                logger.warning("No valid layers found for distance calculation")
-                return float('inf')
-            
-            # Return average L2 distance
-            avg_distance = total_distance / param_count
-            logger.debug(f"Average L2 distance: {avg_distance:.6f}")
-            
-            return avg_distance
-            
-        except Exception as e:
-            logger.error(f"Failed to calculate L2 distance: {e}", exc_info=True)
-            return float('inf')
-
-    # Potenzialmente da eliminare poichè non usata (in pratica mai usata)
-    def calculate_matrix_rank_distance(self,
-                                      weights1: Dict[str, Any],
-                                      weights2: Dict[str, Any]) -> float:
+    def calculate_cosine_layer_distance(self, tensor1: torch.Tensor, tensor2: torch.Tensor) -> float:
         """
-        Calculate distance based on matrix rank differences (optimized for LoRA models).        
-        For LoRA models, we analyze the rank of weight difference matrices
-        as they typically have low-rank adaptations.
+        Calculate Cosine distance between two tensors (single layer).
+        
+        Args:
+            tensor1: First tensor
+            tensor2: Second tensor
+            
+        Returns:
+            Cosine distance as float, or None if calculation fails (e.g., zero norm)
         """
-        try:
-            total_rank_diff = 0.0
-            param_count = 0
-            
-            # Get common parameters
-            common_params = set(weights1.keys()) & set(weights2.keys())
-            
-            for param_name in common_params:
+        vec1 = tensor1.detach().cpu().numpy().flatten()
+        vec2 = tensor2.detach().cpu().numpy().flatten()
+        
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        
+        # Handle edge case: zero vectors
+        if norm1 == 0 or norm2 == 0:
+            return None
+        
+        dot_product = np.dot(vec1, vec2)
+        cosine_similarity = dot_product / (norm1 * norm2)
+        cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)
+        cosine_dist = 1.0 - cosine_similarity
+        
+        return cosine_dist
 
-                # Filter relevant layers
-                # if not self._should_include_layer(param_name):
-                #     continue
-                    
-                tensor1 = weights1[param_name]
-                tensor2 = weights2[param_name]
-                
-                if isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor):
-                    if tensor1.shape != tensor2.shape:
-                        continue
-                        
-                    # Calculate difference matrix
-                    diff_matrix = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
-                    
-                    # For matrices, calculate rank
-                    if len(diff_matrix.shape) == 2:
-                        rank = np.linalg.matrix_rank(diff_matrix)
-                        max_rank = min(diff_matrix.shape)
-                        normalized_rank = rank / max_rank if max_rank > 0 else 0
-                        total_rank_diff += normalized_rank
-                    else:
-                        # For other tensors, use frobenius norm as fallback
-                        total_rank_diff += np.linalg.norm(diff_matrix)
-                        
-                    param_count += 1
+    def calculate_rms_l2_layer_distance(self, tensor1: torch.Tensor, tensor2: torch.Tensor) -> float:
+        """
+        Calculate RMS-L2 distance between two tensors (single layer).
+        
+        RMS (Root Mean Square) normalizes by the number of elements.
+        
+        Args:
+            tensor1: First tensor
+            tensor2: Second tensor
             
-            if param_count == 0:
-                return float('inf')
-                
-            return total_rank_diff / param_count
+        Returns:
+            RMS-L2 distance as float
+        """
+        diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+        diff_flat = diff.flatten()
+        rms_dist = np.sqrt(np.mean(diff_flat ** 2))
+        return rms_dist
+
+    def calculate_hybrid_layer_distance(self, 
+                                   tensor1: torch.Tensor, 
+                                   tensor2: torch.Tensor) -> float:
+        """
+        Calculate Hybrid distance (α·L2 + (1-α)·Cosine) between two tensors (single layer).
+        
+        Args:
+            tensor1: First tensor
+            tensor2: Second tensor
+            alpha: Weight for L2 distance (0.0 to 1.0)
             
-        except Exception as e:
-            logger.error(f"Error in matrix rank distance calculation: {e}")
-            return float('inf')
+        Returns:
+            Hybrid distance as float, or None if calculation fails
+        """
+        # Variabile per assegnare il giusto "peso" alle 2 metriche (alpha weighting)
+        alpha = 0.3
+
+        # Calculate L2 component
+        l2_dist = self.calculate_l2_layer_distance(tensor1, tensor2)
+        
+        # Calculate Cosine component
+        cosine_dist = self.calculate_cosine_layer_distance(tensor1, tensor2)
+        
+        # If cosine calculation failed (zero norm), return None
+        if cosine_dist is None:
+            return None
+        
+        # Combine with alpha weighting
+        hybrid_dist = alpha * l2_dist + (1 - alpha) * cosine_dist
+        
+        return hybrid_dist
     
-    def calculate_cosine_distance(self, weights1: Dict[str, Any], weights2: Dict[str, Any]) -> float:
+    def calculate_distance(self, 
+                      weights1: Dict[str, Any], 
+                      weights2: Dict[str, Any], 
+                      metric_type: DistanceMetric = None,
+                      excluded_patterns: Optional[frozenset] = None) -> float:
         """
-        Calculate Cosine distance between two sets of model weights.
-        
-        Only includes structural layers (attention, feedforward, convolutions, etc.)
-        and excludes normalization, embedding, and head layers.
+        Calculate distance between two sets of model weights using specified metric.
         
         Args:
             weights1: First model's normalized weights
             weights2: Second model's normalized weights
+            metric_type: Type of distance metric to use. Options: "l2", "cosine", "rms_l2", "hybrid"
+            excluded_patterns: Set of patterns for layers to exclude. If None, uses EXCLUDED_LAYER_PATTERNS
+            alpha: Weight for L2 in hybrid metric (only used when metric_type="hybrid")
             
         Returns:
-            Average Cosine distance across common parameters, or inf if no valid layers
+            Average distance across common parameters, or inf if no valid layers
+            
+        Raises:
+            ValueError: If metric_type is not one of the supported metrics
         """
+        # Validate metric type
+        valid_metrics = [DistanceMetric.L2_DISTANCE, DistanceMetric.COSINE_SIMILARITY, DistanceMetric.RMS_L2_DISTANCE, DistanceMetric.HYBRID_DISTANCE]
+        if metric_type not in valid_metrics:
+            raise logHandler.error_handler(f"Invalid metric_type '{metric_type}'. Must be one of {valid_metrics}","calculate_distance")
+        
+        # Use default excluded patterns if none provided
+        if excluded_patterns is None:
+            excluded_patterns = EXCLUDED_LAYER_PATTERNS
+        
         try:
             # Get common parameters (intersection)
             common_params = set(weights1.keys()) & set(weights2.keys())
@@ -223,7 +200,7 @@ class ModelDistanceCalculator:
                 param_lower = param_name.lower()
                 
                 # Exclude layers matching any pattern in blacklist
-                if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
+                if any(pattern in param_lower for pattern in excluded_patterns):
                     excluded_count += 1
                     continue
                 
@@ -232,106 +209,55 @@ class ModelDistanceCalculator:
                 
                 # Verify both are tensors
                 if not (isinstance(tensor1, torch.Tensor) and isinstance(tensor2, torch.Tensor)):
-                    logger.debug(f"Skipping {param_name}: not both tensors")
+                    logger.info(f"Skipping {param_name}: not both tensors")
                     continue
                 
                 # Ensure same shape
                 if tensor1.shape != tensor2.shape:
-                    logger.warning(
+                    logHandler.warning_handler(
                         f"Shape mismatch for {param_name}: "
-                        f"{tensor1.shape} vs {tensor2.shape}"
+                        f"{tensor1.shape} vs {tensor2.shape}", "calculate_distance"
                     )
                     continue
                 
-                # Calculate Cosine distance
-                # Flatten tensors to 1D vectors
-                vec1 = tensor1.detach().cpu().numpy().flatten()
-                vec2 = tensor2.detach().cpu().numpy().flatten()
+                # Calculate layer distance using appropriate metric
+                if metric_type == DistanceMetric.L2_DISTANCE:
+                    layer_distance = self.calculate_l2_layer_distance(tensor1, tensor2)
+                elif metric_type == DistanceMetric.COSINE_SIMILARITY:
+                    layer_distance = self.calculate_cosine_layer_distance(tensor1, tensor2)
+                elif metric_type == DistanceMetric.RMS_L2_DISTANCE:
+                    layer_distance = self.calculate_rms_l2_layer_distance(tensor1, tensor2)
+                elif metric_type == DistanceMetric.HYBRID_DISTANCE:
+                    layer_distance = self.calculate_hybrid_layer_distance(tensor1, tensor2)
                 
-                # Calculate norms
-                norm1 = np.linalg.norm(vec1)
-                norm2 = np.linalg.norm(vec2)
-                
-                # Handle edge case: zero vectors (should be extremely rare in model weights)
-                if norm1 == 0 or norm2 == 0:
-                    logger.warning(f"Zero norm detected for {param_name}, skipping layer")
+                # Skip layer if distance calculation failed (e.g., zero norm for cosine)
+                if layer_distance is None:
+                    logHandler.warning_handler(f"Distance calculation failed for {param_name}, skipping layer","calculate_distance")
                     continue
                 
-                # Calculate cosine similarity
-                dot_product = np.dot(vec1, vec2)
-                cosine_similarity = dot_product / (norm1 * norm2)
-                
-                # Convert to cosine distance (1 - similarity)
-                # Clamp similarity to [-1, 1] to handle numerical errors
-                cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)
-                cosine_dist = 1.0 - cosine_similarity
-                
-                total_distance += cosine_dist
+                total_distance += layer_distance
                 param_count += 1
             
             # Log statistics
             logger.info(
-                f"Cosine distance calculation: {param_count} layers included, "
-                f"{excluded_count} layers excluded (normalization/embedding/head)"
+                f"{metric_type} distance calculation: {param_count} layers included, "
+                f"{excluded_count} layers excluded"
             )
             
             if param_count == 0:
-                logger.warning("No valid layers found for distance calculation")
+                logHandler.warning_handler("No valid layers found for distance calculation","calculate_distance")
                 return float('inf')
             
-            # Return average Cosine distance
+            # Return average distance
             avg_distance = total_distance / param_count
-            logger.debug(f"Average Cosine distance: {avg_distance:.6f}")
+            logger.info(f"Average {metric_type} distance: {avg_distance:.6f}")
             
             return avg_distance
             
         except Exception as e:
-            logger.error(f"Failed to calculate Cosine distance: {e}", exc_info=True)
+            logHandler.error_handler(f"Failed to calculate {metric_type} distance: {e}","calculate_distance")
             return float('inf')
 
-    def calculate_distance(self, 
-                          model1_weights: Dict[str, Any],
-                          model2_weights: Dict[str, Any],
-                          metric: Optional[DistanceMetric] = None,
-                          model_type: ModelType = ModelType.FULL_FINETUNED) -> float:
-        """
-        Calculate distance between two model weight dictionaries.
-        
-        Args:
-            model1_weights: First model's weights dictionary
-            model2_weights: Second model's weights dictionary  
-            metric: Distance metric to use (overrides default)
-            model_type: Type of models being compared
-            
-        Returns:
-            Distance value (lower means more similar)
-        """
-        try:
-            metric = metric or self.default_metric
-            
-            # Auto-select metric based on model type
-            if metric == DistanceMetric.AUTO:
-                if model_type == ModelType.LORA:
-                    metric = DistanceMetric.MATRIX_RANK
-                else:
-                    metric = DistanceMetric.L2_DISTANCE
-                    
-            logger.debug(f"Using metric: {metric} for model comparison")
-            
-            if metric == DistanceMetric.L2_DISTANCE:
-                return self.calculate_l2_distance(model1_weights, model2_weights)
-            elif metric == DistanceMetric.MATRIX_RANK:
-                return self.calculate_matrix_rank_distance(model1_weights, model2_weights)
-            elif metric == DistanceMetric.COSINE_SIMILARITY:
-                return self.calculate_cosine_distance(model1_weights, model2_weights)
-            else:
-                raise Exception(f"Unsupported distance metric: {metric}")
-                
-        except Exception as e:
-            logHandler.error_handler(e, "calculate_distance")
-            return float('inf')
-
-    # Funzione potenzialmente utile per la realizzazione della soglia adattiva (non usata ma per ora lasciarla)
     def calculate_intra_family_distance(self, family_models: List[Model]) -> float:
         """
         Calculate average intra-family distance.
