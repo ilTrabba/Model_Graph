@@ -13,10 +13,8 @@ from typing import Dict, List, Optional, Any
 from src.log_handler import logHandler
 from ..db_entities.entity import Model
 from enum import Enum
-from src.mother_algorithm.mother_utils import (
-    load_model_weights,
-    EXCLUDED_LAYER_PATTERNS
-)
+from src.utils.architecture_filtering import FilteringPatterns
+from src.mother_algorithm.mother_utils import load_model_weights
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +176,7 @@ class ModelDistanceCalculator:
         
         # Use default excluded patterns if none provided
         if excluded_patterns is None:
-            excluded_patterns = EXCLUDED_LAYER_PATTERNS
+            excluded_patterns = FilteringPatterns.BACKBONE_ONLY
         
         try:
             # Get common parameters (intersection)

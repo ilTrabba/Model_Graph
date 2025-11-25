@@ -15,148 +15,9 @@ from scipy import stats
 from typing import Dict, List, Optional, Any, Tuple
 from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
+from src.utils.architecture_filtering import FilteringPatterns
 
 logger = logging.getLogger(__name__)
-
-# Aggiungi questa costante a livello di modulo (top del file)
-# Lista completa di pattern per layer da ESCLUDERE dal calcolo L2
-
-EXCLUDED_LAYER_PATTERNS_FULL_MODEL = frozenset([
-    # Solo normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-])
-
-EXCLUDED_LAYER_PATTERNS = frozenset([
-    # Normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-    
-    # Embedding layers
-    'embed', 'embedding', 'embeddings',
-    'position_embed', 'positional_embed', 'pos_embed',
-    'token_embed', 'word_embed',
-    'patch_embed',
-    'wte', 'wpe',  # GPT-style embeddings
-    
-    # Head/Output layers
-    'lm_head', 'language_model_head',
-    'classifier', 'classification_head',
-    'head', 
-    'output_projection', 'output_proj',
-    'score', 'scorer',
-    'cls', 'pooler',
-    'prediction_head', 'pred_head',
-    'qa_outputs', 
-    'seq_relationship',
-    
-    # Additional output-specific patterns
-    'logits',
-    'final_layer',
-    'output_layer'
-])
-
-EXCLUDED_LAYER_PATTERNS_BACKBONE_EMBEDDING = frozenset([
-    # Normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-    
-    # Head/Output layers
-    'lm_head', 'language_model_head',
-    'classifier', 'classification_head',
-    'head', 
-    'output_projection', 'output_proj',
-    'score', 'scorer',
-    'cls', 'pooler',
-    'prediction_head', 'pred_head',
-    'qa_outputs', 
-    'seq_relationship',
-    'logits',
-    'final_layer',
-    'output_layer',
-])
-
-EXCLUDED_LAYER_PATTERNS_BACKBONE_HEAD = frozenset([
-    # Normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-    
-    # Embedding layers
-    'embed', 'embedding', 'embeddings',
-    'position_embed', 'positional_embed', 'pos_embed',
-    'token_embed', 'word_embed',
-    'patch_embed',
-    'wte', 'wpe',
-])
-
-EXCLUDED_LAYER_PATTERNS_EMBEDDING_ONLY = frozenset([
-    # Normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-    
-    # Head/Output layers
-    'lm_head', 'language_model_head',
-    'classifier', 'classification_head',
-    'head', 
-    'output_projection', 'output_proj',
-    'score', 'scorer',
-    'cls', 'pooler',
-    'prediction_head', 'pred_head',
-    'qa_outputs', 
-    'seq_relationship',
-    'logits',
-    'final_layer',
-    'output_layer',
-    
-    # Backbone/Attention layers
-    'attention', 'attn', 'self_attn', 'cross_attn',
-    'query', 'key', 'value', 'q_proj', 'k_proj', 'v_proj',
-    'dense', 'intermediate', 'output',
-    'mlp', 'ffn', 'feed_forward',
-    'conv', 'convolution',
-    'linear',
-    'layer.', 'layers.',
-])
-
-EXCLUDED_LAYER_PATTERNS_HEAD_ONLY = frozenset([
-    # Normalization layers
-    'layernorm', 'layer_norm', 'ln_', '.ln.', 
-    'batchnorm', 'batch_norm', 'bn', '.bn.',
-    'groupnorm', 'group_norm', 'gn',
-    'instancenorm', 'instance_norm',
-    'rmsnorm', 'rms_norm',
-    
-    # Embedding layers
-    'embed', 'embedding', 'embeddings',
-    'position_embed', 'positional_embed', 'pos_embed',
-    'token_embed', 'word_embed',
-    'patch_embed',
-    'wte', 'wpe',
-    
-    # Backbone/Attention layers
-    'attention', 'attn', 'self_attn', 'cross_attn',
-    'query', 'key', 'value', 'q_proj', 'k_proj', 'v_proj',
-    'dense', 'intermediate', 'output',
-    'mlp', 'ffn', 'feed_forward',
-    'conv', 'convolution',
-    'linear',
-    'layer.', 'layers.',  # generic layer indexing
-])
 
 # da spulciare bene (forse da eliminare)
 def normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
@@ -223,7 +84,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
             param_lower = param_name.lower()
             
             # Exclude normalization, embedding, and head layers
-            if any(pattern in param_lower for pattern in EXCLUDED_LAYER_PATTERNS):
+            if any(pattern in param_lower for pattern in FilteringPatterns.BACKBONE_ONLY):
                 excluded_count += 1
                 continue
             
