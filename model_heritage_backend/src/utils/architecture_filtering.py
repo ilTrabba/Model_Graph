@@ -1,7 +1,6 @@
 class FilteringPatterns:
     """Predefined layer exclusion patterns for distance calculations"""
     # Lista completa di pattern per layer da ESCLUDERE dal calcolo della distanza
-
     #utilizzando un pattern, vengono esclusi tutti i layer tranne quelli del nome del pattern
 
     FULL_MODEL = frozenset([
