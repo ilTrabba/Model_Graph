@@ -381,7 +381,7 @@ export default function AddModelPage() {
                         <input
                           type="checkbox"
                           checked={formData.tasks.includes(task)}
-                          onChange={() => {}}
+                          readOnly
                           className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
                         />
                         <span className="text-sm">{task}</span>

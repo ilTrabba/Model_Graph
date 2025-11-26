@@ -5,6 +5,7 @@ import logging
 import tempfile
 import re
 import json
+from urllib.parse import urlparse
 
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
@@ -28,15 +29,6 @@ ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 ALLOWED_README_EXTENSIONS = {'md', 'txt'}
 MAX_README_SIZE = 5 * 1024 * 1024  # 5MB
 
-# URL validation regex pattern
-URL_PATTERN = re.compile(
-    r'^https?://'  # http:// or https://
-    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
-    r'localhost|'  # localhost...
-    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-    r'(?::\d+)?'  # optional port
-    r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -44,10 +36,14 @@ def allowed_readme_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_README_EXTENSIONS
 
 def validate_url(url):
-    """Validate URL format using regex"""
+    """Validate URL format using urllib.parse"""
     if not url:
         return True  # Empty URL is valid (optional field)
-    return bool(URL_PATTERN.match(url))
+    try:
+        result = urlparse(url)
+        return all([result.scheme in ('http', 'https'), result.netloc])
+    except Exception:
+        return False
 
 def calculate_file_checksum(file_path):
     """Calculate SHA-256 checksum of file"""
@@ -216,10 +212,8 @@ def upload_model():
         existing = neo4j_service.get_model_by_checksum(checksum)
         if existing:
             os.remove(file_path)  # Clean up duplicate file
-            if readme_uri:
-                readme_full_path = os.path.join(README_FOLDER, f"{model_id}_readme.md")
-                if os.path.exists(readme_full_path):
-                    os.remove(readme_full_path)
+            if readme_uri and os.path.exists(readme_uri):
+                os.remove(readme_uri)
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
         # FIXME: Extract weight signature
