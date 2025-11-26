@@ -1,23 +1,60 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle, Trash2, Eye, EyeOff, X, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+
+const LICENSE_OPTIONS = [
+  { value: '', label: 'Select a license...' },
+  { value: 'MIT', label: 'MIT' },
+  { value: 'Apache-2.0', label: 'Apache 2.0' },
+  { value: 'GPL-3.0', label: 'GPL-3.0' },
+  { value: 'BSD-3-Clause', label: 'BSD-3-Clause' },
+  { value: 'CC-BY-NC-4.0', label: 'CC BY-NC 4.0' },
+  { value: 'Proprietary', label: 'Proprietary' },
+  { value: 'Other', label: 'Other' }
+];
+
+const TASK_OPTIONS = [
+  'Text Generation',
+  'Image Classification', 
+  'Object Detection',
+  'Text Classification',
+  'Question Answering',
+  'Translation',
+  'Summarization',
+  'Image-to-Text',
+  'Text-to-Image',
+  'Other'
+];
+
+// URL validation regex
+const URL_REGEX = /^https?:\/\/(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:\/?|[/?]\S+)$/i;
 
 export default function AddModelPage() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    file: null
+    file: null,
+    license: '',
+    customLicense: '',
+    tasks: [],
+    datasetUrl: '',
+    readmeFile: null,
+    isFoundationModel: false
   });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [showFoundationModel, setShowFoundationModel] = useState(false);
+  const [datasetUrlError, setDatasetUrlError] = useState(null);
+  const [showTaskDropdown, setShowTaskDropdown] = useState(false);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -30,6 +67,26 @@ export default function AddModelPage() {
     }
   };
 
+  const handleReadmeFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['md', 'txt'].includes(ext)) {
+        setError('README file must be .md or .txt');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('README file must be less than 5MB');
+        return;
+      }
+      setFormData(prev => ({
+        ...prev,
+        readmeFile: file
+      }));
+      setError(null);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -38,19 +95,67 @@ export default function AddModelPage() {
     }));
   };
 
+  const handleDatasetUrlChange = (e) => {
+    const value = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      datasetUrl: value
+    }));
+    
+    // Validate URL
+    if (value && !URL_REGEX.test(value)) {
+      setDatasetUrlError('Please enter a valid URL');
+    } else {
+      setDatasetUrlError(null);
+    }
+  };
+
+  const handleLicenseChange = (e) => {
+    const value = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      license: value,
+      customLicense: value !== 'Other' ? '' : prev.customLicense
+    }));
+  };
+
+  const handleTaskToggle = (task) => {
+    setFormData(prev => {
+      const tasks = prev.tasks.includes(task)
+        ? prev.tasks.filter(t => t !== task)
+        : [...prev.tasks, task];
+      return { ...prev, tasks };
+    });
+  };
+
+  const removeTask = (task) => {
+    setFormData(prev => ({
+      ...prev,
+      tasks: prev.tasks.filter(t => t !== task)
+    }));
+  };
+
   const handleReset = () => {
     setFormData({
       name: '',
       description: '',
-      file: null
+      file: null,
+      license: '',
+      customLicense: '',
+      tasks: [],
+      datasetUrl: '',
+      readmeFile: null,
+      isFoundationModel: false
     });
     setError(null);
     setSuccess(null);
+    setDatasetUrlError(null);
+    setShowFoundationModel(false);
     // Reset anche l'input file
     const fileInput = document.getElementById('file');
-    if (fileInput) {
-      fileInput.value = '';
-    }
+    const readmeInput = document.getElementById('readme-file');
+    if (fileInput) fileInput.value = '';
+    if (readmeInput) readmeInput.value = '';
   };
 
   const handleSubmit = async (e) => {
@@ -58,6 +163,11 @@ export default function AddModelPage() {
     
     if (!formData.file) {
       setError('Please select a file to upload');
+      return;
+    }
+
+    if (datasetUrlError) {
+      setError('Please fix the dataset URL before submitting');
       return;
     }
 
@@ -70,6 +180,24 @@ export default function AddModelPage() {
       formDataToSend.append('file', formData.file);
       formDataToSend.append('name', formData.name || formData.file.name);
       formDataToSend.append('description', formData.description);
+      
+      // New fields
+      const licenseValue = formData.license === 'Other' ? formData.customLicense : formData.license;
+      if (licenseValue) formDataToSend.append('license', licenseValue);
+      
+      if (formData.tasks.length > 0) {
+        formDataToSend.append('task', formData.tasks.join(','));
+      }
+      
+      if (formData.datasetUrl) {
+        formDataToSend.append('dataset_url', formData.datasetUrl);
+      }
+      
+      if (formData.readmeFile) {
+        formDataToSend.append('readme_file', formData.readmeFile);
+      }
+      
+      formDataToSend.append('is_foundation_model', formData.isFoundationModel.toString());
 
       const response = await fetch('http://localhost:5001/api/models', {
         method: 'POST',
@@ -191,6 +319,208 @@ export default function AddModelPage() {
                 placeholder="Describe your model, its purpose, training details, etc."
                 rows={4}
               />
+            </div>
+
+            {/* License */}
+            <div className="space-y-2">
+              <Label htmlFor="license">License (Optional)</Label>
+              <select
+                id="license"
+                name="license"
+                value={formData.license}
+                onChange={handleLicenseChange}
+                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                {LICENSE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {formData.license === 'Other' && (
+                <Input
+                  id="customLicense"
+                  name="customLicense"
+                  type="text"
+                  value={formData.customLicense}
+                  onChange={handleInputChange}
+                  placeholder="Enter custom license name"
+                  className="mt-2"
+                />
+              )}
+            </div>
+
+            {/* Tasks Multi-Select */}
+            <div className="space-y-2">
+              <Label>Tasks (Optional)</Label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowTaskDropdown(!showTaskDropdown)}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                >
+                  <span className="text-gray-500">
+                    {formData.tasks.length === 0 
+                      ? 'Select tasks...' 
+                      : `${formData.tasks.length} task(s) selected`
+                    }
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showTaskDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showTaskDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {TASK_OPTIONS.map(task => (
+                      <div
+                        key={task}
+                        onClick={() => handleTaskToggle(task)}
+                        className={`flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100 ${
+                          formData.tasks.includes(task) ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.tasks.includes(task)}
+                          onChange={() => {}}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
+                        />
+                        <span className="text-sm">{task}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Selected Tasks as Badges */}
+              {formData.tasks.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.tasks.map(task => (
+                    <Badge key={task} variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                      {task}
+                      <button
+                        type="button"
+                        onClick={() => removeTask(task)}
+                        className="ml-1 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Dataset URL */}
+            <div className="space-y-2">
+              <Label htmlFor="datasetUrl">Dataset URL (Optional)</Label>
+              <div className="relative">
+                <Input
+                  id="datasetUrl"
+                  name="datasetUrl"
+                  type="url"
+                  value={formData.datasetUrl}
+                  onChange={handleDatasetUrlChange}
+                  placeholder="https://huggingface.co/datasets/..."
+                  className={datasetUrlError ? 'border-red-500 focus-visible:ring-red-500' : formData.datasetUrl && !datasetUrlError ? 'border-green-500 focus-visible:ring-green-500' : ''}
+                />
+                {formData.datasetUrl && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {datasetUrlError ? (
+                      <AlertCircle className="h-4 w-4 text-red-500" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {datasetUrlError && (
+                <p className="text-xs text-red-500">{datasetUrlError}</p>
+              )}
+              <p className="text-xs text-gray-500">Link to dataset on HuggingFace, GitHub, or Kaggle</p>
+            </div>
+
+            {/* README File Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="readme-file">README File (Optional)</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                <input
+                  id="readme-file"
+                  type="file"
+                  accept=".md,.txt"
+                  onChange={handleReadmeFileChange}
+                  className="hidden"
+                />
+                <label htmlFor="readme-file" className="cursor-pointer">
+                  <FileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600">
+                    Click to upload README
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    .md or .txt files, max 5MB
+                  </p>
+                </label>
+              </div>
+              
+              {formData.readmeFile && (
+                <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-4 w-4" />
+                    <span>{formData.readmeFile.name}</span>
+                    <span className="text-gray-400">({formatFileSize(formData.readmeFile.size)})</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, readmeFile: null }));
+                      const input = document.getElementById('readme-file');
+                      if (input) input.value = '';
+                    }}
+                    className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Foundation Model Toggle */}
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFoundationModel(!showFoundationModel)}
+                  className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+                  title="This field indicates if the model is a foundation/base model"
+                >
+                  {showFoundationModel ? (
+                    <Eye className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <EyeOff className="h-5 w-5" />
+                  )}
+                  <span className="text-sm font-medium">Foundation Model</span>
+                </button>
+              </div>
+              
+              <div 
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  showFoundationModel ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'
+                }`}
+              >
+                <div className="flex items-center space-x-2 pt-2">
+                  <input
+                    type="checkbox"
+                    id="isFoundationModel"
+                    checked={formData.isFoundationModel}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isFoundationModel: e.target.checked }))}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="isFoundationModel" className="text-sm font-normal">
+                    This is a foundation/base model
+                  </Label>
+                </div>
+              </div>
             </div>
 
             {/* Error Alert */}

@@ -9,22 +9,39 @@ import {
   Database,
   TrendingUp,
   GitBranch,
-  Info
+  Info,
+  Scale,
+  Tag,
+  Link as LinkIcon,
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export default function ModelDetailPage() {
   const { id } = useParams();
   const [model, setModel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [readmeContent, setReadmeContent] = useState(null);
+  const [readmeLoading, setReadmeLoading] = useState(false);
 
   useEffect(() => {
     fetchModel();
   }, [id]);
+
+  useEffect(() => {
+    if (model?.readme_uri) {
+      fetchReadme();
+    }
+  }, [model?.readme_uri]);
 
   const fetchModel = async () => {
     try {
@@ -36,6 +53,23 @@ export default function ModelDetailPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchReadme = async () => {
+    if (!model?.readme_uri) return;
+    
+    setReadmeLoading(true);
+    try {
+      const response = await fetch(`http://localhost:5001/api/models/${id}/readme`);
+      if (response.ok) {
+        const data = await response.json();
+        setReadmeContent(data.content);
+      }
+    } catch (err) {
+      console.error('Failed to fetch README:', err);
+    } finally {
+      setReadmeLoading(false);
     }
   };
 
@@ -53,6 +87,28 @@ export default function ModelDetailPage() {
       case 'error': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getDatasetVerificationBadge = (verified) => {
+    if (verified === null || verified === undefined) {
+      return { text: '🟡 Verifying', className: 'bg-yellow-100 text-yellow-800' };
+    }
+    if (verified === true) {
+      return { text: '🟢 Verified', className: 'bg-green-100 text-green-800' };
+    }
+    return { text: '🔴 Unverified', className: 'bg-red-100 text-red-800' };
+  };
+
+  const getLicenseColor = (license) => {
+    const colors = {
+      'MIT': 'bg-green-100 text-green-800',
+      'Apache-2.0': 'bg-orange-100 text-orange-800',
+      'GPL-3.0': 'bg-blue-100 text-blue-800',
+      'BSD-3-Clause': 'bg-purple-100 text-purple-800',
+      'CC-BY-NC-4.0': 'bg-pink-100 text-pink-800',
+      'Proprietary': 'bg-red-100 text-red-800'
+    };
+    return colors[license] || 'bg-gray-100 text-gray-800';
   };
 
   if (loading) {
@@ -91,10 +147,36 @@ export default function ModelDetailPage() {
         
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{model.name}</h1>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-3xl font-bold text-gray-900">{model.name}</h1>
+              {model.is_foundation_model && (
+                <Badge className="bg-purple-100 text-purple-800">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Foundation
+                </Badge>
+              )}
+            </div>
             {model.description && (
               <p className="text-gray-600 max-w-2xl">{model.description}</p>
             )}
+            
+            {/* Tags row */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {model.license && (
+                <Badge className={getLicenseColor(model.license)}>
+                  <Scale className="h-3 w-3 mr-1" />
+                  {model.license}
+                </Badge>
+              )}
+              {model.task && model.task.length > 0 && (
+                model.task.map((task, index) => (
+                  <Badge key={index} variant="outline" className="text-blue-700 border-blue-300">
+                    <Tag className="h-3 w-3 mr-1" />
+                    {task}
+                  </Badge>
+                ))
+              )}
+            </div>
           </div>
           <Badge className={getStatusColor(model.status)}>
             {model.status}
@@ -220,6 +302,82 @@ export default function ModelDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Dataset URL */}
+          {model.dataset_url && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <LinkIcon className="h-5 w-5" />
+                  <span>Dataset</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <a 
+                    href={model.dataset_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1 truncate max-w-[80%]"
+                  >
+                    {model.dataset_url}
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                  </a>
+                  <Badge className={getDatasetVerificationBadge(model.dataset_url_verified).className}>
+                    {getDatasetVerificationBadge(model.dataset_url_verified).text}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* README */}
+          {model.readme_uri && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <FileText className="h-5 w-5" />
+                  <span>README</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {readmeLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : readmeContent ? (
+                  <div className="prose prose-sm max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({node, inline, className, children, ...props}) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return !inline && match ? (
+                            <SyntaxHighlighter
+                              style={oneDark}
+                              language={match[1]}
+                              PreTag="div"
+                              {...props}
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          ) : (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          );
+                        }
+                      }}
+                    >
+                      {readmeContent}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">Failed to load README content</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}

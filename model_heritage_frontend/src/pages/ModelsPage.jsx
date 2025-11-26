@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, FileText, Users, Clock } from 'lucide-react';
+import { Search, FileText, Users, Clock, Scale, Tag, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +47,18 @@ export default function ModelsPage() {
       case 'error': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getLicenseColor = (license) => {
+    const colors = {
+      'MIT': 'bg-green-100 text-green-800',
+      'Apache-2.0': 'bg-orange-100 text-orange-800',
+      'GPL-3.0': 'bg-blue-100 text-blue-800',
+      'BSD-3-Clause': 'bg-purple-100 text-purple-800',
+      'CC-BY-NC-4.0': 'bg-pink-100 text-pink-800',
+      'Proprietary': 'bg-red-100 text-red-800'
+    };
+    return colors[license] || 'bg-gray-100 text-gray-800';
   };
 
   if (loading) {
@@ -117,7 +129,12 @@ export default function ModelsPage() {
               <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg truncate">{model.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg truncate">{model.name}</CardTitle>
+                      {model.is_foundation_model && (
+                        <Sparkles className="h-4 w-4 text-purple-600" title="Foundation Model" />
+                      )}
+                    </div>
                     <Badge className={getStatusColor(model.status)}>
                       {model.status}
                     </Badge>
@@ -159,7 +176,23 @@ export default function ModelsPage() {
                       </div>
                     )}
                     
-                    <div className="flex items-center space-x-1 text-gray-400 pt-2">
+                    {/* New badges row */}
+                    <div className="flex flex-wrap gap-1 pt-2">
+                      {model.license && (
+                        <Badge className={`text-xs ${getLicenseColor(model.license)}`}>
+                          <Scale className="h-3 w-3 mr-1" />
+                          {model.license}
+                        </Badge>
+                      )}
+                      {model.task && model.task.length > 0 && (
+                        <Badge variant="outline" className="text-xs text-blue-700 border-blue-300">
+                          <Tag className="h-3 w-3 mr-1" />
+                          {model.task.length > 1 ? `${model.task.length} tasks` : model.task[0]}
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center space-x-1 text-gray-400 pt-1">
                       <Clock className="h-3 w-3" />
                       <span className="text-xs">
                         {new Date(model.created_at).toLocaleDateString()}

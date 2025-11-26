@@ -3,6 +3,8 @@ import hashlib
 import uuid
 import logging
 import tempfile
+import re
+import json
 
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
@@ -21,10 +23,31 @@ models_bp = Blueprint('models', __name__)
 mgmt_system = ModelManagementSystem()
 
 MODEL_FOLDER = Config.MODEL_FOLDER
+README_FOLDER = 'readmes'
 ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
+ALLOWED_README_EXTENSIONS = {'md', 'txt'}
+MAX_README_SIZE = 5 * 1024 * 1024  # 5MB
+
+# URL validation regex pattern
+URL_PATTERN = re.compile(
+    r'^https?://'  # http:// or https://
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+    r'localhost|'  # localhost...
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+    r'(?::\d+)?'  # optional port
+    r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def allowed_readme_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_README_EXTENSIONS
+
+def validate_url(url):
+    """Validate URL format using regex"""
+    if not url:
+        return True  # Empty URL is valid (optional field)
+    return bool(URL_PATTERN.match(url))
 
 def calculate_file_checksum(file_path):
     """Calculate SHA-256 checksum of file"""
@@ -112,6 +135,38 @@ def upload_model():
     name = request.form.get('name', file.filename)
     description = request.form.get('description', '')
     model_id = str(uuid.uuid4())
+    
+    # Get new optional fields
+    license_value = request.form.get('license', '')
+    task_value = request.form.get('task', '')  # Comma-separated string from frontend
+    dataset_url = request.form.get('dataset_url', '')
+    is_foundation_model = request.form.get('is_foundation_model', 'false').lower() == 'true'
+    
+    # Validate dataset URL if provided
+    if dataset_url and not validate_url(dataset_url):
+        return jsonify({'error': 'Invalid dataset URL format'}), 400
+    
+    # Handle README file upload
+    readme_uri = None
+    readme_file = request.files.get('readme_file')
+    if readme_file and readme_file.filename:
+        if not allowed_readme_file(readme_file.filename):
+            return jsonify({'error': 'Invalid README file type. Allowed: .md, .txt'}), 400
+        
+        # Check file size
+        readme_file.seek(0, 2)  # Seek to end
+        file_size = readme_file.tell()
+        readme_file.seek(0)  # Reset to beginning
+        
+        if file_size > MAX_README_SIZE:
+            return jsonify({'error': 'README file too large. Maximum size is 5MB'}), 400
+        
+        # Save README file
+        os.makedirs(README_FOLDER, exist_ok=True)
+        readme_filename = secure_filename(f"{model_id}_readme.md")
+        readme_path = os.path.join(README_FOLDER, readme_filename)
+        readme_file.save(readme_path)
+        readme_uri = f"readmes/{readme_filename}"
 
     # Leggi il file in memoria
     file_bytes = file.read()
@@ -161,10 +216,17 @@ def upload_model():
         existing = neo4j_service.get_model_by_checksum(checksum)
         if existing:
             os.remove(file_path)  # Clean up duplicate file
+            if readme_uri:
+                readme_full_path = os.path.join(README_FOLDER, f"{model_id}_readme.md")
+                if os.path.exists(readme_full_path):
+                    os.remove(readme_full_path)
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
         # FIXME: Extract weight signature
         signature = extract_weight_signature_stub(file_path)
+        
+        # Parse task as list if comma-separated
+        task_list = [t.strip() for t in task_value.split(',') if t.strip()] if task_value else []
 
         # Create model record
         model_data = {
@@ -178,7 +240,14 @@ def upload_model():
             'structural_hash': signature['structural_hash'],
             'status': 'processing',
             'weights_uri': 'weights/' + filename,
-            'created_at': datetime.now(timezone.utc).isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            # New optional fields
+            'license': license_value if license_value else None,
+            'task': task_list,
+            'dataset_url': dataset_url if dataset_url else None,
+            'dataset_url_verified': None if dataset_url else None,  # null = pending verification
+            'readme_uri': readme_uri,
+            'is_foundation_model': is_foundation_model
         }
         
         # Save to Neo4j
@@ -224,6 +293,37 @@ def list_families():
         'families': families_data,
         'total': len(families_data)
     })
+
+@models_bp.route('/models/<model_id>/readme', methods=['GET'])
+def get_model_readme(model_id):
+    """Get README content for a model"""
+    try:
+        model = neo4j_service.get_model_by_id(model_id)
+        
+        if not model:
+            return jsonify({'error': 'Model not found'}), 404
+        
+        readme_uri = model.readme_uri
+        if not readme_uri:
+            return jsonify({'error': 'No README available for this model'}), 404
+        
+        # Read README file
+        readme_path = readme_uri  # readme_uri is already relative path like "readmes/xxx_readme.md"
+        if not os.path.exists(readme_path):
+            return jsonify({'error': 'README file not found'}), 404
+        
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            'model_id': model_id,
+            'content': content,
+            'readme_uri': readme_uri
+        })
+        
+    except Exception as e:
+        logHandler.error_handler(e, "get_model_readme")
+        return jsonify({'error': 'Failed to retrieve README', 'details': str(e)}), 500
 
 @models_bp.route('/families/<family_id>/models', methods=['GET'])
 def get_family_models(family_id):

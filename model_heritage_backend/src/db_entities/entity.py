@@ -78,6 +78,30 @@ class Model:
     def processed_at(self):
         return self.data.get('processed_at')
     
+    @property
+    def license(self):
+        return self.data.get('license')
+    
+    @property
+    def task(self):
+        return self.data.get('task')
+    
+    @property
+    def dataset_url(self):
+        return self.data.get('dataset_url')
+    
+    @property
+    def dataset_url_verified(self):
+        return self.data.get('dataset_url_verified')
+    
+    @property
+    def readme_uri(self):
+        return self.data.get('readme_uri')
+    
+    @property
+    def is_foundation_model(self):
+        return self.data.get('is_foundation_model', False)
+    
     def to_dict(self):
         """Convert to dictionary format"""
         return {
@@ -95,7 +119,13 @@ class Model:
             'checksum': self.checksum,
             'file_path': self.file_path,
             'created_at': self.created_at,
-            'processed_at': self.processed_at
+            'processed_at': self.processed_at,
+            'license': self.license,
+            'task': self.task,
+            'dataset_url': self.dataset_url,
+            'dataset_url_verified': self.dataset_url_verified,
+            'readme_uri': self.readme_uri,
+            'is_foundation_model': self.is_foundation_model
         }
 
 class Family:

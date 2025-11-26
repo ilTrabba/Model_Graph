@@ -108,12 +108,25 @@ class Neo4jService:
                     m.confidence_score = $confidence_score,
                     m.created_at = $created_at,
                     m.processed_at = $processed_at,
-                    m.color = $color
+                    m.color = $color,
+                    m.license = $license,
+                    m.task = $task,
+                    m.dataset_url = $dataset_url,
+                    m.dataset_url_verified = $dataset_url_verified,
+                    m.readme_uri = $readme_uri,
+                    m.is_foundation_model = $is_foundation_model
                 RETURN m.id as model_id, labels(m) as labels, properties(m) as props
                 """
                 
                 # Calculate file size in MB (rough estimate)
                 weights_size_mb = (model_data.get('total_parameters', 0) * 4) / (1024 * 1024)  # float32 assumption
+                
+                # Handle task as a list or convert from comma-separated string
+                task_value = model_data.get('task')
+                if isinstance(task_value, str) and task_value:
+                    task_value = [t.strip() for t in task_value.split(',')]
+                elif not task_value:
+                    task_value = []
                 
                 params = {
                     'id': model_data['id'],
@@ -134,7 +147,13 @@ class Neo4jService:
                     'confidence_score': model_data.get('confidence_score', 0.0),
                     'created_at': model_data.get('created_at', ''),
                     'processed_at': model_data.get('processed_at', ''),
-                    'color': model_data.get('color', 'gray')
+                    'color': model_data.get('color', 'gray'),
+                    'license': model_data.get('license'),
+                    'task': task_value,
+                    'dataset_url': model_data.get('dataset_url'),
+                    'dataset_url_verified': model_data.get('dataset_url_verified'),
+                    'readme_uri': model_data.get('readme_uri'),
+                    'is_foundation_model': model_data.get('is_foundation_model', False)
                 }
                 
                 logger.info(f"Attempting to upsert Model node with id: {model_id}")

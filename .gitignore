@@ -20,7 +20,9 @@ model_heritage_backend/uploads/*.pth
 model_heritage_backend/uploads/*.bin
 model_heritage_backend/uploads/*.safetensors
 model_heritage_backend/weights
+model_heritage_backend/readmes
 weights/
+readmes/
 node_modules/
 __pycache__/
 *.pyc
