@@ -3,8 +3,6 @@ import hashlib
 import uuid
 import logging
 import tempfile
-import re
-import json
 from urllib.parse import urlparse
 
 from safetensors import safe_open
