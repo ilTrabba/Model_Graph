@@ -16,6 +16,8 @@ OPERAZIONI PRELIMINARI DA FARE:
 
 
 NOTE:
+
+   0. Chiarire come stabilire l'unicità di un modello (del file safetensors)
    1. Come cambiare metrica utilizzata:
        a. nel Clustering (family_clustering.py)-> in find_best_family_match, basta cambiare la metrica passata quando si chiama la funzione calculate_distance
        b. in MoTHer (Tree_builder.py)-> stessa cosa, nella funzione build_mother_tree cambiare la metrica passata a  calculate_distance 
@@ -54,6 +56,8 @@ ULTERIORI OBIETTIVI PROGETTUALI:
    8.	Testare modelli massivi e vedere come il sistema reagisce
    9.	Valutare l’utilizzo di nuove metriche al posto della L2 norm
 
+
+
 ALTRO:
 
    1.	Rileggere e comprendere meglio i paper:
@@ -63,6 +67,8 @@ ALTRO:
    2.	Realizzare un logo custom per il sistema
    3.	Realizzare un portale di login per admin
    4.	Family locks
+
+
 
 OBIETTIVI NON INTEGRATI (per ovvie ragioni):
 
