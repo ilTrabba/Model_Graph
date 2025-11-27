@@ -6,7 +6,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
-
 class URLVerificationService:
     """Service for asynchronously verifying dataset URLs in the background."""
     
