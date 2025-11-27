@@ -50,11 +50,7 @@ export default function ModelsPage() {
     
     // Task filter (OR logic: model must have at least ONE selected task)
     const matchesTasks = selectedTasks.length === 0 || 
-      (model.task && selectedTasks.some(task => 
-        Array.isArray(model.task) 
-          ? model.task.includes(task) 
-          : model.task.includes(task)
-      ));
+      (model.task && model.task.length > 0 && selectedTasks.some(task => model.task.includes(task)));
     
     // Combined: name AND task
     return matchesName && matchesTasks;

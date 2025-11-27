@@ -48,11 +48,9 @@ const PopoverContent = React.forwardRef(({ children, className, align = "start",
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (contentRef.current && !contentRef.current.contains(event.target)) {
-        // Check if click is on trigger
+        // Check if click is on trigger - close if click is outside the popover root
         const popoverRoot = contentRef.current.closest('.relative.inline-block')
-        if (popoverRoot && !popoverRoot.contains(event.target)) {
-          setIsOpen(false)
-        } else if (!popoverRoot?.contains(event.target)) {
+        if (!popoverRoot || !popoverRoot.contains(event.target)) {
           setIsOpen(false)
         }
       }

@@ -1,6 +1,5 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -149,7 +148,3 @@ class URLVerificationService:
             logger.info("URL verification scheduler stopped")
         except Exception as e:
             logger.error(f"Error stopping URL verification scheduler: {e}")
-
-
-# Will be initialized in main.py
-url_verification_service: Optional[URLVerificationService] = None
