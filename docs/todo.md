@@ -11,6 +11,9 @@ OPERAZIONI PRELIMINARI DA FARE:
       e.	✅ Capire effettivamente quali layer sono utili alla causa (config serve?)
    4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
    5. ✅ Valutazione generale del corretto flusso di esecuzione del sistema
+   6. Aggiornare campi inutili nelle strutture dati su neo4j
+
+
 
 NOTE:
    1. Come cambiare metrica utilizzata:
@@ -23,11 +26,12 @@ CLUSTERIZZAZIONE:
 
    1. ✅ Effettuare merge con main branch su github per futuri sviluppi
    2. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
-   3. Aggiungere campo foundations model come flag check o not nella form per modello
+   3. ✅ Aggiungere campo foundations model come flag check o not nella form per modello
    4. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
-   5. Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
-   6. Realizzare una soglia adattiva e una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
-   7. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
+   5. Implementare la meccanica dei foundation model
+   6. Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
+   7. Realizzare una soglia adattiva e una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
+   8. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
 
 
 
@@ -36,16 +40,19 @@ MOTHER:
    1. Possibile ottimizzazione della gestione della matrice delle distanze
    2. Anche in MoTher provare/testare altre metriche di distanza, magari quelle valutate durante il clustering
 
+
+
 ULTERIORI OBIETTIVI PROGETTUALI:
 
    1. Eliminazione di un modello dal sistema o correzione inserimento(unica parziale soluzione a possibili errori di associazione tra modelli)
-   2. Aggiungere dei nuovi campi nella form di inserimento di un modello nel sistema, aumentando così il dettaglio di una model card e allo stesso tempo facilitare potenzialmente il lavoro di un LLM. Campi da considerare: 
-   3. Realizzare una vista (box view), accessibile tramite model card singola o creando una sezione dedicata, che mostri la famiglia (ad albero) del relativo modello di interesse.
-   4.	Creare un modello in grado di elaborare prompt in NL e interpretarlo come query cypher, utile per cercare modelli o interrogare la knowledge generale accumulata dal sistema. Inizialmente sarà necessario concentrarsi su query semplici e poi successivamente più complesse (facenti uso di tag dedicati)
-   5.	Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene
-   6.	Scelta di nuovi modelli per l’ampliamento del dataset con l’obiettivo di estendere il sistema su scala massiva
-   7.	Testare modelli massivi e vedere come il sistema reagisce
-   8.	Valutare l’utilizzo di nuove metriche al posto della L2 norm
+   2. ✅ Aggiungere dei nuovi campi nella form di inserimento di un modello nel sistema, aumentando così il dettaglio di una model card e allo stesso tempo facilitare potenzialmente il lavoro di un LLM. 
+   3. Implementare l'operazione di download tramite fingerprint dei file safetensors originali
+   4. Realizzare una vista (box view), accessibile tramite model card singola o creando una sezione dedicata, che mostri la famiglia (ad albero) del relativo modello di interesse.
+   5.	Creare un modello in grado di elaborare prompt in NL e interpretarlo come query cypher, utile per cercare modelli o interrogare la knowledge generale accumulata dal sistema. Inizialmente sarà necessario concentrarsi su query semplici e poi successivamente più complesse (facenti uso di tag dedicati)
+   6.	Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene.
+   7.	Scelta di nuovi modelli per l’ampliamento del dataset con l’obiettivo di estendere il sistema su scala massiva
+   8.	Testare modelli massivi e vedere come il sistema reagisce
+   9.	Valutare l’utilizzo di nuove metriche al posto della L2 norm
 
 ALTRO:
 
