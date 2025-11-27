@@ -63,7 +63,8 @@ class Neo4jService:
             "CREATE INDEX model_family_idx IF NOT EXISTS FOR (m:Model) ON (m.family_id)",
             "CREATE INDEX model_status_idx IF NOT EXISTS FOR (m:Model) ON (m.status)",
             "CREATE INDEX family_pattern_idx IF NOT EXISTS FOR (f:Family) ON (f.structural_pattern_hash)",
-            "CREATE INDEX centroid_family_idx IF NOT EXISTS FOR (c:Centroid) ON (c.family_id)"
+            "CREATE INDEX centroid_family_idx IF NOT EXISTS FOR (c:Centroid) ON (c.family_id)",
+            "CREATE INDEX dataset_verification_idx IF NOT EXISTS FOR (m:Model) ON (m.dataset_url_verified)"
         ]
         
         try:

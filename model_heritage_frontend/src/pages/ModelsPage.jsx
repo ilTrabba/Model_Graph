@@ -1,14 +1,29 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, FileText, Users, Clock, Scale, Tag, Sparkles } from 'lucide-react';
+import { Search, FileText, Users, Clock, Scale, Tag, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+
+const PREDEFINED_TASKS = [
+  'Text Generation',
+  'Image Classification',
+  'Object Detection',
+  'Text Classification',
+  'Question Answering',
+  'Translation',
+  'Summarization',
+  'Image-to-Text',
+  'Text-to-Image',
+  'Other'
+];
 
 export default function ModelsPage() {
   const [models, setModels] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTasks, setSelectedTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -29,9 +44,21 @@ export default function ModelsPage() {
     }
   };
 
-  const filteredModels = models.filter(model =>
-    model.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredModels = models.filter(model => {
+    // Name filter
+    const matchesName = model.name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Task filter (OR logic: model must have at least ONE selected task)
+    const matchesTasks = selectedTasks.length === 0 || 
+      (model.task && selectedTasks.some(task => 
+        Array.isArray(model.task) 
+          ? model.task.includes(task) 
+          : model.task.includes(task)
+      ));
+    
+    // Combined: name AND task
+    return matchesName && matchesTasks;
+  });
 
   const formatNumber = (num) => {
     if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
@@ -87,7 +114,7 @@ export default function ModelsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Model Catalog</h1>
         
-        <div className="flex items-center space-x-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
@@ -98,25 +125,89 @@ export default function ModelsPage() {
               className="pl-10"
             />
           </div>
-          <div className="text-sm text-gray-500">
+          
+          {/* Task filter */}
+          <div className="flex gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="min-w-[200px] justify-between">
+                  🏷️ Filter by tasks
+                  {selectedTasks.length > 0 && (
+                    <Badge className="ml-2 bg-blue-100 text-blue-800">{selectedTasks.length}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[250px] p-4">
+                <div className="space-y-2">
+                  {PREDEFINED_TASKS.map(task => (
+                    <label key={task} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={selectedTasks.includes(task)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTasks([...selectedTasks, task]);
+                          } else {
+                            setSelectedTasks(selectedTasks.filter(t => t !== task));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm">{task}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+            
+            {/* Clear filter button */}
+            {selectedTasks.length > 0 && (
+              <Button 
+                variant="ghost" 
+                onClick={() => setSelectedTasks([])}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                Clear Filter
+              </Button>
+            )}
+          </div>
+          
+          <div className="text-sm text-gray-500 self-center">
             {filteredModels.length} of {models.length} models
           </div>
         </div>
+        
+        {/* Selected tasks display (chips/badges) */}
+        {selectedTasks.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {selectedTasks.map(task => (
+              <Badge 
+                key={task} 
+                variant="secondary"
+                className="flex items-center gap-1 cursor-pointer hover:bg-gray-200 transition-colors"
+                onClick={() => setSelectedTasks(selectedTasks.filter(t => t !== task))}
+              >
+                {task}
+                <X className="h-3 w-3" />
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
 
       {filteredModels.length === 0 ? (
         <div className="text-center py-12">
           <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {searchTerm ? 'No models found' : 'No models yet'}
+            {searchTerm || selectedTasks.length > 0 ? 'No models found' : 'No models yet'}
           </h3>
           <p className="text-gray-500 mb-4">
-            {searchTerm 
-              ? 'Try adjusting your search terms'
+            {searchTerm || selectedTasks.length > 0
+              ? 'Try adjusting your search terms or filters'
               : 'Upload your first model to get started'
             }
           </p>
-          {!searchTerm && (
+          {!searchTerm && selectedTasks.length === 0 && (
             <Link to="/add-model">
               <Button>Add Your First Model</Button>
             </Link>
@@ -129,21 +220,21 @@ export default function ModelsPage() {
               <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg truncate">{model.name}</CardTitle>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <CardTitle 
+                        className="text-lg font-semibold text-gray-900 truncate max-w-full" 
+                        title={model.name}
+                      >
+                        {model.name.length > 40 ? model.name.substring(0, 40) + '...' : model.name}
+                      </CardTitle>
                       {model.is_foundation_model && (
-                        <Sparkles className="h-4 w-4 text-purple-600" title="Foundation Model" />
+                        <Sparkles className="h-4 w-4 text-purple-600 flex-shrink-0" title="Foundation Model" />
                       )}
                     </div>
                     <Badge className={getStatusColor(model.status)}>
                       {model.status}
                     </Badge>
                   </div>
-                  {model.description && (
-                    <CardDescription className="line-clamp-2">
-                      {model.description}
-                    </CardDescription>
-                  )}
                 </CardHeader>
                 
                 <CardContent>
