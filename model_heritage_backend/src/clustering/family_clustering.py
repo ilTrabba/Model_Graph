@@ -223,7 +223,12 @@ class FamilyClusteringSystem:
             # Update model with family assignment
             neo4j_service.update_model(model.id, {'family_id': family_id})
 
-            neo4j_service.get_family_by_id(family_id)
+            if(model.is_foundation_model):
+                updates = {
+                    'has_foundation_model': True,
+                    'updated_at': datetime.now(timezone.utc)
+                    }
+                neo4j_service.update_family(family_id,updates)
 
             return family_id, confidence
         except Exception as e:
@@ -293,7 +298,7 @@ class FamilyClusteringSystem:
                 centroid_weights = None
 
                 # prendere centroide già esistente della famiglia corrente con un if
-                centroid_path = centroid["path"]
+                centroid_path = centroid["file_path"]
                 family_id = centroid["family_id"]
 
                 if os.path.exists(centroid_path):
@@ -363,7 +368,7 @@ class FamilyClusteringSystem:
                 'avg_intra_distance': 0.0,
                 'created_at': datetime.now(timezone.utc),
                 'updated_at': datetime.now(timezone.utc),
-                'has_foundation_model': bool(model.is_foundation_model)
+                'has_foundation_model': False
             }
             neo4j_service.create_family(family_data)
             
@@ -628,7 +633,7 @@ class FamilyClusteringSystem:
                  
             
             # Step 2: Trova layer comuni (intersezione per nome esatto)
-            current_centroid_weights = load_model_weights(current_centroid['path'])
+            current_centroid_weights = load_model_weights(current_centroid['file_path'])
 
             centroid_layers = set(current_centroid_weights.keys()) 
             new_model_layers = set(new_model_weights.keys())

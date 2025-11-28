@@ -139,8 +139,7 @@ class ModelManagementSystem:
 
             # Step 4: Mark as processed
             neo4j_service.update_model(model_proxy.id, {
-                'status': 'ok',
-                'processed_at': datetime.now(timezone.utc).isoformat()
+                'status': 'ok'
             })
             
             return {
@@ -158,8 +157,7 @@ class ModelManagementSystem:
             
             # Mark model as error state
             neo4j_service.update_model(model_proxy.id, {
-                'status': 'error',
-                'processed_at': datetime.now(timezone.utc)
+                'status': 'error'
             })
             
             return {

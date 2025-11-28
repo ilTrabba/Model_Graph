@@ -11,7 +11,7 @@ OPERAZIONI PRELIMINARI DA FARE:
       e.	✅ Capire effettivamente quali layer sono utili alla causa (config serve?)
    4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
    5. ✅ Valutazione generale del corretto flusso di esecuzione del sistema
-   6. Aggiornare campi inutili nelle strutture dati su neo4j
+   6. ✅ Aggiornare campi inutili nelle strutture dati su neo4j
    7. Rivedere ed eventualmente aggiustare funzioni di create/update nel codice
 
 

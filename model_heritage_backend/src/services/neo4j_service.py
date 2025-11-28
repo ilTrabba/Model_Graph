@@ -97,10 +97,7 @@ class Neo4jService:
                     m.description = $description,
                     m.file_path = $file_path,
                     m.checksum = $checksum,
-                    m.weights_uri = $weights_uri,
                     m.weights_size_MB = $weights_size_MB,
-                    m.upload_date = $upload_date,
-                    m.embedding = $embedding,
                     m.total_parameters = $total_parameters,
                     m.layer_count = $layer_count,
                     m.structural_hash = $structural_hash,
@@ -109,8 +106,6 @@ class Neo4jService:
                     m.parent_id = $parent_id,
                     m.confidence_score = $confidence_score,
                     m.created_at = $created_at,
-                    m.processed_at = $processed_at,
-                    m.color = $color,
                     m.license = $license,
                     m.task = $task,
                     m.dataset_url = $dataset_url,
@@ -136,10 +131,7 @@ class Neo4jService:
                     'description': model_data.get('description', ''),
                     'file_path': model_data.get('file_path', ''),
                     'checksum': model_data.get('checksum', ''),
-                    'weights_uri': model_data.get('weights_uri', ''),
                     'weights_size_MB': weights_size_mb,
-                    'upload_date': model_data.get('created_at', ''),
-                    'embedding': [0.0],  # Placeholder embedding
                     'total_parameters': model_data.get('total_parameters', 0),
                     'layer_count': model_data.get('layer_count', 0),
                     'structural_hash': model_data.get('structural_hash', ''),
@@ -148,8 +140,6 @@ class Neo4jService:
                     'parent_id': model_data.get('parent_id'),
                     'confidence_score': model_data.get('confidence_score', 0.0),
                     'created_at': model_data.get('created_at', ''),
-                    'processed_at': model_data.get('processed_at', ''),
-                    'color': model_data.get('color', 'gray'),
                     'license': model_data.get('license'),
                     'task': task_value,
                     'dataset_url': model_data.get('dataset_url'),
@@ -340,27 +330,26 @@ class Neo4jService:
                 query = """
                 CREATE (f:Family {
                     id: $id,
-                    name: $name,
                     created_at: $created_at,
                     updated_at: $updated_at,
                     member_count: $member_count,
                     structural_pattern_hash: $structural_pattern_hash,
                     avg_intra_distance: $avg_intra_distance,
                     has_foundation_model: $has_foundation_model,
-                    color: 'black'
+                    display_name: $id
                 })
                 RETURN f
                 """
                 
                 session.run(query, {
                     'id': family_data['id'],
-                    'name': family_data.get('name', family_data['id']),
                     'created_at': datetime.now(timezone.utc).isoformat(),
                     'updated_at':  datetime.now(timezone.utc).isoformat(),
                     'member_count': family_data.get('member_count', 0),
                     'structural_pattern_hash': family_data.get('structural_pattern_hash', ''),
-                    'avg_intra_distance': family_data.get('avg_intra_distance', 0.0),
-                    'has_foundation_model': family_data.get('has_foundation_model', False)
+                    'avg_intra_distance': family_data.get('avg_intra_distance', 0.0), 
+                    'has_foundation_model': family_data.get('has_foundation_model', False),
+                    'display_name': family_data['id']
                 })
                 
             logger.info(f"✅ Created family {family_data['id']}")
@@ -441,13 +430,9 @@ class Neo4jService:
                 query = """
                 MERGE (c:Centroid {id: $id})
                 SET c.family_id = $family_id,
-                    c.path = $path,
-                    c.layer_keys = $layer_keys,
+                    c.file_path = $file_path,
                     c.model_count = $model_count,
                     c.updated_at = $updated_at,
-                    c.distance_metric = $distance_metric,
-                    c.version = $version,
-                    c.color = 'white',
                     c.display_name = $id
                 RETURN c
                 """
@@ -458,12 +443,9 @@ class Neo4jService:
                 session.run(query, {
                     'id': centroid_id,
                     'family_id': family_id,
-                    'path': centroid_path,
-                    'layer_keys': [],  # Will be populated when centroid is calculated
+                    'file_path': centroid_path,
                     'model_count': 1,  # Will be updated when centroid is calculated
                     'updated_at': datetime.now(timezone.utc).isoformat(),
-                    'distance_metric': 'cosine',  # Default metric
-                    'version': '1.0',
                     'display_name': centroid_id
                 })
                 
@@ -478,9 +460,6 @@ class Neo4jService:
         try:
 
             centroid = neo4j_service.get_centroid_by_family_id(family_id)
-
-            # Extract layer keys from centroid
-            layer_keys = list(centroid.keys()) if centroid else []
             
             if model_count is None:
                 model_count = centroid.get('model_count', 1) + 1
@@ -489,27 +468,21 @@ class Neo4jService:
             with neo4j_service.driver.session(database='neo4j') as session:
                 query = """
                 MATCH (c:Centroid {family_id: $family_id})
-                SET c.layer_keys = $layer_keys,
-                    c.model_count = $model_count,
-                    c.updated_at = $updated_at,
-                    c.distance_metric = $distance_metric,
-                    c.version = $version
+                SET c.model_count = $model_count,
+                    c.updated_at = $updated_at
                 RETURN c
                 """
                 
                 session.run(query, {
                     'family_id': family_id,
-                    'layer_keys': layer_keys,
                     'model_count': model_count,
-                    'updated_at': datetime.now(timezone.utc).isoformat(),
-                    'distance_metric': 'cosine',
-                    'version': '1.1'  
+                    'updated_at': datetime.now(timezone.utc).isoformat(), 
                 })
                 
-            logger.info(f"✅ Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
+            logger.info(f"✅ Updated Centroid metadata for family {family_id}, with {model_count} models")
             
         except Exception as e:
-            logger.error(f"Failed to update centroid metadata for family {family_id}: {e}")
+            logHandler.error_handler(f"Failed to update centroid metadata for family {family_id}: {e}","update_centroid_metadata")
     
     def delete_family_relationships(self, family_id: str) -> bool:
         """Delete all IS_CHILD_OF relationships for models in a family (batch operation)"""

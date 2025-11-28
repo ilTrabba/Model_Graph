@@ -58,10 +58,6 @@ class Model:
     def structural_hash(self):
         return self.data.get('structural_hash')
     
-    @property
-    def weights_uri(self):
-        return self.data.get('weights_uri')
-    
     @property 
     def file_path(self):
         return self.data.get('file_path')
@@ -73,10 +69,6 @@ class Model:
     @property
     def created_at(self):
         return self.data.get('created_at')
-    
-    @property
-    def processed_at(self):
-        return self.data.get('processed_at')
     
     @property
     def license(self):
@@ -115,11 +107,9 @@ class Model:
             'parent_id': self.parent_id,
             'confidence_score': self.confidence_score,
             'status': self.status,
-            'weights_uri': self.weights_uri,
             'checksum': self.checksum,
             'file_path': self.file_path,
             'created_at': self.created_at,
-            'processed_at': self.processed_at,
             'license': self.license,
             'task': self.task,
             'dataset_url': self.dataset_url,
