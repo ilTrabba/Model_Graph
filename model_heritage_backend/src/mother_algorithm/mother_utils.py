@@ -174,15 +174,12 @@ def update_family_statistics(family_id: str, distance_matrix: NDArray[np.float64
             'avg_intra_distance': avg_distance,
             'updated_at': datetime.now(timezone.utc)
         }
-        neo4j_service.create_or_update_family({
-            'id': family_id,
-            **updates
-        })
+        neo4j_service.update_family(family_id, updates)
 
         logger.info(f"Updated statistics for family {family_id}: {num_nodes} members, avg_distance: {avg_distance:.4f}")
 
     except Exception as e:
-        logHandler.error_handler(f"Error updating distance matrix: {e}", "distance_matrix_updates")
+        logHandler.error_handler(f"Error updating family statistics: {e}", "update_family_statistics")
 
 ############################# FUNZIONI DI SUPPORTO CHE ANDRANNO FIXATE (NON IMPORTANTI) ##################################
 

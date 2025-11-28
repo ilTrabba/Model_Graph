@@ -195,9 +195,12 @@ class FamilyClusteringSystem:
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
-
-            # Get all existing models with the same structural pattern
-            candidate_centroids = neo4j_service.get_all_centroids()
+            
+            if (model.is_foundation_model): 
+                candidate_centroids = neo4j_service.get_all_centroids_without_foundation()
+            else:
+                # Get all existing models with the same structural pattern
+                candidate_centroids = neo4j_service.get_all_centroids()
 
             # If there aren't candidate centroids create a new one with the model weights for the centroid
             if not candidate_centroids:
@@ -220,11 +223,13 @@ class FamilyClusteringSystem:
             # Update model with family assignment
             neo4j_service.update_model(model.id, {'family_id': family_id})
 
+            neo4j_service.get_family_by_id(family_id)
+
             return family_id, confidence
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
     
-    def calculate_family_centroid(self, family_id: str, new_model_path: str) -> Optional[Dict[str, Any]]:
+    def calculate_family_centroid(self, family_id: str, new_model: Model) -> Optional[Dict[str, Any]]:
         """
         Calculate the centroid (average weights) for a family.
         
@@ -239,7 +244,7 @@ class FamilyClusteringSystem:
                 return None
             
             # Load weights for the new model
-            new_model_weights = load_model_weights(new_model_path)
+            new_model_weights = load_model_weights(new_model.file_path)
             if not new_model_weights:
                 return None
             
@@ -257,10 +262,8 @@ class FamilyClusteringSystem:
                     if neo4j_service.is_connected():
 
                         # Update enhanced Centroid node with metadata
-                        self.update_centroid_metadata(neo4j_service, family_id)
+                        neo4j_service.update_centroid_metadata(family_id)
                         
-                        # FIXME: Probabilmente inutile
-                        neo4j_service.create_has_centroid_relationship(family_id)
                 except Exception as neo4j_error:
                     logHandler.warning_handler(f"Failed to update Neo4j centroid for family {family_id}: {neo4j_error}", "calculate_family_centroid")
             
@@ -359,7 +362,8 @@ class FamilyClusteringSystem:
                 'member_count': 1,
                 'avg_intra_distance': 0.0,
                 'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc)
+                'updated_at': datetime.now(timezone.utc),
+                'has_foundation_model': bool(model.is_foundation_model)
             }
             neo4j_service.create_family(family_data)
             
@@ -382,7 +386,7 @@ class FamilyClusteringSystem:
                         if neo4j_service.is_connected():
                             
                             # Update enhanced Centroid node with metadata
-                            self.update_centroid_metadata(neo4j_service, family_id, 1)
+                            neo4j_service.create_centroid_with_metadata(family_id)
                             
                             neo4j_service.create_has_centroid_relationship(family_id)
                     except Exception as neo4j_error:
@@ -745,41 +749,3 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
             return current_centroid_weights
-
-    def update_centroid_metadata(self, neo4j_service, family_id: str, model_count: Optional[int] = None):
-        """Update Centroid node metadata with enhanced attributes"""
-        try:
-
-            centroid = neo4j_service.get_centroid_by_family_id(family_id)
-
-            # Extract layer keys from centroid
-            layer_keys = list(centroid.keys()) if centroid else []
-            
-            if model_count is None:
-                model_count = centroid.get('model_count', 1) + 1
-
-            # Update the Centroid node with metadata
-            with neo4j_service.driver.session(database='neo4j') as session:
-                query = """
-                MATCH (c:Centroid {family_id: $family_id})
-                SET c.layer_keys = $layer_keys,
-                    c.model_count = $model_count,
-                    c.updated_at = $updated_at,
-                    c.distance_metric = $distance_metric,
-                    c.version = $version
-                RETURN c
-                """
-                
-                session.run(query, {
-                    'family_id': family_id,
-                    'layer_keys': layer_keys,
-                    'model_count': model_count,
-                    'updated_at': datetime.now(timezone.utc).isoformat(),
-                    'distance_metric': 'cosine',
-                    'version': '1.1'  
-                })
-                
-            logger.info(f"✅ Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
-            
-        except Exception as e:
-            logger.error(f"Failed to update centroid metadata for family {family_id}: {e}")

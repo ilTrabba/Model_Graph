@@ -163,6 +163,10 @@ class Family:
     def updated_at(self):
         return self.data.get('updated_at')
     
+    @property
+    def has_foundation_model(self):
+        return self.data.get('has_foundation_model',False)
+    
     def to_dict(self):
         """Convert to dictionary format"""
         return {
@@ -171,5 +175,6 @@ class Family:
             'member_count': self.member_count,
             'avg_intra_distance': self.avg_intra_distance,
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'updated_at': self.updated_at,
+            'has_foundation_model': self.has_foundation_model
         }

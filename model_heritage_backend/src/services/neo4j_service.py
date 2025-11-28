@@ -4,6 +4,7 @@ from neo4j import GraphDatabase
 from typing import List, Dict, Any, Optional
 from src.db_entities.entity import Model
 from src.log_handler import logHandler
+from datetime import datetime, timezone
 from ..config import Config
 
 logger = logging.getLogger(__name__)
@@ -328,59 +329,113 @@ class Neo4jService:
 
     ############### FAMILY QUERY ############### 
     def create_family(self, family_data: Dict[str, Any]) -> bool:
-        
-        """Create a new family and automatically create its centroid"""
-        success = self.create_or_update_family(family_data)
-
-        if success:
-            # Automatically create centroid with proper metadata
-            family_id = family_data['id']
-            success = self.create_centroid_with_metadata(family_id)
-            if success:
-                # Create HAS_CENTROID relationship
-                self.create_has_centroid_relationship(family_id)
-        return success
-    
-    def create_or_update_family(self, family_data: Dict[str, Any]) -> bool:
+        """
+        Create a new family node in Neo4j.
+        """
         if not self.driver:
             return False
         
         try:
-            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+            with self.driver. session(database=Config.NEO4J_DATABASE) as session:
                 query = """
-                MERGE (f:Family {id: $id})
-                SET f.name = $name,
-                    f.created_at = $created_at,
-                    f.updated_at = $updated_at,
-                    f.member_count = $member_count,
-                    f.structural_pattern_hash = $structural_pattern_hash,
-                    f.avg_intra_distance = $avg_intra_distance,
-                    f.color = 'black'
+                CREATE (f:Family {
+                    id: $id,
+                    name: $name,
+                    created_at: $created_at,
+                    updated_at: $updated_at,
+                    member_count: $member_count,
+                    structural_pattern_hash: $structural_pattern_hash,
+                    avg_intra_distance: $avg_intra_distance,
+                    has_foundation_model: $has_foundation_model,
+                    color: 'black'
+                })
                 RETURN f
                 """
                 
                 session.run(query, {
                     'id': family_data['id'],
-                    'name': family_data.get('name', family_data['id']),  # Use ID as name for now
-                    'created_at': family_data.get('created_at', ''),
-                    'updated_at': family_data.get('updated_at', ''),
+                    'name': family_data.get('name', family_data['id']),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
+                    'updated_at':  datetime.now(timezone.utc).isoformat(),
                     'member_count': family_data.get('member_count', 0),
                     'structural_pattern_hash': family_data.get('structural_pattern_hash', ''),
-                    'avg_intra_distance': family_data.get('avg_intra_distance', 0.0)
+                    'avg_intra_distance': family_data.get('avg_intra_distance', 0.0),
+                    'has_foundation_model': family_data.get('has_foundation_model', False)
                 })
                 
+            logger.info(f"✅ Created family {family_data['id']}")
             return True
+            
         except Exception as e:
-            logger.error(f"Failed to create/update family node: {e}")
+            logHandler.error_handler(f"Failed to create family node: {e}","update_family")
             return False
-    
+
+
+    def update_family(self, family_id: str, update_data: Dict[str, Any]) -> bool:
+        """
+        Update an existing family node in Neo4j.
+        Returns:
+            bool: True if update successful, False otherwise
+        """
+        if not self. driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                # Build SET clause dynamically based on provided fields
+                set_clauses = []
+                params = {'id': family_id}
+                
+                # Always update updated_at
+                set_clauses.append("f.updated_at = $updated_at")
+                params['updated_at'] = update_data.get('updated_at', datetime.now(timezone.utc))
+                
+                # Optional fields
+                if 'name' in update_data:
+                    set_clauses.append("f.name = $name")
+                    params['name'] = update_data['name']
+                
+                if 'member_count' in update_data:
+                    set_clauses.append("f.member_count = $member_count")
+                    params['member_count'] = update_data['member_count']
+                
+                if 'avg_intra_distance' in update_data:
+                    set_clauses.append("f.avg_intra_distance = $avg_intra_distance")
+                    params['avg_intra_distance'] = update_data['avg_intra_distance']
+                
+                if 'has_foundation_model' in update_data:
+                    set_clauses.append("f. has_foundation_model = $has_foundation_model")
+                    params['has_foundation_model'] = update_data['has_foundation_model']
+                
+                if 'structural_pattern_hash' in update_data:
+                    set_clauses.append("f.structural_pattern_hash = $structural_pattern_hash")
+                    params['structural_pattern_hash'] = update_data['structural_pattern_hash']
+                
+                query = f"""
+                MATCH (f:Family {{id: $id}})
+                SET {', '.join(set_clauses)}
+                RETURN f
+                """
+                
+                result = session.run(query, params)
+                
+                if result.single():
+                    logger.info(f"✅ Updated family {family_id}")
+                    return True
+                else:
+                    logHandler.warning_handler(f"Family {family_id} not found for update","update_family")
+                    return False
+                    
+        except Exception as e:
+            logHandler.error_handler(f"Failed to update family node: {e}","update_family")
+            return False
+     
     def create_centroid_with_metadata(self, family_id: str) -> bool:
         """Create a Centroid node with enhanced metadata according to requirements"""
         if not self.driver:
             return False
         
         try:
-            from datetime import datetime, timezone
             
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
@@ -405,7 +460,7 @@ class Neo4jService:
                     'family_id': family_id,
                     'path': centroid_path,
                     'layer_keys': [],  # Will be populated when centroid is calculated
-                    'model_count': 0,  # Will be updated when centroid is calculated
+                    'model_count': 1,  # Will be updated when centroid is calculated
                     'updated_at': datetime.now(timezone.utc).isoformat(),
                     'distance_metric': 'cosine',  # Default metric
                     'version': '1.0',
@@ -417,6 +472,44 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to create centroid node for family {family_id}: {e}")
             return False
+
+    def update_centroid_metadata(self, family_id: str, model_count: Optional[int] = None):
+        """Update Centroid node metadata with enhanced attributes"""
+        try:
+
+            centroid = neo4j_service.get_centroid_by_family_id(family_id)
+
+            # Extract layer keys from centroid
+            layer_keys = list(centroid.keys()) if centroid else []
+            
+            if model_count is None:
+                model_count = centroid.get('model_count', 1) + 1
+
+            # Update the Centroid node with metadata
+            with neo4j_service.driver.session(database='neo4j') as session:
+                query = """
+                MATCH (c:Centroid {family_id: $family_id})
+                SET c.layer_keys = $layer_keys,
+                    c.model_count = $model_count,
+                    c.updated_at = $updated_at,
+                    c.distance_metric = $distance_metric,
+                    c.version = $version
+                RETURN c
+                """
+                
+                session.run(query, {
+                    'family_id': family_id,
+                    'layer_keys': layer_keys,
+                    'model_count': model_count,
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
+                    'distance_metric': 'cosine',
+                    'version': '1.1'  
+                })
+                
+            logger.info(f"✅ Updated Centroid metadata for family {family_id}: {len(layer_keys)} layers, {model_count} models")
+            
+        except Exception as e:
+            logger.error(f"Failed to update centroid metadata for family {family_id}: {e}")
     
     def delete_family_relationships(self, family_id: str) -> bool:
         """Delete all IS_CHILD_OF relationships for models in a family (batch operation)"""
@@ -596,6 +689,28 @@ class Neo4jService:
                 
         except Exception as e:
             logger.error(f"Failed to get all centroids: {e}")
+            return []
+    
+    # Get all centroids of the families that do not possess a foundation model yet
+    def get_all_centroids_without_foundation(self) -> List[Dict[str, Any]]:
+        """Get centroids from families without foundation models"""
+        if not self.driver:
+            return []
+        
+        try:
+            with self.driver. session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (f:Family)-[:HAS_CENTROID]->(c:Centroid)
+                WHERE f.has_foundation_model = false
+                RETURN c
+                ORDER BY c.created_at DESC
+                """
+                result = session.run(query)
+                centroids = [dict(record['c']) for record in result]
+                return centroids
+                
+        except Exception as e:
+            logHandler.error_handler(f"Failed to get centroids without foundation models: {e}","get_all_centroids_without_foundation")
             return []
     
     def get_centroid_by_family_id(self, family_id: str) -> Optional[Dict]:

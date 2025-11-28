@@ -12,7 +12,7 @@ OPERAZIONI PRELIMINARI DA FARE:
    4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
    5. ✅ Valutazione generale del corretto flusso di esecuzione del sistema
    6. Aggiornare campi inutili nelle strutture dati su neo4j
-
+   7. Rivedere ed eventualmente aggiustare funzioni di create/update nel codice
 
 
 NOTE:
@@ -30,9 +30,9 @@ CLUSTERIZZAZIONE:
    2. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
    3. ✅ Aggiungere campo foundations model come flag check o not nella form per modello
    4. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
-   5. Implementare la meccanica dei foundation model
+   5. ✅ Implementare la meccanica dei foundation model
    6. Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
-   7. Realizzare una soglia adattiva e una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
+   7. Realizzare una soglia adattiva e gestire una confidence (possibile eliminazione, ma vediamo) in grado di generalizzare un corretto funzionamento della fase di clustering
    8. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
 
 
