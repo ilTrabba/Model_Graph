@@ -12,13 +12,12 @@ OPERAZIONI PRELIMINARI DA FARE:
    4.	✅ Capire come si effettua l’inserimento di un nuovo modello su Hugging Face
    5. ✅ Valutazione generale del corretto flusso di esecuzione del sistema
    6. ✅ Aggiornare campi inutili nelle strutture dati su neo4j
-   7. Rivedere ed eventualmente aggiustare funzioni di create/update nel codice
+   7. ✅ Rivedere ed eventualmente aggiustare funzioni di create/update nel codice
 
 
 NOTE:
 
-   0. Chiarire come stabilire l'unicità di un modello (del file safetensors)
-   1. Come cambiare metrica utilizzata:
+   0. Come cambiare metrica utilizzata:
        a. nel Clustering (family_clustering.py)-> in find_best_family_match, basta cambiare la metrica passata quando si chiama la funzione calculate_distance
        b. in MoTHer (Tree_builder.py)-> stessa cosa, nella funzione build_mother_tree cambiare la metrica passata a  calculate_distance 
    
@@ -31,7 +30,7 @@ CLUSTERIZZAZIONE:
    3. ✅ Aggiungere campo foundations model come flag check o not nella form per modello
    4. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
    5. ✅ Implementare la meccanica dei foundation model
-   6. Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
+   6. ✅ Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
    7. Realizzare una soglia adattiva e gestire una confidence (possibile eliminazione, ma vediamo) in grado di generalizzare un corretto funzionamento della fase di clustering
    8. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
 
@@ -65,8 +64,9 @@ ALTRO:
       b.	Model lakes
       c.	Paper centroidi stesso task (più di uno)
    2.	Realizzare un logo custom per il sistema
-   3.	Realizzare un portale di login per admin
-   4.	Family locks
+   3. Abbellire la model card
+   4.	Realizzare un portale di login per admin
+   5.	Family locks
 
 
 

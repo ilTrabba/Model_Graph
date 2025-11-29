@@ -1,5 +1,6 @@
 import os
 import hashlib
+from typing import Any
 import uuid
 import logging
 import tempfile
@@ -14,8 +15,7 @@ from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
-from src.utils.normalization_system import normalize_safetensors_layers
-from src.utils.normalization_system import save_layer_mapping_json
+from src.utils.normalization_system import normalize_safetensors_layers, save_layer_mapping_json
 
 logger = logging.getLogger(__name__)
 models_bp = Blueprint('models', __name__)
@@ -51,22 +51,78 @@ def calculate_file_checksum(file_path):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def extract_weight_signature_stub(file_path):
-    """Stub implementation for weight signature extraction"""
-    # This is a simplified stub - in real implementation would analyze actual weights
-    file_size = os.path.getsize(file_path)
-    
-    # Mock signature based on file size (for demo purposes)
-    estimated_params = file_size // 4  # Assuming float32 weights
-    estimated_layers = max(10, estimated_params // 1000000)  # Rough estimate
-    
-    signature = {
-        'total_parameters': estimated_params,
-        'layer_count': estimated_layers,
-        'structural_hash': hashlib.md5(f"{estimated_params}_{estimated_layers}".encode()).hexdigest()[:16]
+from safetensors import safe_open
+import hashlib
+import os
+from collections import Counter
+
+def extract_weight_signature(file_path: str, num_layers: int) -> dict:
+    """
+    Estrae:
+      - hidden_size (derivato dalle shapes)
+      - numero di layers (fornito)
+      - structural hash basato su (layers + hidden_size)
+      - total_parameters (nuovo)
+
+    Non usa i valori dei pesi.
+    Funziona con modelli arbitrari.
+    """
+
+    # ---------------------------
+    # 1. Carico shapes dal file
+    # ---------------------------
+    shapes = []
+    dtypes = []
+    total_parameters = 0
+
+    with safe_open(file_path, framework="pt") as f:
+        for key in f.keys():
+            tensor = f.get_tensor(key)
+            shape = tuple(tensor.shape)
+            dtype = str(tensor.dtype)
+
+            shapes.append(shape)
+            dtypes.append(dtype)
+
+            # aggiungo al conteggio dei parametri
+            num_params = 1
+            for dim in shape:
+                num_params *= dim
+            total_parameters += num_params
+
+    # --------------------------------------------
+    # 2. Deduzione dell'HIDDEN SIZE in modo generico
+    # --------------------------------------------
+    dims = []
+
+    for shape in shapes:
+        if len(shape) == 2 and shape[0] == shape[1]:
+            dims.append(shape[0])
+            dims.append(shape[1])
+
+    dims = [d for d in dims if d >= 128]
+
+    if not dims:
+        raise RuntimeError("Impossibile dedurre hidden_size dal file (nessuna matrice significativa trovata).")
+
+    hidden_size = Counter(dims).most_common(1)[0][0]
+
+    # ------------------------------
+    # 3. Calcolo hash strutturale
+    # ------------------------------
+    base_string = f"{num_layers}_{hidden_size}"
+    structural_hash = hashlib.md5(base_string.encode()).hexdigest()[:16]
+
+    # ------------------------------
+    # 4. Output
+    # ------------------------------
+    return {
+        "num_layers": num_layers,
+        "hidden_size": hidden_size,
+        "structural_hash": structural_hash,
+        "total_parameters": total_parameters
     }
-    
-    return signature
+
 
 @models_bp.route('/models', methods=['GET'])
 def list_models():
@@ -214,8 +270,8 @@ def upload_model():
                 os.remove(readme_uri)
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
-        # FIXME: Extract weight signature
-        signature = extract_weight_signature_stub(file_path)
+        # Extract weight signature
+        signature = extract_weight_signature(file_path, num_layers)
         
         # Parse task as list if comma-separated
         task_list = [t.strip() for t in task_value.split(',') if t.strip()] if task_value else []
@@ -243,7 +299,7 @@ def upload_model():
         }
         
         # Save to Neo4j
-        if not neo4j_service.upsert_model(model_data):
+        if not neo4j_service.create_model(model_data):
             raise Exception("Failed to save model to Neo4j")
         
         result = mgmt_system.process_new_model(model_data)

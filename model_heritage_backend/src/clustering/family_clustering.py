@@ -196,11 +196,13 @@ class FamilyClusteringSystem:
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
             
+            logger.info(f"Model has this structural_hash:{model.structural_hash}")
+
             if (model.is_foundation_model): 
-                candidate_centroids = neo4j_service.get_all_centroids_without_foundation()
+                candidate_centroids = neo4j_service.get_all_centroids_without_foundation(model.structural_hash)
             else:
                 # Get all existing models with the same structural pattern
-                candidate_centroids = neo4j_service.get_all_centroids()
+                candidate_centroids = neo4j_service.get_all_centroids(model.structural_hash)
 
             # If there aren't candidate centroids create a new one with the model weights for the centroid
             if not candidate_centroids:
@@ -363,7 +365,6 @@ class FamilyClusteringSystem:
             # Create family in Neo4j
             family_data = {
                 'id': family_id,
-                'structural_pattern_hash': model.structural_hash,
                 'member_count': 1,
                 'avg_intra_distance': 0.0,
                 'created_at': datetime.now(timezone.utc),
@@ -391,7 +392,7 @@ class FamilyClusteringSystem:
                         if neo4j_service.is_connected():
                             
                             # Update enhanced Centroid node with metadata
-                            neo4j_service.create_centroid_with_metadata(family_id)
+                            neo4j_service.create_centroid_with_metadata(family_id, model.structural_hash)
                             
                             neo4j_service.create_has_centroid_relationship(family_id)
                     except Exception as neo4j_error:

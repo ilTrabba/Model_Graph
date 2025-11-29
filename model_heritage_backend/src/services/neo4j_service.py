@@ -81,8 +81,8 @@ class Neo4jService:
             return False
     
     ############### MODEL QUERY ############### 
-    def upsert_model(self, model_data: Dict[str, Any]) -> bool:
-        """Create or update a Model node using MERGE (unified method)"""
+    def create_model(self, model_data: Dict[str, Any]) -> bool:
+        """Create a Model node using MERGE (unified method)"""
         if not self.driver:
             logger.error("Neo4j driver not initialized")
             return False
@@ -148,7 +148,7 @@ class Neo4jService:
                     'is_foundation_model': model_data.get('is_foundation_model', False)
                 }
                 
-                logger.info(f"Attempting to upsert Model node with id: {model_id}")
+                logger.info(f"Attempting to insert Model node with id: {model_id}")
                 logger.debug(f"Parameters: {params}")
                 
                 result = session.run(query, params)
@@ -156,18 +156,18 @@ class Neo4jService:
                 
                 if record:
                     logger.info(
-                        f"✅ Model node upserted successfully: "
+                        f"✅ Model node inserted successfully: "
                         f"id={record['model_id']}, "
                         f"labels={record['labels']}, "
                         f"status={record['props'].get('status')}"
                     )
                     return True
                 else:
-                    logger.error(f"❌ Model node upsert returned no record for id: {model_id}")
+                    logger.error(f"❌ Model node insert returned no record for id: {model_id}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Failed to upsert model node (id={model_id}): {e}", exc_info=True)
+            logger.error(f"❌ Failed to insert model node (id={model_id}): {e}", exc_info=True)
             return False
     
     def update_model(self, model_id: str, updates: Dict[str, Any]) -> bool:
@@ -333,7 +333,6 @@ class Neo4jService:
                     created_at: $created_at,
                     updated_at: $updated_at,
                     member_count: $member_count,
-                    structural_pattern_hash: $structural_pattern_hash,
                     avg_intra_distance: $avg_intra_distance,
                     has_foundation_model: $has_foundation_model,
                     display_name: $id
@@ -346,7 +345,6 @@ class Neo4jService:
                     'created_at': datetime.now(timezone.utc).isoformat(),
                     'updated_at':  datetime.now(timezone.utc).isoformat(),
                     'member_count': family_data.get('member_count', 0),
-                    'structural_pattern_hash': family_data.get('structural_pattern_hash', ''),
                     'avg_intra_distance': family_data.get('avg_intra_distance', 0.0), 
                     'has_foundation_model': family_data.get('has_foundation_model', False),
                     'display_name': family_data['id']
@@ -396,10 +394,6 @@ class Neo4jService:
                     set_clauses.append("f. has_foundation_model = $has_foundation_model")
                     params['has_foundation_model'] = update_data['has_foundation_model']
                 
-                if 'structural_pattern_hash' in update_data:
-                    set_clauses.append("f.structural_pattern_hash = $structural_pattern_hash")
-                    params['structural_pattern_hash'] = update_data['structural_pattern_hash']
-                
                 query = f"""
                 MATCH (f:Family {{id: $id}})
                 SET {', '.join(set_clauses)}
@@ -419,7 +413,7 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to update family node: {e}","update_family")
             return False
      
-    def create_centroid_with_metadata(self, family_id: str) -> bool:
+    def create_centroid_with_metadata(self, family_id: str, structural_hash: Any) -> bool:
         """Create a Centroid node with enhanced metadata according to requirements"""
         if not self.driver:
             return False
@@ -431,6 +425,7 @@ class Neo4jService:
                 MERGE (c:Centroid {id: $id})
                 SET c.family_id = $family_id,
                     c.file_path = $file_path,
+                    c.structural_hash = $structural_hash,
                     c.model_count = $model_count,
                     c.updated_at = $updated_at,
                     c.display_name = $id
@@ -444,6 +439,7 @@ class Neo4jService:
                     'id': centroid_id,
                     'family_id': family_id,
                     'file_path': centroid_path,
+                    'structural_hash': structural_hash,
                     'model_count': 1,  # Will be updated when centroid is calculated
                     'updated_at': datetime.now(timezone.utc).isoformat(),
                     'display_name': centroid_id
@@ -639,7 +635,7 @@ class Neo4jService:
             logger.error(f"Failed to get all families: {e}")
             return []
     
-    def get_all_centroids(self) -> List[Dict[str, Any]]:
+    def get_all_centroids(self, structural_hash: Any) -> List[Dict[str, Any]]:
         """Get all centroids"""
         if not self.driver:
             return []
@@ -648,10 +644,10 @@ class Neo4jService:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
                 MATCH (c:Centroid)
+                WHERE c.structural_hash = $structural_hash
                 RETURN c
-                ORDER BY c.created_at DESC
                 """
-                result = session.run(query)
+                result = session.run(query, {'structural_hash': structural_hash})
                 
                 centroids = []
                 for record in result:
@@ -665,7 +661,7 @@ class Neo4jService:
             return []
     
     # Get all centroids of the families that do not possess a foundation model yet
-    def get_all_centroids_without_foundation(self) -> List[Dict[str, Any]]:
+    def get_all_centroids_without_foundation(self, structural_hash: Any) -> List[Dict[str, Any]]:
         """Get centroids from families without foundation models"""
         if not self.driver:
             return []
@@ -675,10 +671,11 @@ class Neo4jService:
                 query = """
                 MATCH (f:Family)-[:HAS_CENTROID]->(c:Centroid)
                 WHERE f.has_foundation_model = false
+                AND c.structural_hash = $structural_hash
                 RETURN c
                 ORDER BY c.created_at DESC
                 """
-                result = session.run(query)
+                result = session.run(query, {'structural_hash': structural_hash})
                 centroids = [dict(record['c']) for record in result]
                 return centroids
                 
