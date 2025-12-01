@@ -106,6 +106,7 @@ class Neo4jService:
                     m.parent_id = $parent_id,
                     m.confidence_score = $confidence_score,
                     m.created_at = $created_at,
+                    m.distance_from_parent = $distance_from_parent,
                     m.license = $license,
                     m.task = $task,
                     m.dataset_url = $dataset_url,
@@ -140,6 +141,7 @@ class Neo4jService:
                     'parent_id': model_data.get('parent_id'),
                     'confidence_score': model_data.get('confidence_score', 0.0),
                     'created_at': model_data.get('created_at', ''),
+                    'distance_from_parent': model_data.get('distance_from_parent'),
                     'license': model_data.get('license'),
                     'task': task_value,
                     'dataset_url': model_data.get('dataset_url'),
@@ -357,7 +359,6 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to create family node: {e}","update_family")
             return False
 
-
     def update_family(self, family_id: str, update_data: Dict[str, Any]) -> bool:
         """
         Update an existing family node in Neo4j.
@@ -413,6 +414,29 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to update family node: {e}","update_family")
             return False
      
+    def get_direct_relationship_distances(self, best_family_id: str) -> List[float]:
+        """Create a Centroid node with enhanced metadata according to requirements"""
+        if not self.driver:
+            return False
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (family:Family {id: $family_id})<-[:BELONGS_TO]-(root:Model)
+                MATCH (root)-[:IS_CHILD_OF*0.. ]->(model:Model)
+                WHERE model.distance_from_parent IS NOT NULL
+                RETURN model.distance_from_parent AS distance
+                """
+
+                result = session.run(query, family_id=best_family_id)
+                distances = [record["distance"] for record in result]
+            
+            return distances
+
+        except Exception as e:
+            logHandler.error_handler(e, "get_direct_relationship_distances" ,f"Failed to get the distances from the family: {best_family_id} in neo4j!")
+            return False
+
     def create_centroid_with_metadata(self, family_id: str, structural_hash: Any) -> bool:
         """Create a Centroid node with enhanced metadata according to requirements"""
         if not self.driver:

@@ -23,8 +23,13 @@ from safetensors import safe_open
 from ..db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
+from src.utils.architecture_filtering import FilteringPatterns
 
 logger = logging.getLogger(__name__)
+
+#FIXME: capire bene quali soglie settare empiricamente e non
+MIN_CONFIDENCE = 0.2
+THRESHOLD_SINGLE_MEMBER = 1.5
 
 # Costante per soglia chunking automatico
 CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
@@ -176,6 +181,58 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
 
+
+    def calculate_adaptive_threshold(self, family_stats: Dict, k=2.0):
+
+        try:
+            member_count = family_stats["members"]
+            avg_intra_distance = family_stats["avg_intra_distance"]
+            std_intra_distance = family_stats["std_intra_distance"]
+
+            if member_count == 1:
+                # Famiglia con 1 solo membro: soglia conservativa fissa
+                return THRESHOLD_SINGLE_MEMBER  # es. 1.5
+            
+            elif member_count == 2:
+                # 1 sola relazione: std non affidabile, usa margine sulla media
+                return avg_intra_distance * 1.5  # 50% margine
+            
+            else:
+                # >= 3 membri: formula standard
+                return avg_intra_distance + k * std_intra_distance
+            
+        except Exception as e:
+            logHandler.error_handler(e, "calculate_adaptive_threshold")
+            return None
+
+    def calculate_confidence(best_distance, avg_intra_distance, threshold):
+        if best_distance <= avg_intra_distance:
+            return 1.0
+        elif best_distance <= threshold:
+            # Scala lineare tra mean e threshold
+            return 1.0 - (best_distance - avg_intra_distance) / (threshold - avg_intra_distance)
+        else:
+            return 0.0
+
+    def extract_family_metrics(self, best_family_id: str) -> Dict:
+        try:
+            models = neo4j_service.get_family_models(best_family_id)
+            distances = neo4j_service.get_direct_relationship_distances(best_family_id)
+
+            avg_intra_distance = ModelDistanceCalculator.calculate_intra_family_distance(models)
+            std_intra_distance = ModelDistanceCalculator.calculate_std_intra_distance(distances, avg_intra_distance)
+            members = models.count
+
+            return {
+                'avg_intra_distance': avg_intra_distance,
+                'std_intra_distance': std_intra_distance,
+                'members': members
+            }
+
+        except Exception as e:
+            logHandler.error_handler(e, "extract_family_metrics")
+            return None
+ 
     def assign_model_to_family(self, 
                              model: Model,
                              model_weights: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
@@ -211,14 +268,20 @@ class FamilyClusteringSystem:
             else:
                 
                 # Calculate distances to family centroids
-                best_family_id, confidence = self.find_best_family_match(
+                best_family_id, best_distance = self.find_best_family_match(
                     model_weights, candidate_centroids
                 )
                 
-                if confidence >= 0.2:
+                family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
+
+                threshold = self.calculate_adaptive_threshold(family_stats, k=2.0)
+
+                confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
+                
+                if best_distance < threshold and confidence > MIN_CONFIDENCE:
                     family_id = best_family_id
+                    return family_id, confidence
                 else:
-                    # Create new family with the model weights
                     family_id = self.create_new_family(model, model_weights)
                     confidence = 1.0
             
@@ -230,7 +293,7 @@ class FamilyClusteringSystem:
                     'has_foundation_model': True,
                     'updated_at': datetime.now(timezone.utc)
                     }
-                neo4j_service.update_family(family_id,updates)
+                neo4j_service.update_family(family_id, updates)
 
             return family_id, confidence
         except Exception as e:
@@ -327,7 +390,7 @@ class FamilyClusteringSystem:
                     continue
                 
                 distance = self.distance_calculator.calculate_distance(
-                    model_weights, centroid_weights, distance_metric
+                    model_weights, centroid_weights, distance_metric, FilteringPatterns.FULL_MODEL
                 )
                 
                 if distance < best_distance:
@@ -339,14 +402,14 @@ class FamilyClusteringSystem:
                 return "", 0.0
         
             # Convert distance to confidence score
-            print(f"{self.family_threshold}")
+            # print(f"{self.family_threshold}")
 
-            value1 = best_distance / 4.2
-            value2 = 1 - value1
-            confidence = max (0.0, value2)
-            confidence = min (1.0, confidence)
+            # value1 = best_distance / 4.2
+            # value2 = 1 - value1
+            # confidence = max (0.0, value2)
+            # confidence = min (1.0, confidence)
             
-            return best_family_id, confidence
+            return best_family_id, best_distance
             
         except Exception as e:
             logHandler.error_handler(e, "find_best_family_match")

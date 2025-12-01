@@ -289,6 +289,7 @@ def upload_model():
             'status': 'processing',
             'weights_uri': 'weights/' + filename,
             'created_at': datetime.now(timezone.utc).isoformat(),
+            'distance_from_parent': 0.0,
             # New optional fields
             'license': license_value if license_value else None,
             'task': task_list,

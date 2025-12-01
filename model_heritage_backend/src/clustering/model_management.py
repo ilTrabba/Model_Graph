@@ -137,7 +137,7 @@ class ModelManagementSystem:
                     model_proxy
                 )
 
-            # Step 4: Mark as processed
+            # Step 4: final updates
             neo4j_service.update_model(model_proxy.id, {
                 'status': 'ok'
             })

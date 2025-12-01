@@ -43,8 +43,7 @@ class ModelDistanceCalculator:
     """
     
     def __init__(self, 
-                 default_metric: DistanceMetric = DistanceMetric.COSINE_SIMILARITY,
-                 layer_filter: Optional[List[str]] = None):
+                 default_metric: DistanceMetric = DistanceMetric.L2_DISTANCE):
         """
         Initialize the distance calculator.
         
@@ -53,7 +52,6 @@ class ModelDistanceCalculator:
             layer_filter: List of layer patterns to include. If None, uses default patterns.
         """
         self.default_metric = default_metric
-        # self.layer_filter = layer_filter or get_layer_kinds()
 
     def calculate_l2_layer_distance(self, tensor1: torch.Tensor, tensor2: torch.Tensor) -> float:
         """
@@ -291,3 +289,28 @@ class ModelDistanceCalculator:
         except Exception as e:
             logHandler.error_handler(f"Error calculating intra-family distance: {e}", "calculate_intra_family_distance")
             return 0.0
+    
+    def calculate_std_intra_distance(self, direct_relationship_distances: List[float], avg_intra_distance: float) -> float:
+        """
+        Calculate standard deviation of intra-family distances.
+        
+        Only considers distances from direct parent-child relationships (edges in the family tree),
+        not distances between all pairs of family members.
+        
+        Args:
+            direct_relationship_distances: List of distances from all direct parent-child edges in the family
+            
+        Returns:
+            Standard deviation of the distances, or 0. 0 if insufficient data
+        """
+        if len(direct_relationship_distances) < 2:
+            # Need at least 2 relationships to calculate meaningful std
+            return 0.0
+        
+        # Calculate variance
+        variance = sum((d - avg_intra_distance) ** 2 for d in direct_relationship_distances) / len(direct_relationship_distances)
+        
+        # Calculate standard deviation
+        std_distance = variance ** 0.5
+        
+        return std_distance
