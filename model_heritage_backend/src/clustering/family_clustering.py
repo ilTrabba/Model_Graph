@@ -205,23 +205,27 @@ class FamilyClusteringSystem:
             logHandler.error_handler(e, "calculate_adaptive_threshold")
             return None
 
-    def calculate_confidence(best_distance, avg_intra_distance, threshold):
-        if best_distance <= avg_intra_distance:
-            return 1.0
-        elif best_distance <= threshold:
-            # Scala lineare tra mean e threshold
-            return 1.0 - (best_distance - avg_intra_distance) / (threshold - avg_intra_distance)
-        else:
+    def calculate_confidence(self, best_distance, avg_intra_distance, threshold):
+        try:
+            if best_distance <= avg_intra_distance:
+                return 1.0
+            elif best_distance <= threshold:
+                # Scala lineare tra mean e threshold
+                return 1.0 - (best_distance - avg_intra_distance) / (threshold - avg_intra_distance)
+            else:
+                return 0.0
+        except Exception as e:
+            logHandler.error_handler(e,"calculate_confidence")
             return 0.0
 
     def extract_family_metrics(self, best_family_id: str) -> Dict:
         try:
             models = neo4j_service.get_family_models(best_family_id)
             distances = neo4j_service.get_direct_relationship_distances(best_family_id)
-
-            avg_intra_distance = ModelDistanceCalculator.calculate_intra_family_distance(models)
-            std_intra_distance = ModelDistanceCalculator.calculate_std_intra_distance(distances, avg_intra_distance)
-            members = models.count
+            
+            avg_intra_distance = self.distance_calculator.calculate_intra_family_distance(models)
+            std_intra_distance = self.distance_calculator.calculate_std_intra_distance(distances, avg_intra_distance)
+            members = len(models)
 
             return {
                 'avg_intra_distance': avg_intra_distance,
@@ -280,7 +284,7 @@ class FamilyClusteringSystem:
                 
                 if best_distance < threshold and confidence > MIN_CONFIDENCE:
                     family_id = best_family_id
-                    return family_id, confidence
+                    
                 else:
                     family_id = self.create_new_family(model, model_weights)
                     confidence = 1.0

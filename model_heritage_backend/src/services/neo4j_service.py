@@ -554,6 +554,7 @@ class Neo4jService:
                 return False
         
         # Extract edges from NetworkX DiGraph
+        # Extract edges from NetworkX DiGraph
         edges_data = [
             {
                 'parent': parent_id,
@@ -562,9 +563,37 @@ class Neo4jService:
             }
             for parent_id, child_id in family_tree.edges()
         ]
-        
+
+        # 🔍 LOGGING: Cosa stiamo per processare
+        logger.info(f"🔄 Processing family_id: {family_id}")
+        logger.info(f"📊 Total edges to process: {len(edges_data)}")
+        for i, edge in enumerate(edges_data):
+            logger.debug(f"  Edge {i}: parent={edge['parent']}, child={edge['child']}, confidence={edge['confidence']}")
+
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                
+                # 🔍 LOGGING: Verifica esistenza nodi PRIMA della query principale
+                logger.info(f"🔍 Verifying nodes existence for family {family_id}...")
+                verify_query = """
+                UNWIND $edges AS edge
+                OPTIONAL MATCH (child:Model {id: edge.child, family_id: $family_id})
+                OPTIONAL MATCH (parent:Model {id: edge.parent, family_id: $family_id})
+                RETURN edge.child as child_id, 
+                    edge.parent as parent_id,
+                    child IS NOT NULL as child_exists,
+                    parent IS NOT NULL as parent_exists
+                """
+                verify_result = session.run(verify_query, {'family_id': family_id, 'edges': edges_data})
+                
+                for record in verify_result:
+                    if not record['child_exists']:
+                        logger.error(f"  ❌ CHILD NOT FOUND: {record['child_id']}")
+                    if not record['parent_exists']:
+                        logger.error(f"  ❌ PARENT NOT FOUND: {record['parent_id']}")
+                    if record['child_exists'] and record['parent_exists']:
+                        logger.debug(f"  ✅ Both nodes exist: {record['child_id'][:8]}...  -> {record['parent_id'][:8]}...")
+                
                 # Single atomic query for maximum efficiency
                 query = """
                 // Step 1: Delete all existing IS_CHILD_OF relationships for this family
@@ -592,8 +621,28 @@ class Neo4jService:
                 
                 record = result.single()
                 if record:
-                    logger.info(f"✅ Family {family_id}: {record['deleted_count']} relationships deleted, "
-                            f"{record['created_count']} relationships created in ONE atomic query")
+                    deleted = record['deleted_count']
+                    created = record['created_count']
+                    
+                    logger.info(f"✅ Family {family_id}: {deleted} relationships deleted, "
+                            f"{created} relationships created in ONE atomic query")
+                    
+                    # 🔍 LOGGING: Alert se i numeri non corrispondono
+                    if created != len(edges_data):
+                        logger.error(f"🚨 MISMATCH: Expected to create {len(edges_data)} relationships, but only {created} were created!")
+                        logger.error(f"🚨 Missing: {len(edges_data) - created} relationships were NOT created")
+                else:
+                    logger.error(f"❌ No result returned from query for family {family_id}")
+                
+                # 🔍 LOGGING: Verifica finale - cosa c'è effettivamente nel DB
+                verify_after_query = """
+                MATCH (child:Model {family_id: $family_id})-[r:IS_CHILD_OF]->(parent:Model)
+                RETURN count(r) as total_relationships
+                """
+                after_result = session.run(verify_after_query, {'family_id': family_id})
+                after_record = after_result.single()
+                if after_record:
+                    logger.info(f"📊 Total IS_CHILD_OF relationships in DB for family {family_id}: {after_record['total_relationships']}")
                 
                 return True
                 
