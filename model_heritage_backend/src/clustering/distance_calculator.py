@@ -210,19 +210,25 @@ class ModelDistanceCalculator:
                 
                 # Ensure same shape
                 if tensor1.shape != tensor2.shape:
+                    """
                     logHandler.warning_handler(
                         f"Shape mismatch for {param_name}: "
                         f"{tensor1.shape} vs {tensor2.shape}", "calculate_distance"
                     )
+                    """
+                    excluded_count += 1
                     continue
-                """
+                
                 if len(tensor1.shape)!=2 or len(tensor2.shape)!=2 or tensor1.shape[0]!=tensor1.shape[1] or tensor2.shape[0]!=tensor2.shape[1]:
+                    """
                     logHandler.warning_handler(
                         f"Shape not quadratic for {param_name}: "
                         f"At least one between tensor1:{tensor1.shape} or tensor2:{tensor2.shape} is not squared", "calculate_distance"
                     )
+                    """
+                    excluded_count += 1
                     continue
-                """
+                
                 
                 # Calculate layer distance using appropriate metric
                 if metric_type == DistanceMetric.L2_DISTANCE:
