@@ -415,17 +415,16 @@ class Neo4jService:
             return False
      
     def get_direct_relationship_distances(self, best_family_id: str) -> List[float]:
-        """Create a Centroid node with enhanced metadata according to requirements"""
+        
         if not self.driver:
             return False
         
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 query = """
-                MATCH (family:Family {id: $family_id})<-[:BELONGS_TO]-(root:Model)
-                MATCH (root)-[:IS_CHILD_OF*0.. ]->(model:Model)
-                WHERE model.distance_from_parent IS NOT NULL
-                RETURN model.distance_from_parent AS distance
+                MATCH (model:Model {family_id: $family_id})
+                WHERE model.distance_from_parent > 0
+                RETURN model. distance_from_parent AS distance
                 """
 
                 result = session.run(query, family_id=best_family_id)
