@@ -199,7 +199,7 @@ class FamilyClusteringSystem:
             
             else:
                 # >= 3 membri: formula standard
-                return avg_intra_distance + k * std_intra_distance
+                return 10000 + avg_intra_distance + k * std_intra_distance
             
         except Exception as e:
             logHandler.error_handler(e, "calculate_adaptive_threshold")
