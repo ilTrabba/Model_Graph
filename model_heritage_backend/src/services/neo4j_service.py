@@ -523,23 +523,12 @@ class Neo4jService:
 
     def atomic_rebuild_genealogy(self, family_id: str, family_tree, tree_confidence: Dict[str, float]) -> bool:
         """
-        Ultra-optimized single-query tree rebuild for maximum performance.
-        
-        Performance: O(1) - constant time regardless of tree size
-        Uses one atomic Cypher query to delete all old relationships and create all new ones.
-        
-        Args:
-            family_id: Family identifier
-            family_tree: NetworkX DiGraph representing the family tree structure
-            tree_confidence: Dictionary mapping child_id -> confidence score
-            
-        Returns:
-            True if successful, False otherwise
+        Ultra-optimized single-query tree rebuild + distance update. 
         """
         if not self.driver:
             return False
         
-        # Handle edge case: no edges (only root nodes)
+        # Handle edge case: no edges
         if family_tree.number_of_edges() == 0:
             try:
                 with self.driver.session(database=Config.NEO4J_DATABASE) as session:
@@ -550,66 +539,50 @@ class Neo4jService:
                     session.run(query, {'family_id': family_id})
                     return True
             except Exception as e:
-                logHandler.error_handler(f"Failed to clear relationships: {e}", "rebuild_family_tree_ultra")
+                logHandler. error_handler(f"Failed to clear relationships: {e}", "rebuild_family_tree_ultra")
                 return False
         
-        # Extract edges from NetworkX DiGraph
-        # Extract edges from NetworkX DiGraph
+        # Extract edges WITH distance in ONE iteration
         edges_data = [
-            {
-                'parent': parent_id,
-                'child': child_id,
-                'confidence': tree_confidence.get(parent_id, 0.0)
-            }
-            for parent_id, child_id in family_tree.edges()
-        ]
+                {
+                    'parent': parent_id,
+                    'child': child_id,
+                    'confidence': tree_confidence.get(parent_id, 0.0),
+                    'distance': family_tree[parent_id][child_id].get('distance', 0.0)  # ← AGGIUNTO
+                }
+                for parent_id, child_id in family_tree.edges()
+            ]
 
-        # 🔍 LOGGING: Cosa stiamo per processare
         logger.info(f"🔄 Processing family_id: {family_id}")
         logger.info(f"📊 Total edges to process: {len(edges_data)}")
         for i, edge in enumerate(edges_data):
-            logger.debug(f"  Edge {i}: parent={edge['parent']}, child={edge['child']}, confidence={edge['confidence']}")
+            logger.debug(f"  Edge {i}: parent={edge['parent']}, child={edge['child']}, "
+                        f"confidence={edge['confidence']}, distance={edge['distance']}")  # ← LOG distanza
 
         try:
             with self.driver.session(database=Config.NEO4J_DATABASE) as session:
                 
-                # 🔍 LOGGING: Verifica esistenza nodi PRIMA della query principale
-                logger.info(f"🔍 Verifying nodes existence for family {family_id}...")
-                verify_query = """
-                UNWIND $edges AS edge
-                OPTIONAL MATCH (child:Model {id: edge.child, family_id: $family_id})
-                OPTIONAL MATCH (parent:Model {id: edge.parent, family_id: $family_id})
-                RETURN edge.child as child_id, 
-                    edge.parent as parent_id,
-                    child IS NOT NULL as child_exists,
-                    parent IS NOT NULL as parent_exists
-                """
-                verify_result = session.run(verify_query, {'family_id': family_id, 'edges': edges_data})
-                
-                for record in verify_result:
-                    if not record['child_exists']:
-                        logger.error(f"  ❌ CHILD NOT FOUND: {record['child_id']}")
-                    if not record['parent_exists']:
-                        logger.error(f"  ❌ PARENT NOT FOUND: {record['parent_id']}")
-                    if record['child_exists'] and record['parent_exists']:
-                        logger.debug(f"  ✅ Both nodes exist: {record['child_id'][:8]}...  -> {record['parent_id'][:8]}...")
-                
-                # Single atomic query for maximum efficiency
+                # Main atomic query WITH distance update
                 query = """
-                // Step 1: Delete all existing IS_CHILD_OF relationships for this family
+                // Step 1: Delete all existing IS_CHILD_OF relationships
                 MATCH (m:Model {family_id: $family_id})-[r:IS_CHILD_OF]->()
                 DELETE r
                 
                 WITH count(r) as deleted_count
                 
-                // Step 2: Create all new relationships in one operation
+                // Step 2: Create relationships AND update distances
                 UNWIND $edges AS edge
                 MATCH (child:Model {id: edge.child, family_id: $family_id})
                 MATCH (parent:Model {id: edge.parent, family_id: $family_id})
+                
+                // Create relationship
                 CREATE (child)-[:IS_CHILD_OF {
                     confidence: edge.confidence,
                     updated_at: datetime()
                 }]->(parent)
+                
+                // Update child node with distance from parent
+                SET child.distance_from_parent = edge.distance
                 
                 RETURN deleted_count, count(*) as created_count
                 """
@@ -627,14 +600,13 @@ class Neo4jService:
                     logger.info(f"✅ Family {family_id}: {deleted} relationships deleted, "
                             f"{created} relationships created in ONE atomic query")
                     
-                    # 🔍 LOGGING: Alert se i numeri non corrispondono
                     if created != len(edges_data):
                         logger.error(f"🚨 MISMATCH: Expected to create {len(edges_data)} relationships, but only {created} were created!")
                         logger.error(f"🚨 Missing: {len(edges_data) - created} relationships were NOT created")
                 else:
                     logger.error(f"❌ No result returned from query for family {family_id}")
                 
-                # 🔍 LOGGING: Verifica finale - cosa c'è effettivamente nel DB
+                # Verification after
                 verify_after_query = """
                 MATCH (child:Model {family_id: $family_id})-[r:IS_CHILD_OF]->(parent:Model)
                 RETURN count(r) as total_relationships

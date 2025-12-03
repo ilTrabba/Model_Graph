@@ -207,21 +207,27 @@ class MoTHerTreeBuilder:
             logger.warning("Cannot build tree with fewer than 2 models")
             return nx.DiGraph(), {}
         
+        true_lambda = compute_lambda(distance_matrix)
+        
         if n == 2:
 
             # Higher kurtosis = parent (original model, less fine-tuned)
             if ku_values[0] > ku_values[1]:
                 parent, child = 0, 1
+                kurtosis_cost = ku_values[0] - ku_values[1]
             else:
                 parent, child = 1, 0
-                
+                kurtosis_cost = ku_values[1] - ku_values[0]
+            
+            distance_cost = distance_matrix[0, 1]
+            edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
             tree = nx.DiGraph()
-            tree.add_edge(parent, child)
+            tree.add_edge(parent, child, weight=edge_weight, distance=distance_cost)
             return tree, {parent: 0.8, child: 0.7}
         
         logger.debug(f"Building tree with {n} models using Chu-Liu-Edmonds algorithm")
 
-        true_lambda = compute_lambda(distance_matrix)
+        #true_lambda = compute_lambda(distance_matrix)
         
         # Create weighted directed graph
         G = nx.DiGraph()
@@ -249,7 +255,7 @@ class MoTHerTreeBuilder:
                     # Combine costs using lambda parameter
                     edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
                     
-                    G.add_edge(i, j, weight=edge_weight)
+                    G.add_edge(i, j, weight=edge_weight, distance=distance_cost)
 
         # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
         try:

@@ -54,7 +54,7 @@ class MDST:
         # Step 3: Contract cycles and solve recursively
         return self.contract_cycles_and_recurse(G, root, min_edges, cycles)
 
-    def find_min_incoming_edges(self, graph: nx.DiGraph, root: int) -> Dict[int, Tuple[int, int, float]]:
+    def find_min_incoming_edges(self, graph: nx.DiGraph, root: int) -> Dict[int, Tuple[int, int, float, float]]:
         """Find minimum incoming edge for each node (except root)"""
         min_edges = {}
         
@@ -68,64 +68,58 @@ class MDST:
             for pred in graph.predecessors(node):
                 if graph.has_edge(pred, node):
                     weight = graph[pred][node]['weight']
+                    distance = graph[pred][node]['distance']  # ← AGGIUNGI
                     if weight < min_weight:
                         min_weight = weight
-                        min_edge = (pred, node, weight)
+                        min_edge = (pred, node, weight, distance)  # ← AGGIUNGI distance
             
             if min_edge is not None:
                 min_edges[node] = min_edge
         
         return min_edges
 
-    def find_cycles_in_min_edges(self, min_edges: Dict[int, Tuple[int, int, float]], root: int) -> list:
+    def find_cycles_in_min_edges(self, min_edges: Dict[int, Tuple[int, int, float, float]], root: int) -> list:
         """Find cycles formed by minimum incoming edges"""
-        # Build a graph with only the minimum edges
         temp_graph = nx.DiGraph()
         
-        # Add all nodes that appear in min_edges
         nodes = set([root])
-        for target, (source, _, _) in min_edges.items():
+        for target, (source, _, _, _) in min_edges.items():  # ← 4 elementi ora
             nodes.add(source)
             nodes.add(target)
         
         temp_graph.add_nodes_from(nodes)
         
-        # Add minimum edges
-        for target, (source, _, weight) in min_edges.items():
-            temp_graph.add_edge(source, target, weight=weight)
+        for target, (source, _, weight, distance) in min_edges. items():  # ← AGGIUNGI distance
+            temp_graph.add_edge(source, target, weight=weight, distance=distance)  # ← AGGIUNGI
         
-        # Find cycles
         try:
             cycles = list(nx.simple_cycles(temp_graph))
             return cycles
         except:
             return []
 
-    def build_arborescence_from_edges(self, graph: nx.DiGraph, min_edges: Dict[int, Tuple[int, int, float]], root: int) -> nx.DiGraph:
+    def build_arborescence_from_edges(self, graph: nx.DiGraph, min_edges: Dict[int, Tuple[int, int, float, float]], root: int) -> nx.DiGraph:
         """Build arborescence from minimum edges (when no cycles exist)"""
         result = nx.DiGraph()
         result.add_node(root)
         
-        for target, (source, _, weight) in min_edges.items():
-            result.add_edge(source, target, weight=weight)
+        for target, (source, _, weight, distance) in min_edges.items():  # ← AGGIUNGI distance
+            result.add_edge(source, target, weight=weight, distance=distance)  # ← AGGIUNGI
         
         return result
-
-    def contract_cycles_and_recurse(self, graph: nx.DiGraph, root: int, min_edges: Dict[int, Tuple[int, int, float]], cycles: list) -> nx.DiGraph:
+    
+    def contract_cycles_and_recurse(self, graph: nx.DiGraph, root: int, 
+                                min_edges: Dict[int, Tuple[int, int, float, float]], cycles: list) -> nx.DiGraph:
         """Contract cycles into super-nodes and solve recursively"""
         
-        # Take the first cycle to contract
         cycle = cycles[0]
         cycle_nodes = set(cycle)
         
-        # Create contracted graph
         contracted_graph = nx.DiGraph()
         
-        # Create mapping: original_node -> contracted_node
-        super_node = f"super_{min(cycle)}"  # Name for the super-node
+        super_node = f"super_{min(cycle)}"
         node_mapping = {}
         
-        # Map cycle nodes to super-node, others to themselves
         for node in graph.nodes():
             if node in cycle_nodes:
                 node_mapping[node] = super_node
@@ -135,7 +129,6 @@ class MDST:
         
         contracted_graph.add_node(super_node)
         
-        # Calculate cycle weight (sum of minimum edges in cycle)
         cycle_weight = 0
         for node in cycle:
             if node in min_edges:
@@ -146,51 +139,41 @@ class MDST:
             u_mapped = node_mapping[u]
             v_mapped = node_mapping[v]
             
-            # Skip self-loops in contracted graph
             if u_mapped == v_mapped:
                 continue
             
             weight = data['weight']
+            distance = data.get('distance', 0.0)  # ← AGGIUNGI
             
-            # If edge enters the super-node, adjust weight
             if v in cycle_nodes and u not in cycle_nodes:
-                # Adjust weight by subtracting the minimum incoming edge weight for v
                 if v in min_edges:
                     weight = weight - min_edges[v][2]
             
-            # Add edge to contracted graph (keep minimum if multiple edges exist)
             if contracted_graph.has_edge(u_mapped, v_mapped):
                 current_weight = contracted_graph[u_mapped][v_mapped]['weight']
                 if weight < current_weight:
                     contracted_graph[u_mapped][v_mapped]['weight'] = weight
+                    contracted_graph[u_mapped][v_mapped]['distance'] = distance  # ← AGGIUNGI
             else:
-                contracted_graph.add_edge(u_mapped, v_mapped, weight=weight)
+                contracted_graph.add_edge(u_mapped, v_mapped, weight=weight, distance=distance)  # ← AGGIUNGI
         
-        # Recursively solve on contracted graph
         contracted_root = node_mapping[root]
         contracted_solution = self.chu_liu_edmonds_algorithm(contracted_graph, contracted_root)
         
-        # Expand solution back to original graph
         return self.expand_solution(graph, contracted_solution, cycle, min_edges, super_node, node_mapping)
 
     def expand_solution(self, original_graph: nx.DiGraph, contracted_solution: nx.DiGraph,
-                    cycle: list, min_edges: Dict[int, Tuple[int, int, float]], 
-                    super_node: str, node_mapping: Dict[int, str]) -> nx.DiGraph:
+                cycle: list, min_edges: Dict[int, Tuple[int, int, float, float]], 
+                super_node: str, node_mapping: Dict[int, str]) -> nx.DiGraph:
         """Expand the solution from contracted graph back to original graph"""
         
         result = nx.DiGraph()
-        
-        # Add all original nodes
         result.add_nodes_from(original_graph.nodes())
         
-        # Add edges from contracted solution, mapping back to original nodes
         for u, v, data in contracted_solution.edges(data=True):
             if u == super_node:
-                # Edge from super-node: shouldn't happen in a valid arborescence
                 continue
             elif v == super_node:
-                # Edge to super-node: need to find which cycle node it connects to
-                # Find the cycle node that this edge should connect to
                 original_u = None
                 for orig_node, mapped_node in node_mapping.items():
                     if mapped_node == u:
@@ -198,32 +181,33 @@ class MDST:
                         break
                 
                 if original_u is not None:
-                    # Find best entry point to cycle
                     min_weight = float('inf')
                     best_target = None
+                    best_distance = None
                     for cycle_node in cycle:
-                        if original_graph.has_edge(original_u, cycle_node):
+                        if original_graph. has_edge(original_u, cycle_node):
                             weight = original_graph[original_u][cycle_node]['weight']
                             if weight < min_weight:
                                 min_weight = weight
                                 best_target = cycle_node
+                                best_distance = original_graph[original_u][cycle_node]['distance']  # ✅ CORRETTO
                     
                     if best_target is not None:
-                        result.add_edge(original_u, best_target, weight=min_weight)
+                        result.add_edge(original_u, best_target, weight=min_weight, distance=best_distance)
             else:
-                # Regular edge: map back to original nodes
                 original_u = None
                 original_v = None
-                for orig_node, mapped_node in node_mapping.items():
+                for orig_node, mapped_node in node_mapping. items():
                     if mapped_node == u:
                         original_u = orig_node
                     if mapped_node == v:
                         original_v = orig_node
                 
                 if original_u is not None and original_v is not None:
-                    result.add_edge(original_u, original_v, weight=data['weight'])
+                    result.add_edge(original_u, original_v, 
+                                weight=data['weight'], 
+                                distance=data['distance'])  # ✅ OK anche questo
         
-        # Add cycle edges (except the one that was "broken" by external connection)
         external_entry = None
         for node in cycle:
             for pred in result.predecessors(node):
@@ -233,11 +217,10 @@ class MDST:
             if external_entry:
                 break
         
-        # Add minimum edges within cycle, except for external entry point
         for node in cycle:
             if node != external_entry and node in min_edges:
-                source, target, weight = min_edges[node]
-                if source in cycle:  # Internal cycle edge
-                    result.add_edge(source, target, weight=weight)
+                source, target, weight, distance = min_edges[node]
+                if source in cycle:
+                    result.add_edge(source, target, weight=weight, distance=distance)
         
         return result

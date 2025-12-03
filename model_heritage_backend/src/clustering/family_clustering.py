@@ -28,8 +28,8 @@ from src.utils.architecture_filtering import FilteringPatterns
 logger = logging.getLogger(__name__)
 
 #FIXME: capire bene quali soglie settare empiricamente e non
-MIN_CONFIDENCE = 0.2
-THRESHOLD_SINGLE_MEMBER = 1.5
+MIN_CONFIDENCE = 0.0
+THRESHOLD_SINGLE_MEMBER = 50
 
 # Costante per soglia chunking automatico
 CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
@@ -195,7 +195,7 @@ class FamilyClusteringSystem:
             
             elif member_count == 2:
                 # 1 sola relazione: std non affidabile, usa margine sulla media
-                return avg_intra_distance * 1.5  # 50% margine
+                return avg_intra_distance * 20000 #1.5  # 50% margine
             
             else:
                 # >= 3 membri: formula standard
@@ -222,8 +222,8 @@ class FamilyClusteringSystem:
         try:
             models = neo4j_service.get_family_models(best_family_id)
             distances = neo4j_service.get_direct_relationship_distances(best_family_id)
-            
-            avg_intra_distance = self.distance_calculator.calculate_intra_family_distance(models)
+            avg_intra_distance = neo4j_service.get_family_by_id(best_family_id).get('avg_intra_distance')
+            #avg_intra_distance = self.distance_calculator.calculate_intra_family_distance(models)
             std_intra_distance = self.distance_calculator.calculate_std_intra_distance(distances, avg_intra_distance)
             members = len(models)
 
