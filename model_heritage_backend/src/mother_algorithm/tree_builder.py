@@ -150,7 +150,7 @@ class MoTHerTreeBuilder:
             model_ids = []
             
             for model in models:
-                ku = calc_ku(model_weights[model.id])
+                ku = model.kurtosis
                 kurtosis_values.append(ku)
                 model_ids.append(model.id)
 

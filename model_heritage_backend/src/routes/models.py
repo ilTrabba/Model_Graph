@@ -15,6 +15,7 @@ from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
+from src.mother_algorithm.mother_utils import calc_ku, load_model_weights
 from src.utils.normalization_system import normalize_safetensors_layers, save_layer_mapping_json
 
 logger = logging.getLogger(__name__)
@@ -276,6 +277,10 @@ def upload_model():
         # Parse task as list if comma-separated
         task_list = [t.strip() for t in task_value.split(',') if t.strip()] if task_value else []
 
+        model_weights = load_model_weights(file_path=file_path)
+
+        kurtosis = calc_ku(model_weights)
+
         # Create model record
         model_data = {
             'id': model_id,
@@ -290,6 +295,7 @@ def upload_model():
             'weights_uri': 'weights/' + filename,
             'created_at': datetime.now(timezone.utc).isoformat(),
             'distance_from_parent': 0.0,
+            'kurtosis':kurtosis,
             # New optional fields
             'license': license_value if license_value else None,
             'task': task_list,

@@ -91,6 +91,14 @@ class Model:
         return self.data.get('readme_uri')
     
     @property
+    def distance_from_parent(self):
+        return self.data.get('distance_from_parent')
+    
+    @property
+    def kurtosis(self):
+        return self.data.get('kurtosis')
+    
+    @property
     def is_foundation_model(self):
         return self.data.get('is_foundation_model', False)
     
@@ -106,6 +114,8 @@ class Model:
             'family_id': self.family_id,
             'parent_id': self.parent_id,
             'confidence_score': self.confidence_score,
+            'distance_from_parent': self.distance_from_parent,
+            'kurtosis': self.kurtosis,
             'status': self.status,
             'checksum': self.checksum,
             'file_path': self.file_path,
