@@ -50,7 +50,7 @@ ULTERIORI OBIETTIVI PROGETTUALI:
    3. Implementare l'operazione di download tramite fingerprint dei file safetensors originali
    4. Realizzare una vista (box view), accessibile tramite model card singola o creando una sezione dedicata, che mostri la famiglia (ad albero) del relativo modello di interesse.
    5.	Creare un modello in grado di elaborare prompt in NL e interpretarlo come query cypher, utile per cercare modelli o interrogare la knowledge generale accumulata dal sistema. Inizialmente sarà necessario concentrarsi su query semplici e poi successivamente più complesse (facenti uso di tag dedicati)
-   6.	Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene.
+   6.	Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene. (Confrontare accuracy usando centroide e usando file dei foundation model come centroidi)
    7.	Scelta di nuovi modelli per l’ampliamento del dataset con l’obiettivo di estendere il sistema su scala massiva
    8.	Testare modelli massivi e vedere come il sistema reagisce
    9.	Valutare l’utilizzo di nuove metriche al posto della L2 norm

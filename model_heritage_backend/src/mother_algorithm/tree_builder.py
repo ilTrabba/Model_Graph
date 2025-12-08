@@ -19,7 +19,6 @@ from src.db_entities.entity import Model
 from src.mother_algorithm.mdst import MDST
 from src.mother_algorithm.mother_utils import (
     load_model_weights,
-    calc_ku, 
     compute_lambda,
     fallback_directed_mst,
     calculate_confidence_scores,
@@ -232,6 +231,8 @@ class MoTHerTreeBuilder:
         # Create weighted directed graph
         G = nx.DiGraph()
         G.add_nodes_from(range(n))
+
+        root = np.argmax(ku_values)
         
         # Calculate edge weights combining distance and kurtosis
         for i in range(n):
@@ -248,18 +249,22 @@ class MoTHerTreeBuilder:
                     
                     # If i has higher kurtosis than j, this is a good parent->child relationship
                     if kurtosis_diff > 0:
-                        kurtosis_cost = 0 #-abs(kurtosis_diff)  # Negative cost = preferred
+                        penalty = 0 #-abs(kurtosis_diff)  # Negative cost = preferred
                     else:
-                        kurtosis_cost = abs(kurtosis_diff) * 2  # Penalty for bad direction
+                        penalty = true_lambda  # Penalty for bad direction
                     
                     # Combine costs using lambda parameter
-                    edge_weight = true_lambda * kurtosis_cost + (1 - true_lambda) * distance_cost
-                    
+                    edge_weight = distance_cost + penalty
+
+                    if(j==root):
+                        continue
+
                     G.add_edge(i, j, weight=edge_weight, distance=distance_cost)
 
         # Apply Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree
         try:
-            spanning_tree = mdst.chu_liu_edmonds_algorithm(G,np.argmax(ku_values))
+            spanning_tree = nx.minimum_spanning_arborescence(G, attr='weight', preserve_attrs=True)
+            #spanning_tree = mdst.chu_liu_edmonds(G,root=root)
             logger.debug(f"Chu-Liu-Edmonds completed: {spanning_tree.number_of_nodes()} nodes, {spanning_tree.number_of_edges()} edges")
         except Exception as e:
             logger.warning(f"Chu-Liu-Edmonds failed ({e}), using fallback")

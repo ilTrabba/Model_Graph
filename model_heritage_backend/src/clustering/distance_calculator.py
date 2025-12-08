@@ -249,10 +249,10 @@ class ModelDistanceCalculator:
                 param_count += 1
             
             # Log statistics
-            logger.info(
-                f"{metric_type} distance calculation: {param_count} layers included, "
-                f"{excluded_count} layers excluded"
-            )
+            #logger.info(
+            #    f"{metric_type} distance calculation: {param_count} layers included, "
+            #    f"{excluded_count} layers excluded"
+            #)
             
             if param_count == 0:
                 logHandler.warning_handler("No valid layers found for distance calculation","calculate_distance")
@@ -260,7 +260,7 @@ class ModelDistanceCalculator:
             
             # Return average distance
             avg_distance = total_distance / param_count
-            logger.info(f"Average {metric_type} distance: {avg_distance:.6f}")
+            #logger.info(f"Average {metric_type} distance: {avg_distance:.6f}")
             
             return avg_distance
             

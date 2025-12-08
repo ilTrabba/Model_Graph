@@ -4,206 +4,228 @@ Replaces the find_parent_stub function with sophisticated heritage detection
 """
 
 import logging
-import networkx as nx
-
-from typing import Tuple, Dict
-
 logger = logging.getLogger(__name__)
 
-# Minimum Directed Spanning Tree (MDST) using Chu-Liu-Edmonds algorithm
+import networkx as nx
+from typing import Dict, Tuple, Set
+
 class MDST:
     
-    def __init__(self):
-        pass
+    import numpy as np
+    import copy
 
-    def chu_liu_edmonds_algorithm(self, G: nx.DiGraph, root: int) -> nx.DiGraph:
+    def chu_liu_edmonds(self, graph, root=None):
         """
-        Chu-Liu-Edmonds algorithm for Minimum Directed Spanning Tree (Arborescence)
+        Versione robusta dell'algoritmo di Chu-Liu-Edmonds.
+        
+        Args:
+            graph: Dizionario {u: {v: {'weight': w}, ...}}
+            root: Il nodo radice (opzionale). Se None, viene trovata la radice ottima.
+            
+        Returns:
+            (arborescenza, radice_usata)
         """
-        if G.number_of_nodes() <= 1:
-            return G.copy()
+        # 1. Copia profonda per non modificare i dati originali dell'utente
+        #graph = copy.deepcopy(graph)
+        nodes = list(graph.keys())
         
-        if root not in G.nodes():
-            raise ValueError(f"Root node {root} not in graph")
+        # 2. GESTIONE RADICE AUTOMATICA (Virtual Root Strategy)
+        original_root = root
+        virtual_root = None
         
-        # Step 1: Find minimum incoming edges for each node (except root)
-        min_edges = self.find_min_incoming_edges(G, root)
-        
-        # Se non ci sono archi entranti sufficienti, restituisci quello che puoi (o solo la root)
-        if not min_edges and G.number_of_nodes() > 1:
-            result = nx.DiGraph()
-            result.add_node(root)
-            return result
-        
-        # Step 2: Check for cycles in the minimum edge set
-        cycles = self.find_cycles_in_min_edges(min_edges, root)
-        
-        if not cycles:
-            # No cycles: we have our arborescence
-            return self.build_arborescence_from_edges(G, min_edges, root)
-        
-        # Step 3: Contract cycles and solve recursively
-        return self.contract_cycles_and_recurse(G, root, min_edges, cycles)
+        if root is None:
+            # Trova un ID univoco per il nodo virtuale
+            virtual_root = -1
+            while virtual_root in nodes:
+                virtual_root -= 1
+                
+            # Calcola un peso penalizzante (somma di tutti i pesi esistenti + 1)
+            # Questo forza l'algoritmo a scegliere un solo arco uscente dalla radice virtuale
+            all_weights = [d['weight'] for u in graph for v, d in graph[u].items()]
+            penalty_weight = sum(all_weights) + 1.0 if all_weights else 100.0
+            
+            # Aggiungi il nodo virtuale connesso a TUTTI gli altri nodi
+            graph[virtual_root] = {}
+            for n in nodes:
+                graph[virtual_root][n] = {'weight': penalty_weight}
+                
+            root = virtual_root
+            nodes.append(virtual_root)
 
-    def find_min_incoming_edges(self, graph: nx.DiGraph, root: int) -> Dict[int, Tuple[int, int, float, dict]]:
-        """
-        Find minimum incoming edge for each node (except root).
-        Returns dict: target -> (source, target, weight, full_attributes_dict)
-        """
-        min_edges = {}
+        # --- FASE 1: Selezione Greedy ---
+        min_in_edges = {}
         
-        for node in graph.nodes():
-            if node == root:
+        for v in nodes:
+            if v == root:
                 continue
+                
+            best_edge = None
+            min_weight = float('inf')
             
-            candidates = []
-            for pred in graph.predecessors(node):
-                if graph.has_edge(pred, node):
-                    data = graph[pred][node]
-                    weight = data.get('weight', 0.0)
-                    candidates.append((pred, node, weight, data))
+            # Cerca archi entranti in v
+            for u in graph:
+                if v in graph[u]:
+                    w = graph[u][v]['weight']
+                    if w < min_weight:
+                        min_weight = w
+                        best_edge = (u, v)
             
-            if candidates:
-                # Seleziona quello con peso minore
-                best_edge = min(candidates, key=lambda x: x[2])
-                min_edges[node] = best_edge
-        
-        return min_edges
-
-    def find_cycles_in_min_edges(self, min_edges: Dict[int, Tuple[int, int, float, dict]], root: int) -> list:
-        """Find cycles formed by minimum incoming edges"""
-        temp_graph = nx.DiGraph()
-        
-        # Costruiamo il grafo temporaneo delle selezioni greedy
-        for target, (source, _, _, _) in min_edges.items():
-            temp_graph.add_edge(source, target)
-        
-        try:
-            cycles = list(nx.simple_cycles(temp_graph))
-            return cycles
-        except:
-            return []
-
-    def build_arborescence_from_edges(self, graph: nx.DiGraph, min_edges: Dict[int, Tuple[int, int, float, dict]], root: int) -> nx.DiGraph:
-        """Build arborescence from minimum edges (when no cycles exist)"""
-        result = nx.DiGraph()
-        result.add_nodes_from(graph.nodes()) # Aggiungi tutti i nodi, anche isolati se ce ne fossero
-        
-        for target, (source, _, _, data) in min_edges.items():
-            result.add_edge(source, target, **data)
-        
-        return result
-    
-    def contract_cycles_and_recurse(self, graph: nx.DiGraph, root: int, 
-                                min_edges: Dict[int, Tuple[int, int, float, dict]], cycles: list) -> nx.DiGraph:
-        """Contract cycles into super-nodes and solve recursively"""
-        
-        cycle = cycles[0]
-        cycle_nodes = set(cycle)
-        
-        contracted_graph = nx.DiGraph()
-        super_node = f"super_{min(cycle)}"
-        
-        # Mappa dei nodi: Nodo Originale -> Nodo Contratto (o se stesso)
-        node_mapping = {}
-        for node in graph.nodes():
-            if node in cycle_nodes:
-                node_mapping[node] = super_node
+            if best_edge:
+                min_in_edges[v] = (best_edge, min_weight)
             else:
-                node_mapping[node] = node
-                contracted_graph.add_node(node)
-        contracted_graph.add_node(super_node)
-        
-        # Iteriamo su TUTTI gli archi del grafo originale
-        for u, v, data in graph.edges(data=True):
-            u_mapped = node_mapping[u]
-            v_mapped = node_mapping[v]
-            
-            # 1. Ignora self-loops sul super-nodo (archi interni al ciclo)
-            if u_mapped == v_mapped:
-                continue
-            
-            new_weight = data['weight']
-            # Copiamo tutti i dati originali per non perderli (distance, etc.)
-            new_data = data.copy()
-            
-            # --- SALVATAGGIO FONDAMENTALE PER L'ESPANSIONE ---
-            # Salviamo chi erano u e v nel grafo originale. 
-            # Questo evita di doverli "indovinare" dopo.
-            new_data['original_u'] = u
-            new_data['original_v'] = v
-            
-            # 2. Gestione pesi per archi entranti nel ciclo
-            if v in cycle_nodes:
-                # Formula: w' = w - w(edge_in_cycle_pointing_to_v)
-                # min_edges[v] è la tupla (source, target, weight, data)
-                cycle_edge_weight = min_edges[v][2]
-                new_weight = new_weight - cycle_edge_weight
-                new_data['weight'] = new_weight
-            
-            # 3. Gestione archi uscenti (es. 9 -> 5)
-            # Se u in cycle_nodes e v fuori, l'arco diventa super_node -> v
-            # Il peso rimane invariato. Il 'bug' precedente era qui (venivano ignorati dopo).
-            
-            # Aggiunta al grafo contratto (gestione multi-archi: teniamo il migliore)
-            if contracted_graph.has_edge(u_mapped, v_mapped):
-                current_weight = contracted_graph[u_mapped][v_mapped]['weight']
-                if new_weight < current_weight:
-                    contracted_graph.add_edge(u_mapped, v_mapped, **new_data)
-            else:
-                contracted_graph.add_edge(u_mapped, v_mapped, **new_data)
-        
-        # Ricorsione
-        contracted_root = node_mapping[root]
-        contracted_solution = self.chu_liu_edmonds_algorithm(contracted_graph, contracted_root)
-        
-        return self.expand_solution(graph, contracted_solution, cycle, min_edges, super_node, node_mapping)
+                # EDGE CASE: Nodo irraggiungibile
+                # Se siamo nella ricorsione (grafo contratto), è un problema serio.
+                # Se siamo al top level e usiamo la virtual root, potrebbe essere normale per componenti disconnesse,
+                # ma per un'arborescenza valida (spanning) deve essere tutto connesso.
+                pass 
 
-    def expand_solution(self, original_graph: nx.DiGraph, contracted_solution: nx.DiGraph,
-                cycle: list, min_edges: Dict[int, Tuple[int, int, float, dict]], 
-                super_node: str, node_mapping: Dict[int, str]) -> nx.DiGraph:
-        """Expand the solution from contracted graph back to original graph"""
+        # Controllo raggiungibilità (Spanning Property)
+        if len(min_in_edges) < len(nodes) - 1:
+            reachable = set(min_in_edges.keys()) | {root}
+            unreachable = set(nodes) - reachable
+            raise ValueError(f"Impossibile formare un'arborescenza completa. Nodi irraggiungibili dalla radice {root}: {unreachable}")
+
+        # --- FASE 2: Rilevamento Cicli ---
+        cycle = self.find_cycle(min_in_edges, nodes)
         
-        result = nx.DiGraph()
-        result.add_nodes_from(original_graph.nodes())
-        
+        # CASO BASE: Nessun ciclo
+        if not cycle:
+            arborescence = {u: {} for u in nodes}
+            for v, (edge, w) in min_in_edges.items():
+                u = edge[0]
+                arborescence[u][v] = {'weight': w}
+                
+            # Se abbiamo usato una radice virtuale, dobbiamo ripulire il risultato
+            if virtual_root is not None:
+                final_arb = {u: {} for u in nodes if u != virtual_root}
+                found_real_root = None
+                
+                # Cerca quale nodo reale è stato puntato dalla radice virtuale
+                for v in arborescence[virtual_root]:
+                    found_real_root = v
+                    # Non aggiungiamo questo arco (virtual->real) nel risultato finale, 
+                    # perché l'arborescenza reale inizia da 'v'
+                
+                if found_real_root is None:
+                    raise ValueError("Errore interno: La radice virtuale non ha selezionato nessun figlio.")
+
+                # Copia gli altri archi
+                for u in arborescence:
+                    if u == virtual_root: continue
+                    for v in arborescence[u]:
+                        final_arb[u][v] = arborescence[u][v]
+                
+                return final_arb, found_real_root
+            
+            return arborescence, root
+
+        # CASO RICORSIVO: Contrazione Ciclo
+        # (Logica identica alla precedente, ma adattata per gestire la ricorsione correttamente)
         cycle_nodes = set(cycle)
-        entry_node_in_cycle = None
-        
-        # 1. Ripristina gli archi dalla soluzione contratta
-        for u, v, data in contracted_solution.edges(data=True):
-            # Recuperiamo gli ID veri grazie al salvataggio fatto in contract_cycles
-            # .get('original_u', u) serve per gli archi che non sono stati toccati (esterni)
-            real_u = data.get('original_u', u)
-            real_v = data.get('original_v', v)
-            
-            # Puliamo i dati rimuovendo le chiavi di servizio
-            clean_data = {k: val for k, val in data.items() 
-                          if k not in ['original_u', 'original_v', 'weight']}
-            
-            # Ripristiniamo il peso originale dal grafo originale per sicurezza
-            # (perché 'weight' in data potrebbe essere quello modificato)
-            original_weight = original_graph[real_u][real_v]['weight']
-            clean_data['weight'] = original_weight
-            
-            # Aggiungiamo l'arco "vero"
-            result.add_edge(real_u, real_v, **clean_data)
-            
-            # Se questo arco entra nel ciclo, segniamo il punto di ingresso
-            if real_v in cycle_nodes and real_u not in cycle_nodes:
-                entry_node_in_cycle = real_v
+        new_node = max(nodes) + 1 # Super-nodo
+        while new_node in graph: new_node += 1 # Sicurezza collisioni
 
-        # 2. Ripristina il ciclo interno
-        # Se la radice era parte del ciclo, non c'è un entry_node esterno, 
-        # ma la root funge da entry.
+        contracted_graph = {}
         
-        # Aggiungiamo tutti gli archi del ciclo originale tranne quello che punta all'entry_node
-        for node in cycle:
-            if node == entry_node_in_cycle:
+        # Costruzione grafo contratto
+        for u in graph:
+            if u not in cycle_nodes:
+                contracted_graph[u] = {}
+        contracted_graph[new_node] = {}
+        
+        cycle_weight_sum = sum(min_in_edges[v][1] for v in cycle)
+        
+        for u in graph:
+            for v in graph[u]:
+                w = graph[u][v]['weight']
+                if u not in cycle_nodes and v not in cycle_nodes:
+                    contracted_graph[u][v] = {'weight': w}
+                elif u not in cycle_nodes and v in cycle_nodes:
+                    w_in_cycle = min_in_edges[v][1]
+                    new_weight = w - w_in_cycle
+                    if new_node not in contracted_graph[u] or new_weight < contracted_graph[u][new_node]['weight']:
+                        contracted_graph[u][new_node] = {'weight': new_weight, 'real_target': v}
+                elif u in cycle_nodes and v not in cycle_nodes:
+                    if v not in contracted_graph[new_node] or w < contracted_graph[new_node][v]['weight']:
+                        contracted_graph[new_node][v] = {'weight': w, 'real_source': u}
+
+        # Chiamata ricorsiva
+        # Nota: la radice passa invariata se non è nel ciclo, altrimenti diventa new_node
+        next_root = root if root not in cycle_nodes else new_node
+        mst_contracted, _ = self.chu_liu_edmonds(contracted_graph, next_root)
+        
+        # --- FASE 3: Espansione (Unpacking) ---
+        final_edges = []
+        # Archi del ciclo
+        for v in cycle:
+            u = min_in_edges[v][0][0]
+            final_edges.append((u, v, min_in_edges[v][1]))
+            
+        key_to_remove = None
+        
+        for u in mst_contracted:
+            for v in mst_contracted[u]:
+                if v == new_node: # Entrante nel ciclo
+                    real_target = contracted_graph[u][new_node]['real_target']
+                    w_original = graph[u][real_target]['weight']
+                    final_edges.append((u, real_target, w_original))
+                    key_to_remove = real_target
+                elif u == new_node: # Uscente dal ciclo
+                    real_source = contracted_graph[new_node][v]['real_source']
+                    w_original = graph[new_node][v]['weight']
+                    final_edges.append((real_source, v, w_original))
+                else:
+                    final_edges.append((u, v, mst_contracted[u][v]['weight']))
+                    
+        result_graph = {n: {} for n in nodes}
+        for u, v, w in final_edges:
+            if v == key_to_remove and u in cycle_nodes:
                 continue
+            result_graph[u][v] = {'weight': w}
             
-            # Recupera l'arco del ciclo originale (salvato in min_edges)
-            source, target, weight, edge_data = min_edges[node]
-            result.add_edge(source, target, **edge_data)
+        # Gestione cleanup virtual root al ritorno dalla ricorsione
+        if virtual_root is not None:
+            # Se siamo qui, significa che c'era un ciclo nel grafo esteso col nodo virtuale.
+            # Logica di pulizia simile al caso base.
+            final_arb = {u: {} for u in nodes if u != virtual_root}
+            found_real_root = None
+            for v in result_graph[virtual_root]:
+                found_real_root = v
             
-        return result
+            for u in result_graph:
+                if u == virtual_root: continue
+                for v in result_graph[u]:
+                    final_arb[u][v] = result_graph[u][v]
+            return final_arb, found_real_root
+
+        return result_graph, root
+
+    def _find_cycle(self, selection, nodes):
+        """Helper identico per trovare cicli."""
+        visited = set()
+        path_set = set()
+        parents = {v: edge[0] for v, (edge, w) in selection.items()}
+
+        def visit(node):
+            if node in path_set:
+                cycle = []
+                curr = node
+                while True:
+                    cycle.append(curr)
+                    curr = parents[curr]
+                    if curr == node: break
+                return cycle
+            if node in visited: return None
+            visited.add(node)
+            path_set.add(node)
+            if node in parents:
+                res = visit(parents[node])
+                if res: return res
+            path_set.remove(node)
+            return None
+
+        for n in nodes:
+            if n not in visited:
+                cycle = visit(n)
+                if cycle: return cycle
+        return None
