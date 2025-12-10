@@ -10,6 +10,8 @@ import torch
 import safetensors
 import networkx as nx
 
+import numpy as np
+from scipy.stats import kurtosis
 from numpy.typing import NDArray
 from scipy import stats
 from typing import Dict, List, Optional, Any, Tuple
@@ -54,6 +56,100 @@ def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logHandler.error_handler(e, "load_model_weights", {"file_path": file_path})
 
+def calc_ku(weights: Dict[str, Any]) -> float:
+    """
+    Calculate kurtosis of model weights (only 2D square 'dense' tensors), adapted to match
+    MoTHer FullFT behavior while preserving the original checks/logging.
+
+    Behavior enforced:
+    - Only considers layers whose name contains the substring 'output.dense' (case-insensitive),
+      matching MoTHer FullFT usage.
+    - Only includes 2D square tensors (ndim == 2 and shape[0] == shape[1]).
+    - Calculates kurtosis per-layer (scipy.stats.kurtosis, Fisher/excess kurtosis) and SUMS
+      the per-layer kurtoses to produce the model-level value (same aggregation used in MoTHer).
+    - Preserves existing checks/logging patterns (assumes `logger` and `FilteringPatterns.BACKBONE_ONLY`
+      are available in the caller's scope).
+    - Returns 0.0 if no valid layers are found or if an error occurs.
+    """
+    try:
+        # Layer kind required for Full Fine-Tuning mode in MoTHer
+        LAYER_KIND = "output.dense"
+
+        excluded_count = 0
+        shape_filtered_count = 0
+        layer_kind_filtered_count = 0
+        valid_layer_count = 0
+        nan_inf_layer_count = 0
+        total_weights_from_valid_layers = 0
+        model_ku = 0.0
+
+        for param_name, param_tensor in weights.items():
+            # Normalize name for case-insensitive checks
+            param_lower = param_name.lower()
+
+            # Exclude normalization, embedding, and head layers (your existing filter)
+            if any(pattern in param_lower for pattern in FilteringPatterns.BACKBONE_ONLY):
+                excluded_count += 1
+                continue
+
+            # Require the FullFT-specific layer kind substring
+            if LAYER_KIND not in param_lower:
+                layer_kind_filtered_count += 1
+                continue
+
+            # Verify it's a torch tensor
+            if not isinstance(param_tensor, torch.Tensor):
+                continue
+
+            # Only include 2D square matrices
+            if not (param_tensor.ndim == 2 and param_tensor.shape[0] == param_tensor.shape[1]):
+                shape_filtered_count += 1
+                continue
+
+            # Flatten to numpy array for kurtosis calculation
+            param_weights = param_tensor.detach().cpu().numpy().ravel()
+            total_weights_from_valid_layers += param_weights.size
+
+            # Calculate kurtosis per-layer (Fisher definition)
+            ku = stats.kurtosis(param_weights, fisher=True)
+
+            # Handle NaN/Inf for this layer: skip and count, but don't let it poison the sum
+            if np.isnan(ku) or np.isinf(ku):
+                nan_inf_layer_count += 1
+                continue
+
+            # Aggregate by summing per-layer kurtoses (matching MoTHer)
+            model_ku += float(ku)
+            valid_layer_count += 1
+
+        # If no valid layers (after all filters), keep the same warning behavior as before
+        if valid_layer_count == 0:
+            logger.warning(
+                f"No valid weights found for kurtosis calculation. "
+                f"Excluded: {excluded_count}, Layer-kind filtered: {layer_kind_filtered_count}, "
+                f"Shape filtered: {shape_filtered_count}, NaN/Inf layers: {nan_inf_layer_count}"
+            )
+            return 0.0
+
+        # Final sanity check on aggregated kurtosis
+        if np.isnan(model_ku) or np.isinf(model_ku):
+            logger.warning("Aggregated kurtosis calculation resulted in NaN or Inf")
+            return 0.0
+
+        logger.debug(
+            f"Kurtosis (summed per-layer, FullFT 'output.dense') calculated: {model_ku:.6f} "
+            f"({valid_layer_count} layers used, {total_weights_from_valid_layers} total weights, "
+            f"{excluded_count} layers excluded, {layer_kind_filtered_count} filtered by layer kind, "
+            f"{shape_filtered_count} shape filtered, {nan_inf_layer_count} layers had NaN/Inf kurtosis)"
+        )
+
+        return float(model_ku)
+
+    except Exception as e:
+        logger.error(f"Error calculating kurtosis: {e}", exc_info=True)
+        return 0.0
+
+'''
 def calc_ku(weights: Dict[str, Any]) -> float:
     """
     Calculate kurtosis of model weights (only 2D square tensors).
@@ -130,7 +226,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
     except Exception as e:
         logger.error(f"Error calculating kurtosis: {e}", exc_info=True)
         return 0.0
-
+''' 
 def compute_lambda(distance_matrix: np.ndarray, c: float = 0.3) -> float:
     """
     Compute lambda as defined in the MoTHer paper:

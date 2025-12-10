@@ -229,7 +229,6 @@ class ModelDistanceCalculator:
                     excluded_count += 1
                     continue
                 
-                
                 # Calculate layer distance using appropriate metric
                 if metric_type == DistanceMetric.L2_DISTANCE:
                     layer_distance = self.calculate_l2_layer_distance(tensor1, tensor2)

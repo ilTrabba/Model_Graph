@@ -6,7 +6,6 @@ It handles family assignment, centroid calculation, and family management operat
 """
 
 import logging
-import numpy as np
 import torch
 import uuid
 import re
@@ -15,6 +14,7 @@ import os
 
 from src.log_handler import logHandler
 from src.mother_algorithm.mother_utils import load_model_weights
+from src.clustering.distance_calculator import DistanceMetric
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from enum import Enum
@@ -28,8 +28,9 @@ from src.utils.architecture_filtering import FilteringPatterns
 logger = logging.getLogger(__name__)
 
 #FIXME: capire bene quali soglie settare empiricamente e non
-MIN_CONFIDENCE = 0.0
-THRESHOLD_SINGLE_MEMBER = 50
+MIN_CONFIDENCE = 0.2
+THRESHOLD_SINGLE_MEMBER = 5
+THRESHOLD_DOUBLE_MEMBER = 5
 
 # Costante per soglia chunking automatico
 CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
@@ -191,15 +192,15 @@ class FamilyClusteringSystem:
 
             if member_count == 1:
                 # Famiglia con 1 solo membro: soglia conservativa fissa
-                return THRESHOLD_SINGLE_MEMBER  # es. 1.5
+                return THRESHOLD_SINGLE_MEMBER # now is 5
             
             elif member_count == 2:
                 # 1 sola relazione: std non affidabile, usa margine sulla media
-                return avg_intra_distance * 20000 #1.5  # 50% margine
+                return THRESHOLD_DOUBLE_MEMBER # now is 5
             
             else:
                 # >= 3 membri: formula standard
-                return 10000 + avg_intra_distance + k * std_intra_distance
+                return avg_intra_distance + k * std_intra_distance
             
         except Exception as e:
             logHandler.error_handler(e, "calculate_adaptive_threshold")
@@ -223,7 +224,7 @@ class FamilyClusteringSystem:
             models = neo4j_service.get_family_models(best_family_id)
             distances = neo4j_service.get_direct_relationship_distances(best_family_id)
             avg_intra_distance = neo4j_service.get_family_by_id(best_family_id).get('avg_intra_distance')
-            #avg_intra_distance = self.distance_calculator.calculate_intra_family_distance(models)
+
             std_intra_distance = self.distance_calculator.calculate_std_intra_distance(distances, avg_intra_distance)
             members = len(models)
 
@@ -357,7 +358,6 @@ class FamilyClusteringSystem:
         Returns:
             Tuple of (best_family_id, confidence_score)
         """
-        from src.clustering.distance_calculator import DistanceMetric
         try:
             distance_metric = DistanceMetric.L2_DISTANCE
             best_family_id = None
@@ -404,14 +404,6 @@ class FamilyClusteringSystem:
             
             if best_family_id is None:
                 return "", 0.0
-        
-            # Convert distance to confidence score
-            # print(f"{self.family_threshold}")
-
-            # value1 = best_distance / 4.2
-            # value2 = 1 - value1
-            # confidence = max (0.0, value2)
-            # confidence = min (1.0, confidence)
             
             return best_family_id, best_distance
             

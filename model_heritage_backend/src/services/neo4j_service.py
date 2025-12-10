@@ -426,7 +426,7 @@ class Neo4jService:
                 query = """
                 MATCH (model:Model {family_id: $family_id})
                 WHERE model.distance_from_parent > 0
-                RETURN model. distance_from_parent AS distance
+                RETURN model.distance_from_parent AS distance
                 """
 
                 result = session.run(query, family_id=best_family_id)
