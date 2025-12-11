@@ -183,9 +183,10 @@ class FamilyClusteringSystem:
             return None
 
 
-    def calculate_adaptive_threshold(self, family_stats: Dict, k=2.0):
+    def calculate_adaptive_threshold(self, family_stats: Dict):
 
         try:
+            k = 5.0  # moltiplicatore di deviazione standard
             member_count = family_stats["members"]
             avg_intra_distance = family_stats["avg_intra_distance"]
             std_intra_distance = family_stats["std_intra_distance"]
@@ -279,7 +280,7 @@ class FamilyClusteringSystem:
                 
                 family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
 
-                threshold = self.calculate_adaptive_threshold(family_stats, k=2.0)
+                threshold = self.calculate_adaptive_threshold(family_stats)
 
                 confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
                 

@@ -14,7 +14,8 @@ import {
   Tag,
   Link as LinkIcon,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +33,7 @@ export default function ModelDetailPage() {
   const [error, setError] = useState(null);
   const [readmeContent, setReadmeContent] = useState(null);
   const [readmeLoading, setReadmeLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     fetchModel();
@@ -70,6 +72,45 @@ export default function ModelDetailPage() {
       console.error('Failed to fetch README:', err);
     } finally {
       setReadmeLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const response = await fetch(`http://localhost:5001/api/models/${id}/download`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Download failed');
+      }
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${model?. name || id}.safetensors`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition. match(/filename="? (. +)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert(`Download failed: ${err.message}`);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -434,6 +475,25 @@ export default function ModelDetailPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              {/* Download Button */}
+              <Button 
+                onClick={handleDownload}
+                disabled={downloading}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                {downloading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Weights
+                  </>
+                )}
+              </Button>
+              
               <Link to="/add-model" className="block">
                 <Button variant="outline" className="w-full">
                   <TrendingUp className="h-4 w-4 mr-2" />

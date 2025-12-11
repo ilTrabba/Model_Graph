@@ -55,6 +55,7 @@ export default function AddModelPage() {
   const [showFoundationModel, setShowFoundationModel] = useState(false);
   const [datasetUrlError, setDatasetUrlError] = useState(null);
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
+  const [showLicenseDropdown, setShowLicenseDropdown] = useState(false);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -324,19 +325,44 @@ export default function AddModelPage() {
             {/* License */}
             <div className="space-y-2">
               <Label htmlFor="license">License (Optional)</Label>
-              <select
-                id="license"
-                name="license"
-                value={formData.license}
-                onChange={handleLicenseChange}
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                {LICENSE_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowLicenseDropdown(!showLicenseDropdown)}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <span className={formData.license ?  'text-gray-900' : 'text-gray-500'}>
+                    {formData.license 
+                      ? LICENSE_OPTIONS.find(opt => opt.value === formData.license)?.label || formData.license
+                      : 'Select a license.. .'
+                    }
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showLicenseDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showLicenseDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {LICENSE_OPTIONS. filter(opt => opt.value !== '').map(option => (
+                      <div
+                        key={option. value}
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            license: option.value,
+                            customLicense: option.value !== 'Other' ? '' : prev.customLicense
+                          }));
+                          setShowLicenseDropdown(false);
+                        }}
+                        className={`flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100 ${
+                          formData.license === option. value ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <span className="text-sm">{option.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               {formData.license === 'Other' && (
                 <Input
                   id="customLicense"

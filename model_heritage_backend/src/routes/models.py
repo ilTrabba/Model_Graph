@@ -1,11 +1,13 @@
 import os
 import hashlib
-from typing import Any
 import uuid
 import logging
 import tempfile
-from urllib.parse import urlparse
+import json
+import io
 
+from flask import send_file
+from urllib.parse import urlparse
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from flask import Blueprint, request, jsonify, current_app
@@ -456,3 +458,64 @@ def get_clustering_statistics():
     except Exception as e:
         current_app.logger.error(f"Failed to get clustering statistics: {e}")
         return jsonify({'error': f'Failed to get statistics: {str(e)}'}), 500
+    
+@models_bp.route('/models/<model_id>/download', methods=['GET'])
+def download_model_weights(model_id):
+    """Download model weights with original layer names restored"""
+    try:
+        # 1. Get model from Neo4j
+        model = neo4j_service.get_model_by_id(model_id)
+        if not model: 
+            return jsonify({'error': 'Model not found'}), 404
+        
+        file_path = model.file_path
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'Model file not found'}), 404
+        
+        # 2. Load fingerprint JSON to get mapping and original filename
+        fingerprint_path = os.path.join('weights', 'fingerprints', f'{model_id}_mapping.json')
+        if not os.path.exists(fingerprint_path):
+            return jsonify({'error': 'Fingerprint file not found'}), 404
+        
+        with open(fingerprint_path, 'r') as f:
+            fingerprint = json.load(f)
+        
+        mapping = fingerprint. get('mapping', {})
+        original_filename = fingerprint.get('original_filename', f'{model_id}. safetensors')
+        
+        # 3. Load the stored safetensors file (normalized layer names)
+        tensors_dict = load_file(file_path)
+        
+        # 4. Load original metadata
+        with safe_open(file_path, framework="pt", device="cpu") as f:
+            metadata = f.metadata()
+        
+        # 5. Create new tensors dict with original layer names (key -> value mapping)
+        restored_tensors = {}
+        for normalized_name, tensor in tensors_dict.items():
+            # mapping:  normalized_name (key) -> original_name (value)
+            original_name = mapping.get(normalized_name, normalized_name)
+            restored_tensors[original_name] = tensor
+        
+        # 6. Save to temporary file in memory
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_file:
+            tmp_path = tmp_file.name
+        
+        save_file(restored_tensors, tmp_path, metadata=metadata)
+        
+        # 7. Read the file into memory and delete temp file
+        with open(tmp_path, 'rb') as f:
+            file_data = f.read()
+        os.unlink(tmp_path)
+        
+        # 8. Send file as download
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=original_filename
+        )
+        
+    except Exception as e:
+        logHandler.error_handler(e, "download_model_weights")
+        return jsonify({'error': f'Download failed: {str(e)}'}), 500
