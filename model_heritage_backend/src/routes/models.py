@@ -160,7 +160,7 @@ def extract_weight_signature_from_tensors(tensors_dict: dict, num_layers: int) -
     dims = [d for d in dims if d >= 128]
 
     if not dims:
-        raise RuntimeError("Impossibile dedurre hidden_size dai tensori (nessuna matrice significativa trovata).")
+        raise RuntimeError("Unable to deduce hidden_size from tensors (no significant matrix found).")
 
     hidden_size = Counter(dims).most_common(1)[0][0]
 

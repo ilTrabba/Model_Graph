@@ -62,11 +62,11 @@ def _load_sharded_weights(folder_path: str) -> Optional[Dict[str, Any]]:
 def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
     """Load model weights from file or folder (sharded models)"""
     try:
-        # NUOVO: Se è una cartella, carica tutti gli shard
+        # NEW: If it's a folder, load all shards
         if os.path.isdir(file_path):
             return _load_sharded_weights(file_path)
         
-        # Comportamento esistente per file singoli
+        # Existing behavior for single files
         if file_path.endswith('.safetensors'):
             with safetensors.safe_open(file_path, framework="pt", device="cpu") as f:
                 weights = {key: f.get_tensor(key) for key in f.keys()}
