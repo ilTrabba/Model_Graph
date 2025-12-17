@@ -422,5 +422,5 @@ class ModelDistanceCalculator:
             return avg_distance
             
         except Exception as e:
-            logHandler.error_handler(f"Failed to calculate chunked distance: {e}", "calculate_distance_chunked")
+            logHandler.error_handler(e, "calculate_distance_chunked")
             return float('inf')

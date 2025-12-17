@@ -8,6 +8,7 @@ It leverages the existing MoTHer implementation to create heritage trees within 
 import logging
 import numpy as np
 import networkx as nx
+import os
 
 from typing import Dict, List, Optional, Tuple, Any
 from numpy.typing import NDArray
@@ -131,7 +132,7 @@ class MoTHerTreeBuilder:
             
         except Exception as e:
             logHandler.error_handler(f"Error building family tree for {family_id}: {e}", "build_family_tree")
-            return nx.DiGraph(), [], {}
+            return nx.DiGraph(), {}
     
     def build_mother_tree(self, 
                           family_id: str,

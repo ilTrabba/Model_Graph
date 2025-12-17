@@ -278,16 +278,8 @@ class FamilyClusteringSystem:
                     model.file_path, candidate_centroids, use_chunked=True
                 )
                 
-                family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
-
-                threshold = self.calculate_adaptive_threshold(family_stats)
-
-                confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
-                
-                if best_distance < threshold and confidence > MIN_CONFIDENCE:
-                    family_id = best_family_id
-                    
-                else:
+                # Handle case where no match was found
+                if best_family_id is None:
                     # Creating new family - need to load weights
                     if model_weights is None:
                         model_weights = load_model_weights(model.file_path)
@@ -296,6 +288,25 @@ class FamilyClusteringSystem:
                     
                     family_id = self.create_new_family(model, model_weights)
                     confidence = 1.0
+                else:
+                    family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
+
+                    threshold = self.calculate_adaptive_threshold(family_stats)
+
+                    confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
+                    
+                    if best_distance < threshold and confidence > MIN_CONFIDENCE:
+                        family_id = best_family_id
+                        
+                    else:
+                        # Creating new family - need to load weights
+                        if model_weights is None:
+                            model_weights = load_model_weights(model.file_path)
+                            if model_weights is None:
+                                raise Exception("Model weights could not be loaded for new family creation")
+                        
+                        family_id = self.create_new_family(model, model_weights)
+                        confidence = 1.0
             
             # Update model with family assignment
             neo4j_service.update_model(model.id, {'family_id': family_id})
@@ -418,13 +429,13 @@ class FamilyClusteringSystem:
 
             
             if best_family_id is None:
-                return "", 0.0
+                return None, 0.0
             
             return best_family_id, best_distance
             
         except Exception as e:
             logHandler.error_handler(e, "find_best_family_match")
-            return "", 0.0
+            return None, 0.0
     
     def create_new_family(self, model: Model, model_weights: Optional[Dict[str, Any]] = None) -> str:
         """
