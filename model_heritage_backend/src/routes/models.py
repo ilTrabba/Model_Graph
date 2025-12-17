@@ -17,7 +17,7 @@ from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
-from src.mother_algorithm.mother_utils import calc_ku, load_model_weights
+from src.mother_algorithm.mother_utils import calc_ku, load_model_weights, calc_ku_chunked
 from src.utils.normalization_system import normalize_safetensors_layers, save_layer_mapping_json
 
 logger = logging.getLogger(__name__)
@@ -264,7 +264,7 @@ def process_sharded_upload(files, form_data):
         # Process each shard: load, normalize, and save
         all_original_keys = []
         all_normalized_keys = []
-        all_normalized_tensors = {}
+        # REMOVED: all_normalized_tensors = {}  # Don't accumulate all tensors in memory
         original_filenames = []
         first_metadata = None
         
@@ -295,8 +295,7 @@ def process_sharded_upload(files, form_data):
                 all_original_keys.extend(original_keys)
                 all_normalized_keys.extend(normalized_keys)
                 
-                # Add to unified tensor dict
-                all_normalized_tensors.update(norm_tensors_dict)
+                # REMOVED: all_normalized_tensors.update(norm_tensors_dict)  # Don't accumulate in memory
                 
                 # Save normalized shard to model folder
                 shard_filename = secure_filename(f"shard_{idx:05d}_{file.filename}")
@@ -304,6 +303,9 @@ def process_sharded_upload(files, form_data):
                 save_file(norm_tensors_dict, shard_path, metadata=metadata)
                 
                 original_filenames.append(file.filename)
+                
+                # Free memory immediately
+                del tensors_dict, norm_tensors_dict
                 
             finally:
                 # Clean up temp file
@@ -330,11 +332,15 @@ def process_sharded_upload(files, form_data):
                 os.remove(readme_uri)
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
-        # Extract signature from unified tensors
-        signature = extract_weight_signature_from_tensors(all_normalized_tensors, num_layers)
+        # Extract signature from folder (using first shard for shape analysis)
+        shard_files = sorted([f for f in os.listdir(model_folder) if f.endswith('.safetensors')])
+        if not shard_files:
+            raise Exception("No .safetensors files found in model folder")
+        first_shard_path = os.path.join(model_folder, shard_files[0])
+        signature = extract_weight_signature(first_shard_path, num_layers)
         
-        # Calculate kurtosis from unified tensors
-        kurtosis = calc_ku(all_normalized_tensors)
+        # Calculate kurtosis using chunked method (processes layer by layer from folder)
+        kurtosis = calc_ku_chunked(model_folder)
         
         # Parse task as list
         task_list = [t.strip() for t in task_value.split(',') if t.strip()] if task_value else []

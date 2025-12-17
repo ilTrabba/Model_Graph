@@ -14,7 +14,7 @@ from src.log_handler import logHandler
 from ..db_entities.entity import Model
 from enum import Enum
 from src.utils.architecture_filtering import FilteringPatterns
-from src.mother_algorithm.mother_utils import load_model_weights
+from src.mother_algorithm.mother_utils import load_model_weights, get_model_keys, load_single_tensor
 
 logger = logging.getLogger(__name__)
 
@@ -327,3 +327,100 @@ class ModelDistanceCalculator:
         std_distance = variance ** 0.5
         
         return std_distance
+
+    def calculate_distance_chunked(self, 
+                                   path1: str, 
+                                   path2: str,
+                                   metric_type: DistanceMetric = DistanceMetric.L2_DISTANCE,
+                                   excluded_patterns: List[str] = None) -> float:
+        """
+        Calculate distance between two models layer-by-layer without loading entirely in memory.
+        Works with both single files and sharded model folders.
+        
+        This method is designed for large models (16GB+) to minimize memory usage by
+        processing one layer at a time.
+        
+        Args:
+            path1: Path to first model (file or folder)
+            path2: Path to second model (file or folder)
+            metric_type: Distance metric to use (currently only L2 supported for chunked)
+            excluded_patterns: Patterns for layers to exclude
+            
+        Returns:
+            Average distance across common parameters, or inf if no valid layers
+        """
+        try:
+            if excluded_patterns is None:
+                excluded_patterns = FilteringPatterns.BACKBONE_ONLY
+            
+            # Get common keys
+            keys1 = set(get_model_keys(path1))
+            keys2 = set(get_model_keys(path2))
+            common_keys = keys1 & keys2
+            
+            if not common_keys:
+                logger.warning(f"No common parameters found between {path1} and {path2}")
+                return float('inf')
+            
+            # Filter keys
+            filtered_keys = []
+            for key in common_keys:
+                key_lower = key.lower()
+                if not any(pattern in key_lower for pattern in excluded_patterns):
+                    filtered_keys.append(key)
+            
+            if not filtered_keys:
+                logger.warning("No valid layers found after filtering for chunked distance calculation")
+                return float('inf')
+            
+            logger.debug(f"Calculating chunked distance for {len(filtered_keys)} common layers")
+            
+            # Calculate distance layer by layer
+            total_squared_diff = 0.0
+            total_elements = 0
+            excluded_count = 0
+            
+            for key in filtered_keys:
+                t1 = load_single_tensor(path1, key)
+                t2 = load_single_tensor(path2, key)
+                
+                if t1 is None or t2 is None:
+                    excluded_count += 1
+                    continue
+                
+                if t1.shape != t2.shape:
+                    del t1, t2
+                    excluded_count += 1
+                    continue
+                
+                # Only square 2D matrices (same filter as non-chunked version)
+                if not (len(t1.shape) == 2 and len(t2.shape) == 2 and 
+                       t1.shape[0] == t1.shape[1] and t2.shape[0] == t2.shape[1]):
+                    del t1, t2
+                    excluded_count += 1
+                    continue
+                
+                # L2 distance contribution
+                diff = (t1.float() - t2.float())
+                total_squared_diff += (diff ** 2).sum().item()
+                total_elements += t1.numel()
+                
+                del t1, t2, diff  # Free memory immediately
+            
+            if total_elements == 0:
+                logger.warning("No valid tensor pairs found for distance calculation")
+                return float('inf')
+            
+            # Return RMS distance (same as non-chunked L2)
+            avg_distance = (total_squared_diff / total_elements) ** 0.5
+            
+            logger.debug(
+                f"Chunked distance calculated: {avg_distance:.6f} "
+                f"({len(filtered_keys) - excluded_count} layers used, {excluded_count} excluded)"
+            )
+            
+            return avg_distance
+            
+        except Exception as e:
+            logHandler.error_handler(e, "calculate_distance_chunked")
+            return float('inf')

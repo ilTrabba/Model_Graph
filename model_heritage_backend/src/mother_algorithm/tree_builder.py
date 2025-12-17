@@ -8,6 +8,7 @@ It leverages the existing MoTHer implementation to create heritage trees within 
 import logging
 import numpy as np
 import networkx as nx
+import os
 
 from typing import Dict, List, Optional, Tuple, Any
 from numpy.typing import NDArray
@@ -97,17 +98,16 @@ class MoTHerTreeBuilder:
             
             logger.info(f"Building tree for family {family_id} with {len(models)} models")
             
-            # Load model weights
-            model_weights: Dict[str, Any] = {}
+            # NOTE: We no longer load all model weights into memory
+            # The chunked distance calculation will load layers one at a time
             valid_models: List[Model] = []
 
             for model in models:
-                weights = load_model_weights(model.file_path)
-                if weights is not None:
-                    model_weights[model.id] = weights
+                # Just verify file path exists
+                if os.path.exists(model.file_path):
                     valid_models.append(model)
                 else:
-                    logHandler.warning_handler(f"Failed to load weights for model {model.id}", "build_family_tree")
+                    logHandler.warning_handler(f"File not found for model {model.id}: {model.file_path}", "build_family_tree")
             
             if len(valid_models) < 2:
                 logHandler.warning_handler(f"Insufficient valid models for tree building in family {family_id}", "build_family_tree")
@@ -116,9 +116,9 @@ class MoTHerTreeBuilder:
             # Deterministic ordering also for valid-only set
             valid_models.sort(key=lambda m: m.id)
             
-            # Build tree using selected method
+            # Build tree using selected method (now uses chunked operations)
             if self.method == TreeBuildingMethod.MOTHER:
-                tree, confidence_scores = self.build_mother_tree(family_id, valid_models, model_weights)
+                tree, confidence_scores = self.build_mother_tree(family_id, valid_models)
             else:
                 raise Exception(f"Unknown tree building method: {self.method}")
             
@@ -132,14 +132,21 @@ class MoTHerTreeBuilder:
             
         except Exception as e:
             logHandler.error_handler(f"Error building family tree for {family_id}: {e}", "build_family_tree")
-            return nx.DiGraph(), [], {}
+            return nx.DiGraph(), {}
     
     def build_mother_tree(self, 
                           family_id: str,
-                          models: List[Model], 
-                          model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
+                          models: List[Model]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
         Build tree using full MoTHer algorithm (kurtosis + distance).
+        Uses chunked distance calculation to minimize memory usage.
+        
+        Args:
+            family_id: ID of the family
+            models: List of models in the family
+            
+        Returns:
+            Tuple of (tree, confidence_scores)
         """
         from src.clustering.distance_calculator import DistanceMetric
         try:
@@ -156,21 +163,21 @@ class MoTHerTreeBuilder:
                 logger.debug(f"Model {model.id} kurtosis: {ku:.4f}")
                 print(f"Model: {model.id} -> kurtosis: {ku:.4f}")
             
-            # Build distance matrix
+            # Build distance matrix using chunked approach for memory efficiency
             n_models = len(models)
             distance_matrix = np.zeros((n_models, n_models))
             
             for i in range(n_models):
                 for j in range(i, n_models):
                     if i != j:
-                        dist = self.distance_calculator.calculate_distance(
-                            model_weights[model_ids[i]], 
-                            model_weights[model_ids[j]],
+                        # Use chunked distance calculation to avoid loading both models in memory
+                        dist = self.distance_calculator.calculate_distance_chunked(
+                            models[i].file_path, 
+                            models[j].file_path,
                             distance_metric
                         )
                         distance_matrix[i, j] = dist
                         distance_matrix[j, i] = dist
-
                     else:
                         distance_matrix[i, j] = 0
             

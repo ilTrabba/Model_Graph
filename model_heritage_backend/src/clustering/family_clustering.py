@@ -13,7 +13,7 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
-from src.mother_algorithm.mother_utils import load_model_weights
+from src.mother_algorithm.mother_utils import load_model_weights, get_model_keys, load_single_tensor
 from src.clustering.distance_calculator import DistanceMetric
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
@@ -247,18 +247,12 @@ class FamilyClusteringSystem:
         
         Args:
             model: Model object to assign
-            model_weights: Pre-loaded model weights (optional, will load if None)
+            model_weights: Pre-loaded model weights (optional, will load only if needed for new family creation)
             
         Returns:
             Tuple of (family_id, confidence_score)
         """
         try:
-            # Load model weights if not provided
-            if model_weights is None:
-                model_weights = load_model_weights(model.file_path)
-                if model_weights is None:
-                    raise Exception("Model weights could not be loaded")
-            
             logger.info(f"Model has this structural_hash:{model.structural_hash}")
 
             if (model.is_foundation_model): 
@@ -269,27 +263,50 @@ class FamilyClusteringSystem:
 
             # If there aren't candidate centroids create a new one with the model weights for the centroid
             if not candidate_centroids:
+                # Only load weights when creating a new family
+                if model_weights is None:
+                    model_weights = load_model_weights(model.file_path)
+                    if model_weights is None:
+                        raise Exception("Model weights could not be loaded for new family creation")
+                
                 family_id = self.create_new_family(model, model_weights)
                 confidence = 1.0
             else:
                 
-                # Calculate distances to family centroids
+                # Calculate distances to family centroids using chunked method (no need to load model weights)
                 best_family_id, best_distance = self.find_best_family_match(
-                    model_weights, candidate_centroids
+                    model.file_path, candidate_centroids, use_chunked=True
                 )
                 
-                family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
-
-                threshold = self.calculate_adaptive_threshold(family_stats)
-
-                confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
-                
-                if best_distance < threshold and confidence > MIN_CONFIDENCE:
-                    family_id = best_family_id
+                # Handle case where no match was found
+                if best_family_id is None:
+                    # Creating new family - need to load weights
+                    if model_weights is None:
+                        model_weights = load_model_weights(model.file_path)
+                        if model_weights is None:
+                            raise Exception("Model weights could not be loaded for new family creation")
                     
-                else:
                     family_id = self.create_new_family(model, model_weights)
                     confidence = 1.0
+                else:
+                    family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
+
+                    threshold = self.calculate_adaptive_threshold(family_stats)
+
+                    confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
+                    
+                    if best_distance < threshold and confidence > MIN_CONFIDENCE:
+                        family_id = best_family_id
+                        
+                    else:
+                        # Creating new family - need to load weights
+                        if model_weights is None:
+                            model_weights = load_model_weights(model.file_path)
+                            if model_weights is None:
+                                raise Exception("Model weights could not be loaded for new family creation")
+                        
+                        family_id = self.create_new_family(model, model_weights)
+                        confidence = 1.0
             
             # Update model with family assignment
             neo4j_service.update_model(model.id, {'family_id': family_id})
@@ -351,13 +368,19 @@ class FamilyClusteringSystem:
             return None
     
     def find_best_family_match(self,
-                               model_weights: Dict[str, Any],
-                               candidate_centroids: List[Dict[str, Any]]) -> Tuple[str, float]:
+                               model_file_path: str,
+                               candidate_centroids: List[Dict[str, Any]],
+                               use_chunked: bool = True) -> Tuple[Optional[str], float]:
         """
         Find the best family match for a model.
         
+        Args:
+            model_file_path: Path to the model file or folder
+            candidate_centroids: List of centroid metadata dicts with file_path and family_id
+            use_chunked: Whether to use chunked distance calculation (default True for memory efficiency)
+        
         Returns:
-            Tuple of (best_family_id, confidence_score)
+            Tuple of (best_family_id, best_distance) where family_id can be None if no match found
         """
         try:
             distance_metric = DistanceMetric.L2_DISTANCE
@@ -365,38 +388,40 @@ class FamilyClusteringSystem:
             best_distance = float('inf')
             
             for centroid in candidate_centroids:
-                centroid_weights = None
-
-                # prendere centroide già esistente della famiglia corrente con un if
                 centroid_path = centroid["file_path"]
                 family_id = centroid["family_id"]
 
-                if os.path.exists(centroid_path):
-                    try:
-                        with safe_open(centroid_path, framework="pt") as f:
-
-                            # Create a dictionary to hold the tensors
-                            centroid_data = {}
-                            for key in f.keys():
-
-                                # Load each tensor and add it to the dictionary
-                                # .clone() is often good practice to ensure you have an independent copy
-                                centroid_data[key] = f.get_tensor(key).clone()
-
-                        # Now, centroid_data is a dictionary with the loaded tensors
-                        centroid_weights = centroid_data
-
-                    except Exception as e:
-                        logHandler.error_handler(e, "find_best_family_match", "Error loading safetensors file")
-                else:
+                if not os.path.exists(centroid_path):
                     logHandler.error_handler(f"Centroid file does not exist for family {family_id}", "find_best_family_match")
-
-                if centroid_weights is None:
                     continue
                 
-                distance = self.distance_calculator.calculate_distance(
-                    model_weights, centroid_weights, distance_metric, FilteringPatterns.FULL_MODEL
-                )
+                # Use chunked distance calculation to avoid loading models into memory
+                if use_chunked:
+                    distance = self.distance_calculator.calculate_distance_chunked(
+                        model_file_path, centroid_path, distance_metric, FilteringPatterns.FULL_MODEL
+                    )
+                else:
+                    # Fallback: load both and use standard distance (for small models)
+                    try:
+                        model_weights = load_model_weights(model_file_path)
+                        
+                        with safe_open(centroid_path, framework="pt") as f:
+                            centroid_data = {}
+                            for key in f.keys():
+                                centroid_data[key] = f.get_tensor(key).clone()
+
+                        if model_weights is None or not centroid_data:
+                            continue
+                        
+                        distance = self.distance_calculator.calculate_distance(
+                            model_weights, centroid_data, distance_metric, FilteringPatterns.FULL_MODEL
+                        )
+                        
+                        del model_weights, centroid_data  # Free memory
+                        
+                    except Exception as e:
+                        logHandler.error_handler(e, "find_best_family_match", "Error loading model/centroid")
+                        continue
                 
                 if distance < best_distance:
                     best_distance = distance
@@ -404,12 +429,13 @@ class FamilyClusteringSystem:
 
             
             if best_family_id is None:
-                return "", 0.0
+                return None, 0.0
             
             return best_family_id, best_distance
             
         except Exception as e:
             logHandler.error_handler(e, "find_best_family_match")
+            return None, 0.0
     
     def create_new_family(self, model: Model, model_weights: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -662,18 +688,18 @@ class FamilyClusteringSystem:
         Formula: centroid_new = (centroid_old * n + new_model) / (n + 1)
         
         Caratteristiche:
-        - Aggiornamento in-place di current_centroid
+        - Aggiornamento layer-by-layer per minimizzare l'uso della memoria
         - Calcoli in float32 per massima precisione
         - Chunking automatico per tensori grandi (>10M elementi)
         - Solo layer comuni (nome esatto + shape identica)
         - Layer non comuni nel centroide rimangono invariati
         
         Args:
-            current_centroid: Dizionario con centroide corrente (include 'model_count')
+            current_centroid: Dizionario con centroide corrente (include 'model_count' e 'file_path')
             new_model_weights: Dizionario con pesi del nuovo modello
             
         Returns:
-            Centroide aggiornato (stesso oggetto di current_centroid, modificato in-place)
+            Centroide aggiornato (dizionario con tutti i layer)
             
         Note:
             - I nomi dei layer devono essere già normalizzati
@@ -681,122 +707,144 @@ class FamilyClusteringSystem:
             - Tensori non compatibili vengono esclusi (con logging)
         """
         try:
+            
             # Step 1: Validazione input
             if not new_model_weights:
                 logger.warning("Pesi del nuovo modello vuoti, impossibile calcolare centroide")
                 return current_centroid
             
             n = current_centroid.get('model_count', 0)
+            centroid_path = current_centroid.get('file_path')
             
             # Non dovrebbe mai accadere
             if n <= 0:
                 return logHandler.error_handler(f"model_count invalido nel centroide: {n}", "calculate_weights_centroid")
-                 
             
-            # Step 2: Trova layer comuni (intersezione per nome esatto)
-            current_centroid_weights = load_model_weights(current_centroid['file_path'])
-
-            centroid_layers = set(current_centroid_weights.keys()) 
+            if not centroid_path or not os.path.exists(centroid_path):
+                logger.error("Centroid file path not found or invalid")
+                return current_centroid
+            
+            # Step 2: Trova layer comuni usando chiavi invece di caricare tutto
+            centroid_keys = set(get_model_keys(centroid_path))
             new_model_layers = set(new_model_weights.keys())
-
-            common_layers = centroid_layers & new_model_layers
+            common_layers = centroid_keys & new_model_layers
             
             logger.info(
-                f"Layer: {len(centroid_layers)} nel centroide, "
+                f"Layer: {len(centroid_keys)} nel centroide, "
                 f"{len(new_model_layers)} nel nuovo modello, "
                 f"{len(common_layers)} comuni"
             )
             
             if not common_layers:
                 logger.warning("Nessun layer comune trovato tra centroide e nuovo modello")
-                return current_centroid_weights
+                # Return all centroid weights loaded
+                return load_model_weights(centroid_path)
             
-            # Step 3: Aggiorna layer comuni
+            # Step 3: Aggiorna layer comuni uno alla volta (chunked approach)
+            updated_centroid_weights = {}
             updated_count = 0
             excluded_count = 0
             chunked_layers = []
             
-            for layer_name in common_layers:
-                centroid_tensor = current_centroid_weights[layer_name]
-                new_model_tensor = new_model_weights[layer_name]
-                
-                # Validazione 1: Entrambi devono essere tensori PyTorch
-                if not (isinstance(centroid_tensor, torch.Tensor) and 
-                        isinstance(new_model_tensor, torch.Tensor)):
-                    logger.warning(
-                        f"Layer '{layer_name}' escluso: non entrambi tensori PyTorch "
-                        f"(centroid: {type(centroid_tensor)}, new: {type(new_model_tensor)})"
-                    )
-                    excluded_count += 1
-                    continue
-                
-                # Validazione 2: Shape identiche
-                if centroid_tensor.shape != new_model_tensor.shape:
-                    logger.warning(
-                        f"Layer '{layer_name}' escluso: shape mismatch "
-                        f"({centroid_tensor.shape} vs {new_model_tensor.shape})"
-                    )
-                    excluded_count += 1
-                    continue
-                
-                # Validazione 3: Device matching
-                if centroid_tensor.device != new_model_tensor.device:
-                    logger.debug(
-                        f"Layer '{layer_name}': spostamento device "
-                        f"{new_model_tensor.device} → {centroid_tensor.device}"
-                    )
-                    new_model_tensor = new_model_tensor.to(centroid_tensor.device)
-                
-                # Conversione a float32 per calcoli (massima precisione)
-                original_dtype = centroid_tensor.dtype
-                if centroid_tensor.dtype != torch.float32:
-                    centroid_tensor = centroid_tensor.float()
-                if new_model_tensor.dtype != torch.float32:
-                    new_model_tensor = new_model_tensor.float()
-                
-                # Ottimizzazione: contiguous solo se necessario
-                if not centroid_tensor.is_contiguous():
-                    centroid_tensor = centroid_tensor.contiguous()
-                if not new_model_tensor.is_contiguous():
-                    new_model_tensor = new_model_tensor.contiguous()
-                
-                # Calcolo media con chunking automatico per tensori grandi
-                numel = centroid_tensor.numel()
-                
-                if numel > CENTROID_CHUNK_THRESHOLD:
-                    # CHUNKING: suddividi in blocchi per evitare OOM
-                    chunk_size = CENTROID_CHUNK_THRESHOLD
-                    num_chunks = (numel + chunk_size - 1) // chunk_size
+            # Load and update each layer separately to minimize memory usage
+            for layer_name in centroid_keys:
+                if layer_name in common_layers:
+                    # Load single tensors
+                    centroid_tensor = load_single_tensor(centroid_path, layer_name)
+                    new_model_tensor = new_model_weights.get(layer_name)
                     
-                    centroid_flat = centroid_tensor.view(-1)
-                    new_model_flat = new_model_tensor.view(-1)
+                    if centroid_tensor is None or new_model_tensor is None:
+                        excluded_count += 1
+                        continue
                     
-                    for chunk_old, chunk_new in zip(
-                        centroid_flat.split(chunk_size),
-                        new_model_flat.split(chunk_size)
-                    ):
-                        # Formula incrementale: (old * n + new) / (n + 1)
-                        chunk_old.mul_(n).add_(chunk_new).div_(n + 1)
+                    # Validazione: Entrambi devono essere tensori PyTorch
+                    if not (isinstance(centroid_tensor, torch.Tensor) and 
+                            isinstance(new_model_tensor, torch.Tensor)):
+                        logger.warning(
+                            f"Layer '{layer_name}' escluso: non entrambi tensori PyTorch "
+                            f"(centroid: {type(centroid_tensor)}, new: {type(new_model_tensor)})"
+                        )
+                        excluded_count += 1
+                        del centroid_tensor
+                        continue
                     
-                    chunked_layers.append((layer_name, numel, num_chunks))
+                    # Validazione: Shape identiche
+                    if centroid_tensor.shape != new_model_tensor.shape:
+                        logger.warning(
+                            f"Layer '{layer_name}' escluso: shape mismatch "
+                            f"({centroid_tensor.shape} vs {new_model_tensor.shape})"
+                        )
+                        excluded_count += 1
+                        del centroid_tensor
+                        continue
+                    
+                    # Validazione: Device matching
+                    if centroid_tensor.device != new_model_tensor.device:
+                        logger.debug(
+                            f"Layer '{layer_name}': spostamento device "
+                            f"{new_model_tensor.device} → {centroid_tensor.device}"
+                        )
+                        new_model_tensor = new_model_tensor.to(centroid_tensor.device)
+                    
+                    # Conversione a float32 per calcoli (massima precisione)
+                    original_dtype = centroid_tensor.dtype
+                    if centroid_tensor.dtype != torch.float32:
+                        centroid_tensor = centroid_tensor.float()
+                    if new_model_tensor.dtype != torch.float32:
+                        new_model_tensor = new_model_tensor.float()
+                    
+                    # Ottimizzazione: contiguous solo se necessario
+                    if not centroid_tensor.is_contiguous():
+                        centroid_tensor = centroid_tensor.contiguous()
+                    if not new_model_tensor.is_contiguous():
+                        new_model_tensor = new_model_tensor.contiguous()
+                    
+                    # Calcolo media con chunking automatico per tensori grandi
+                    numel = centroid_tensor.numel()
+                    
+                    if numel > CENTROID_CHUNK_THRESHOLD:
+                        # CHUNKING: suddividi in blocchi per evitare OOM
+                        chunk_size = CENTROID_CHUNK_THRESHOLD
+                        num_chunks = (numel + chunk_size - 1) // chunk_size
+                        
+                        centroid_flat = centroid_tensor.view(-1)
+                        new_model_flat = new_model_tensor.view(-1)
+                        
+                        for chunk_old, chunk_new in zip(
+                            centroid_flat.split(chunk_size),
+                            new_model_flat.split(chunk_size)
+                        ):
+                            # Formula incrementale: (old * n + new) / (n + 1)
+                            chunk_old.mul_(n).add_(chunk_new).div_(n + 1)
+                        
+                        chunked_layers.append((layer_name, numel, num_chunks))
+                        
+                    else:
+                        # NORMALE: aggiornamento diretto (in-place)
+                        centroid_tensor.mul_(n).add_(new_model_tensor).div_(n + 1)
+                    
+                    # Riconverti al dtype originale se necessario
+                    if centroid_tensor.dtype != original_dtype:
+                        centroid_tensor = centroid_tensor.to(original_dtype)
+                    
+                    # Salva il layer aggiornato
+                    updated_centroid_weights[layer_name] = centroid_tensor
+                    updated_count += 1
+                    
+                    # Free memory
+                    del centroid_tensor
                     
                 else:
-                    # NORMALE: aggiornamento diretto (in-place)
-                    centroid_tensor.mul_(n).add_(new_model_tensor).div_(n + 1)
-                
-                # Riconverti al dtype originale se necessario
-                if centroid_tensor.dtype != original_dtype:
-                    centroid_tensor = centroid_tensor.to(original_dtype)
-                
-                # Salva il layer aggiornato (in-place su current_centroid)
-                current_centroid_weights[layer_name] = centroid_tensor
-                updated_count += 1
+                    # Layer not in common - keep original from centroid
+                    centroid_tensor = load_single_tensor(centroid_path, layer_name)
+                    if centroid_tensor is not None:
+                        updated_centroid_weights[layer_name] = centroid_tensor
             
             # Step 4: Logging finale
             logger.info(
                 f"✅ Centroide aggiornato: {updated_count} layer modificati, "
                 f"{excluded_count} layer esclusi, "
-                f"{len(centroid_layers) - len(common_layers)} layer invariati"
+                f"{len(centroid_keys) - len(common_layers)} layer invariati"
             )
             
             if chunked_layers:
@@ -810,8 +858,12 @@ class FamilyClusteringSystem:
             if updated_count == 0:
                 logHandler.warning_handler("Nessun layer aggiornato: centroide invariato", "calculate_weights_centroid")
             
-            return current_centroid_weights
+            return updated_centroid_weights
             
         except Exception as e:
             logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
-            return current_centroid_weights
+            # Fallback: load entire centroid
+            centroid_file_path = current_centroid.get('file_path')
+            if centroid_file_path:
+                return load_model_weights(centroid_file_path)
+            return {}
