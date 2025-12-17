@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import torch
 import safetensors
+from safetensors import safe_open
 import networkx as nx
 import os
 import glob
@@ -175,6 +176,125 @@ def calc_ku(weights: Dict[str, Any]) -> float:
 
     except Exception as e:
         logger.error(f"Error calculating kurtosis: {e}", exc_info=True)
+        return 0.0
+
+def get_model_keys(file_path: str) -> List[str]:
+    """
+    Get list of tensor keys from a model (file or sharded folder).
+    
+    Args:
+        file_path: Path to a single model file or folder with sharded models
+        
+    Returns:
+        List of tensor key names
+    """
+    try:
+        if os.path.isdir(file_path):
+            # Sharded model - collect keys from all shards
+            all_keys = []
+            for shard in sorted(glob.glob(os.path.join(file_path, "*.safetensors"))):
+                with safe_open(shard, framework="pt") as f:
+                    all_keys.extend(f.keys())
+            return all_keys
+        else:
+            # Single file model
+            with safe_open(file_path, framework="pt") as f:
+                return list(f.keys())
+    except Exception as e:
+        logHandler.error_handler(e, "get_model_keys", {"file_path": file_path})
+        return []
+
+def load_single_tensor(file_path: str, tensor_name: str):
+    """
+    Load a single tensor without loading the entire model.
+    
+    Args:
+        file_path: Path to a single model file or folder with sharded models
+        tensor_name: Name of the tensor to load
+        
+    Returns:
+        Tensor if found, None otherwise
+    """
+    try:
+        if os.path.isdir(file_path):
+            # Sharded model - find which shard contains this tensor
+            for shard in sorted(glob.glob(os.path.join(file_path, "*.safetensors"))):
+                with safe_open(shard, framework="pt") as f:
+                    if tensor_name in f.keys():
+                        return f.get_tensor(tensor_name)
+            return None
+        else:
+            # Single file model
+            with safe_open(file_path, framework="pt") as f:
+                if tensor_name in f.keys():
+                    return f.get_tensor(tensor_name)
+            return None
+    except Exception as e:
+        logHandler.error_handler(e, "load_single_tensor", {"file_path": file_path, "tensor_name": tensor_name})
+        return None
+
+def calc_ku_chunked(file_path: str) -> float:
+    """
+    Calculate kurtosis layer-by-layer without loading entire model.
+    
+    This function loads one layer at a time to minimize memory usage,
+    making it suitable for very large models (16GB+).
+    
+    Args:
+        file_path: Path to model file or sharded folder
+        
+    Returns:
+        Kurtosis value (sum of per-layer kurtosis)
+    """
+    try:
+        LAYER_KIND = "output.dense"
+        model_ku = 0.0
+        valid_layer_count = 0
+        
+        keys = get_model_keys(file_path)
+        
+        for param_name in keys:
+            param_lower = param_name.lower()
+            
+            # Apply same filters as calc_ku
+            if any(pattern in param_lower for pattern in FilteringPatterns.BACKBONE_ONLY):
+                continue
+            if LAYER_KIND not in param_lower:
+                continue
+            
+            # Load single tensor
+            tensor = load_single_tensor(file_path, param_name)
+            if tensor is None:
+                continue
+            
+            # Only 2D square matrices
+            if not (tensor.ndim == 2 and tensor.shape[0] == tensor.shape[1]):
+                del tensor
+                continue
+            
+            # Calculate kurtosis for this layer
+            param_weights = tensor.detach().cpu().numpy().ravel()
+            ku = stats.kurtosis(param_weights, fisher=True)
+            
+            del tensor, param_weights  # Free memory immediately
+            
+            if not (np.isnan(ku) or np.isinf(ku)):
+                model_ku += float(ku)
+                valid_layer_count += 1
+        
+        if valid_layer_count == 0:
+            logger.warning(f"No valid layers found for kurtosis calculation in {file_path}")
+            return 0.0
+        
+        logger.debug(
+            f"Chunked kurtosis calculated: {model_ku:.6f} "
+            f"({valid_layer_count} layers used from {file_path})"
+        )
+        
+        return float(model_ku)
+        
+    except Exception as e:
+        logger.error(f"Error calculating chunked kurtosis: {e}", exc_info=True)
         return 0.0
 
 '''
