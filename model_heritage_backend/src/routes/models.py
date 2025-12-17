@@ -126,6 +126,277 @@ def extract_weight_signature(file_path: str, num_layers: int) -> dict:
         "total_parameters": total_parameters
     }
 
+def extract_weight_signature_from_tensors(tensors_dict: dict, num_layers: int) -> dict:
+    """
+    Extract weight signature from already loaded tensors (for sharded models).
+    
+    Args:
+        tensors_dict: Dictionary of tensors already loaded in memory
+        num_layers: Number of layers in the model
+        
+    Returns:
+        Dictionary with num_layers, hidden_size, structural_hash, total_parameters
+    """
+    shapes = []
+    total_parameters = 0
+
+    for key, tensor in tensors_dict.items():
+        shape = tuple(tensor.shape)
+        shapes.append(shape)
+        
+        # Count parameters
+        num_params = 1
+        for dim in shape:
+            num_params *= dim
+        total_parameters += num_params
+
+    # Deduce hidden size from shapes
+    dims = []
+    for shape in shapes:
+        if len(shape) == 2 and shape[0] == shape[1]:
+            dims.append(shape[0])
+            dims.append(shape[1])
+
+    dims = [d for d in dims if d >= 128]
+
+    if not dims:
+        raise RuntimeError("Impossibile dedurre hidden_size dai tensori (nessuna matrice significativa trovata).")
+
+    hidden_size = Counter(dims).most_common(1)[0][0]
+
+    # Calculate structural hash
+    base_string = f"{num_layers}_{hidden_size}"
+    structural_hash = hashlib.md5(base_string.encode()).hexdigest()[:16]
+
+    return {
+        "num_layers": num_layers,
+        "hidden_size": hidden_size,
+        "structural_hash": structural_hash,
+        "total_parameters": total_parameters
+    }
+
+def calculate_combined_checksum(folder_path: str) -> str:
+    """
+    Calculate combined checksum for all safetensors files in a folder.
+    Files are sorted by name to ensure consistent ordering.
+    
+    Args:
+        folder_path: Path to folder containing safetensors shards
+        
+    Returns:
+        SHA-256 checksum of all files combined
+    """
+    import glob
+    
+    sha256_hash = hashlib.sha256()
+    shard_files = sorted(glob.glob(os.path.join(folder_path, "*.safetensors")))
+    
+    for shard_path in shard_files:
+        with open(shard_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+    
+    return sha256_hash.hexdigest()
+
+def process_sharded_upload(files, form_data):
+    """
+    Process upload of multiple safetensors shards.
+    
+    Args:
+        files: List of uploaded file objects
+        form_data: Form data from the request
+        
+    Returns:
+        JSON response with model data or error
+    """
+    import glob
+    
+    try:
+        # Validate all files
+        for file in files:
+            if not allowed_file(file.filename):
+                return jsonify({'error': f'Invalid file type: {file.filename}'}), 400
+        
+        # Get metadata
+        model_id = str(uuid.uuid4())
+        name = form_data.get('name', files[0].filename if files else 'Unnamed Model')
+        description = form_data.get('description', '')
+        
+        # Get optional fields
+        license_value = form_data.get('license', '')
+        task_value = form_data.get('task', '')
+        dataset_url = form_data.get('dataset_url', '')
+        is_foundation_model = form_data.get('is_foundation_model', 'false').lower() == 'true'
+        
+        # Validate dataset URL if provided
+        if dataset_url and not validate_url(dataset_url):
+            return jsonify({'error': 'Invalid dataset URL format'}), 400
+        
+        # Handle README file upload
+        readme_uri = None
+        readme_file = request.files.get('readme_file')
+        if readme_file and readme_file.filename:
+            if not allowed_readme_file(readme_file.filename):
+                return jsonify({'error': 'Invalid README file type. Allowed: .md, .txt'}), 400
+            
+            # Check file size
+            readme_file.seek(0, 2)
+            file_size = readme_file.tell()
+            readme_file.seek(0)
+            
+            if file_size > MAX_README_SIZE:
+                return jsonify({'error': 'README file too large. Maximum size is 5MB'}), 400
+            
+            # Save README file
+            os.makedirs(README_FOLDER, exist_ok=True)
+            readme_filename = secure_filename(f"{model_id}_readme.md")
+            readme_path = os.path.join(README_FOLDER, readme_filename)
+            readme_file.save(readme_path)
+            readme_uri = f"readmes/{readme_filename}"
+        
+        # Create model folder
+        model_folder = os.path.join(MODEL_FOLDER, model_id)
+        os.makedirs(model_folder, exist_ok=True)
+        
+        # Sort files by name to ensure consistent ordering
+        sorted_files = sorted(files, key=lambda f: f.filename)
+        
+        # Process each shard: load, normalize, and save
+        all_original_keys = []
+        all_normalized_keys = []
+        all_normalized_tensors = {}
+        original_filenames = []
+        first_metadata = None
+        
+        for idx, file in enumerate(sorted_files):
+            # Read file bytes
+            file_bytes = file.read()
+            
+            # Save to temporary file to extract metadata
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_file:
+                tmp_file.write(file_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Load tensors and metadata
+                tensors_dict = load_file(tmp_path)
+                original_keys = list(tensors_dict.keys())
+                
+                with safe_open(tmp_path, framework="pt", device="cpu") as f:
+                    metadata = f.metadata()
+                    if first_metadata is None:
+                        first_metadata = metadata
+                
+                # Normalize tensors
+                norm_tensors_dict = normalize_safetensors_layers(tensors_dict)
+                normalized_keys = list(norm_tensors_dict.keys())
+                
+                # Track keys for fingerprint
+                all_original_keys.extend(original_keys)
+                all_normalized_keys.extend(normalized_keys)
+                
+                # Add to unified tensor dict
+                all_normalized_tensors.update(norm_tensors_dict)
+                
+                # Save normalized shard to model folder
+                shard_filename = secure_filename(f"shard_{idx:05d}_{file.filename}")
+                shard_path = os.path.join(model_folder, shard_filename)
+                save_file(norm_tensors_dict, shard_path, metadata=metadata)
+                
+                original_filenames.append(file.filename)
+                
+            finally:
+                # Clean up temp file
+                os.unlink(tmp_path)
+        
+        # Save fingerprint with info about all files
+        num_layers = save_layer_mapping_json(
+            original_keys=all_original_keys,
+            normalized_keys=all_normalized_keys,
+            model_id=model_id,
+            original_filename=", ".join(original_filenames)
+        )
+        
+        # Calculate combined checksum
+        checksum = calculate_combined_checksum(model_folder)
+        
+        # Check for duplicate
+        existing = neo4j_service.get_model_by_checksum(checksum)
+        if existing:
+            # Clean up on duplicate
+            import shutil
+            shutil.rmtree(model_folder)
+            if readme_uri and os.path.exists(readme_uri):
+                os.remove(readme_uri)
+            return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
+        
+        # Extract signature from unified tensors
+        signature = extract_weight_signature_from_tensors(all_normalized_tensors, num_layers)
+        
+        # Calculate kurtosis from unified tensors
+        kurtosis = calc_ku(all_normalized_tensors)
+        
+        # Parse task as list
+        task_list = [t.strip() for t in task_value.split(',') if t.strip()] if task_value else []
+        
+        # Create model record - file_path points to folder
+        model_data = {
+            'id': model_id,
+            'name': name,
+            'description': description,
+            'file_path': model_folder,  # Folder path instead of file
+            'checksum': checksum,
+            'total_parameters': signature['total_parameters'],
+            'layer_count': num_layers,
+            'structural_hash': signature['structural_hash'],
+            'status': 'processing',
+            'weights_uri': f'weights/{model_id}',
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'distance_from_parent': 0.0,
+            'kurtosis': kurtosis,
+            'license': license_value if license_value else None,
+            'task': task_list,
+            'dataset_url': dataset_url if dataset_url else None,
+            'dataset_url_verified': None if dataset_url else None,
+            'readme_uri': readme_uri,
+            'is_foundation_model': is_foundation_model
+        }
+        
+        # Save to Neo4j
+        if not neo4j_service.create_model(model_data):
+            raise Exception("Failed to save model to Neo4j")
+        
+        result = mgmt_system.process_new_model(model_data)
+        
+        if result.get('status') != 'success':
+            raise Exception(f"System failed (model status is not success): {result.get('error', 'Unknown error')}")
+        
+        family_id = result.get('family_id')
+        
+        # Create family relationship if family was assigned
+        if family_id:
+            neo4j_service.create_belongs_to_relationship(model_id, family_id)
+        
+        # Get final model data for response
+        final_model_data = neo4j_service.get_model_by_id(model_id).to_dict()
+        
+        return jsonify({
+            'model_id': model_id,
+            'status': 'ok',
+            'message': 'Sharded model uploaded and processed successfully',
+            'model': final_model_data
+        }), 201
+        
+    except Exception as e:
+        # Clean up on error
+        model_folder = os.path.join(MODEL_FOLDER, model_id) if 'model_id' in locals() else None
+        if model_folder and os.path.exists(model_folder):
+            import shutil
+            shutil.rmtree(model_folder)
+        
+        logHandler.error_handler(e, "process_sharded_upload", f"Sharded model upload failed: {e}")
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
 
 @models_bp.route('/models', methods=['GET'])
 def list_models():
@@ -172,11 +443,19 @@ def get_model(model_id):
 
 @models_bp.route('/models', methods=['POST'])
 def upload_model():
-    
-    if 'file' not in request.files:
+    # Support both 'file' single upload and 'files' multiple upload
+    if 'files' in request.files:
+        files = request.files.getlist('files')
+        if len(files) > 1:
+            return process_sharded_upload(files, request.form)
+        elif len(files) == 1:
+            file = files[0]
+        else:
+            return jsonify({'error': 'No files provided'}), 400
+    elif 'file' in request.files:
+        file = request.files['file']
+    else:
         return jsonify({'error': 'No file provided'}), 400
-
-    file = request.files['file']
 
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -461,7 +740,7 @@ def get_clustering_statistics():
     
 @models_bp.route('/models/<model_id>/download', methods=['GET'])
 def download_model_weights(model_id):
-    """Download model weights with original layer names restored"""
+    """Download model weights with original layer names restored (single file or ZIP for sharded)"""
     try:
         # 1. Get model from Neo4j
         model = neo4j_service.get_model_by_id(model_id)
@@ -480,41 +759,106 @@ def download_model_weights(model_id):
         with open(fingerprint_path, 'r') as f:
             fingerprint = json.load(f)
         
-        mapping = fingerprint. get('mapping', {})
-        original_filename = fingerprint.get('original_filename', f'{model_id}. safetensors')
+        mapping = fingerprint.get('mapping', {})
+        original_filename = fingerprint.get('original_filename', f'{model_id}.safetensors')
         
-        # 3. Load the stored safetensors file (normalized layer names)
-        tensors_dict = load_file(file_path)
-        
-        # 4. Load original metadata
-        with safe_open(file_path, framework="pt", device="cpu") as f:
-            metadata = f.metadata()
-        
-        # 5. Create new tensors dict with original layer names (key -> value mapping)
-        restored_tensors = {}
-        for normalized_name, tensor in tensors_dict.items():
-            # mapping:  normalized_name (key) -> original_name (value)
-            original_name = mapping.get(normalized_name, normalized_name)
-            restored_tensors[original_name] = tensor
-        
-        # 6. Save to temporary file in memory
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_file:
-            tmp_path = tmp_file.name
-        
-        save_file(restored_tensors, tmp_path, metadata=metadata)
-        
-        # 7. Read the file into memory and delete temp file
-        with open(tmp_path, 'rb') as f:
-            file_data = f.read()
-        os.unlink(tmp_path)
-        
-        # 8. Send file as download
-        return send_file(
-            io.BytesIO(file_data),
-            mimetype='application/octet-stream',
-            as_attachment=True,
-            download_name=original_filename
-        )
+        # Check if it's a sharded model (folder) or single file
+        if os.path.isdir(file_path):
+            # Sharded model - create ZIP file
+            import zipfile
+            import glob
+            
+            # Create temporary ZIP file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_zip:
+                tmp_zip_path = tmp_zip.name
+            
+            with zipfile.ZipFile(tmp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Get all shard files
+                shard_files = sorted(glob.glob(os.path.join(file_path, "*.safetensors")))
+                
+                for shard_path in shard_files:
+                    # Load normalized shard
+                    tensors_dict = load_file(shard_path)
+                    
+                    # Load metadata
+                    with safe_open(shard_path, framework="pt", device="cpu") as f:
+                        metadata = f.metadata()
+                    
+                    # Restore original layer names
+                    restored_tensors = {}
+                    for normalized_name, tensor in tensors_dict.items():
+                        original_name = mapping.get(normalized_name, normalized_name)
+                        restored_tensors[original_name] = tensor
+                    
+                    # Save to temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_shard:
+                        tmp_shard_path = tmp_shard.name
+                    
+                    save_file(restored_tensors, tmp_shard_path, metadata=metadata)
+                    
+                    # Add to ZIP with original filename (extract from original_filename list)
+                    shard_basename = os.path.basename(shard_path)
+                    # Try to extract original name from fingerprint if multiple files
+                    if ', ' in original_filename:
+                        # Multiple files - use index to match
+                        original_names = original_filename.split(', ')
+                        shard_idx = shard_files.index(shard_path)
+                        if shard_idx < len(original_names):
+                            archive_name = original_names[shard_idx]
+                        else:
+                            archive_name = shard_basename
+                    else:
+                        archive_name = shard_basename
+                    
+                    zipf.write(tmp_shard_path, archive_name)
+                    os.unlink(tmp_shard_path)
+            
+            # Read ZIP into memory
+            with open(tmp_zip_path, 'rb') as f:
+                zip_data = f.read()
+            os.unlink(tmp_zip_path)
+            
+            # Send ZIP file
+            return send_file(
+                io.BytesIO(zip_data),
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'{model.name}.zip'
+            )
+        else:
+            # Single file model - existing behavior
+            # 3. Load the stored safetensors file (normalized layer names)
+            tensors_dict = load_file(file_path)
+            
+            # 4. Load original metadata
+            with safe_open(file_path, framework="pt", device="cpu") as f:
+                metadata = f.metadata()
+            
+            # 5. Create new tensors dict with original layer names (key -> value mapping)
+            restored_tensors = {}
+            for normalized_name, tensor in tensors_dict.items():
+                # mapping:  normalized_name (key) -> original_name (value)
+                original_name = mapping.get(normalized_name, normalized_name)
+                restored_tensors[original_name] = tensor
+            
+            # 6. Save to temporary file in memory
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.safetensors') as tmp_file:
+                tmp_path = tmp_file.name
+            
+            save_file(restored_tensors, tmp_path, metadata=metadata)
+            
+            # 7. Read the file into memory and delete temp file
+            with open(tmp_path, 'rb') as f:
+                file_data = f.read()
+            os.unlink(tmp_path)
+            
+            # 8. Send file as download
+            return send_file(
+                io.BytesIO(file_data),
+                mimetype='application/octet-stream',
+                as_attachment=True,
+                download_name=original_filename
+            )
         
     except Exception as e:
         logHandler.error_handler(e, "download_model_weights")
