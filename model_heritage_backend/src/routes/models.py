@@ -17,7 +17,7 @@ from src.log_handler import logHandler
 from src.services.neo4j_service import neo4j_service
 from src.config import Config
 from src.clustering.model_management import ModelManagementSystem
-from src.mother_algorithm.mother_utils import calc_ku, load_model_weights
+from src.mother_algorithm.mother_utils import calc_ku, load_model_weights, calc_ku_chunked
 from src.utils.normalization_system import normalize_safetensors_layers, save_layer_mapping_json
 
 logger = logging.getLogger(__name__)
@@ -340,7 +340,6 @@ def process_sharded_upload(files, form_data):
         signature = extract_weight_signature(first_shard_path, num_layers)
         
         # Calculate kurtosis using chunked method (processes layer by layer from folder)
-        from src.mother_algorithm.mother_utils import calc_ku_chunked
         kurtosis = calc_ku_chunked(model_folder)
         
         # Parse task as list

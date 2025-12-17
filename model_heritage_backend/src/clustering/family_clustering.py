@@ -370,7 +370,7 @@ class FamilyClusteringSystem:
     def find_best_family_match(self,
                                model_file_path: str,
                                candidate_centroids: List[Dict[str, Any]],
-                               use_chunked: bool = True) -> Tuple[str, float]:
+                               use_chunked: bool = True) -> Tuple[Optional[str], float]:
         """
         Find the best family match for a model.
         
@@ -380,7 +380,7 @@ class FamilyClusteringSystem:
             use_chunked: Whether to use chunked distance calculation (default True for memory efficiency)
         
         Returns:
-            Tuple of (best_family_id, best_distance)
+            Tuple of (best_family_id, best_distance) where family_id can be None if no match found
         """
         try:
             distance_metric = DistanceMetric.L2_DISTANCE
@@ -863,4 +863,7 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
             # Fallback: load entire centroid
-            return load_model_weights(current_centroid.get('file_path', ''))
+            centroid_file_path = current_centroid.get('file_path')
+            if centroid_file_path:
+                return load_model_weights(centroid_file_path)
+            return {}
