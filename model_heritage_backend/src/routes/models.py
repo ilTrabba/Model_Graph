@@ -333,7 +333,10 @@ def process_sharded_upload(files, form_data):
             return jsonify({'error': 'Model already exists', 'existing_id': existing.get('id')}), 409
         
         # Extract signature from folder (using first shard for shape analysis)
-        first_shard_path = os.path.join(model_folder, os.listdir(model_folder)[0])
+        shard_files = sorted(os.listdir(model_folder))
+        if not shard_files:
+            raise Exception("No shard files found in model folder")
+        first_shard_path = os.path.join(model_folder, shard_files[0])
         signature = extract_weight_signature(first_shard_path, num_layers)
         
         # Calculate kurtosis using chunked method (processes layer by layer from folder)

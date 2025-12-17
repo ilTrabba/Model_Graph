@@ -14,7 +14,7 @@ from src.log_handler import logHandler
 from ..db_entities.entity import Model
 from enum import Enum
 from src.utils.architecture_filtering import FilteringPatterns
-from src.mother_algorithm.mother_utils import load_model_weights
+from src.mother_algorithm.mother_utils import load_model_weights, get_model_keys, load_single_tensor
 
 logger = logging.getLogger(__name__)
 
@@ -349,8 +349,6 @@ class ModelDistanceCalculator:
         Returns:
             Average distance across common parameters, or inf if no valid layers
         """
-        from src.mother_algorithm.mother_utils import get_model_keys, load_single_tensor
-        
         try:
             if excluded_patterns is None:
                 excluded_patterns = FilteringPatterns.BACKBONE_ONLY

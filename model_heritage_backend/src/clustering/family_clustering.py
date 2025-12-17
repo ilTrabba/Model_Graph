@@ -13,7 +13,7 @@ import safetensors.torch
 import os
 
 from src.log_handler import logHandler
-from src.mother_algorithm.mother_utils import load_model_weights
+from src.mother_algorithm.mother_utils import load_model_weights, get_model_keys, load_single_tensor
 from src.clustering.distance_calculator import DistanceMetric
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
@@ -392,7 +392,6 @@ class FamilyClusteringSystem:
                 else:
                     # Fallback: load both and use standard distance (for small models)
                     try:
-                        from src.mother_algorithm.mother_utils import load_model_weights
                         model_weights = load_model_weights(model_file_path)
                         
                         with safe_open(centroid_path, framework="pt") as f:
@@ -697,7 +696,6 @@ class FamilyClusteringSystem:
             - Tensori non compatibili vengono esclusi (con logging)
         """
         try:
-            from src.mother_algorithm.mother_utils import get_model_keys, load_single_tensor
             
             # Step 1: Validazione input
             if not new_model_weights:
@@ -729,7 +727,6 @@ class FamilyClusteringSystem:
             if not common_layers:
                 logger.warning("Nessun layer comune trovato tra centroide e nuovo modello")
                 # Return all centroid weights loaded
-                from src.mother_algorithm.mother_utils import load_model_weights
                 return load_model_weights(centroid_path)
             
             # Step 3: Aggiorna layer comuni uno alla volta (chunked approach)
@@ -855,5 +852,4 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(f"❌ Errore durante calcolo centroide: {e}", "calculate_weights_centroid")
             # Fallback: load entire centroid
-            from src.mother_algorithm.mother_utils import load_model_weights
             return load_model_weights(current_centroid.get('file_path', ''))

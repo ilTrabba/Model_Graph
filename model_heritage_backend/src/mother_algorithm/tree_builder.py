@@ -117,7 +117,7 @@ class MoTHerTreeBuilder:
             
             # Build tree using selected method (now uses chunked operations)
             if self.method == TreeBuildingMethod.MOTHER:
-                tree, confidence_scores = self.build_mother_tree(family_id, valid_models, None)
+                tree, confidence_scores = self.build_mother_tree(family_id, valid_models)
             else:
                 raise Exception(f"Unknown tree building method: {self.method}")
             
@@ -135,10 +135,17 @@ class MoTHerTreeBuilder:
     
     def build_mother_tree(self, 
                           family_id: str,
-                          models: List[Model], 
-                          model_weights: Dict[str, Any]) -> Tuple[nx.DiGraph, Dict[int, float]]:
+                          models: List[Model]) -> Tuple[nx.DiGraph, Dict[int, float]]:
         """
         Build tree using full MoTHer algorithm (kurtosis + distance).
+        Uses chunked distance calculation to minimize memory usage.
+        
+        Args:
+            family_id: ID of the family
+            models: List of models in the family
+            
+        Returns:
+            Tuple of (tree, confidence_scores)
         """
         from src.clustering.distance_calculator import DistanceMetric
         try:
