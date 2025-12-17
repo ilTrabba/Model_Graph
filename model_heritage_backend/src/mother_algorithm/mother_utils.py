@@ -9,6 +9,8 @@ import numpy as np
 import torch
 import safetensors
 import networkx as nx
+import os
+import glob
 
 import numpy as np
 from scipy.stats import kurtosis
@@ -36,9 +38,35 @@ def normalize_parent_child_orientation(tree: nx.DiGraph) -> nx.DiGraph:
         return nx.reverse(tree, copy=True)
     return tree
 
-def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
-    """Load model weights from file"""
+def _load_sharded_weights(folder_path: str) -> Optional[Dict[str, Any]]:
+    """Load and merge all safetensors shards from a folder"""
     try:
+        shard_files = sorted(glob.glob(os.path.join(folder_path, "*.safetensors")))
+        
+        if not shard_files:
+            logger.warning(f"No safetensors files found in {folder_path}")
+            return None
+        
+        all_weights = {}
+        for shard_path in shard_files:
+            with safetensors.safe_open(shard_path, framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    all_weights[key] = f.get_tensor(key)
+        
+        logger.info(f"Loaded {len(shard_files)} shards, {len(all_weights)} total tensors")
+        return all_weights
+    except Exception as e:
+        logHandler.error_handler(e, "_load_sharded_weights", {"folder_path": folder_path})
+        return None
+
+def load_model_weights(file_path: str) -> Optional[Dict[str, Any]]:
+    """Load model weights from file or folder (sharded models)"""
+    try:
+        # NEW: If it's a folder, load all shards
+        if os.path.isdir(file_path):
+            return _load_sharded_weights(file_path)
+        
+        # Existing behavior for single files
         if file_path.endswith('.safetensors'):
             with safetensors.safe_open(file_path, framework="pt", device="cpu") as f:
                 weights = {key: f.get_tensor(key) for key in f.keys()}

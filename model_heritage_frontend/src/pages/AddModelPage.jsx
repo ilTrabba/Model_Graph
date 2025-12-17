@@ -41,7 +41,7 @@ export default function AddModelPage() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    file: null,
+    files: [],  // Changed from file: null to files: []
     license: '',
     customLicense: '',
     tasks: [],
@@ -57,13 +57,15 @@ export default function AddModelPage() {
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
   const [showLicenseDropdown, setShowLicenseDropdown] = useState(false);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const handleFilesChange = (e) => {  // Changed from handleFileChange
+    const selectedFiles = Array.from(e.target.files);
+    if (selectedFiles.length > 0) {
       setFormData(prev => ({
         ...prev,
-        file,
-        name: prev.name || file.name.replace(/\.[^/.]+$/, '') // Remove extension for default name
+        files: selectedFiles,
+        name: prev.name || (selectedFiles.length === 1 
+          ? selectedFiles[0].name.replace(/\.[^/.]+$/, '') 
+          : 'Multi-file model') // Default name for multi-file
       }));
     }
   };
@@ -140,7 +142,7 @@ export default function AddModelPage() {
     setFormData({
       name: '',
       description: '',
-      file: null,
+      files: [],  // Changed from file: null
       license: '',
       customLicense: '',
       tasks: [],
@@ -162,7 +164,7 @@ export default function AddModelPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.file) {
+    if (formData.files.length === 0) {  // Changed from !formData.file
       setError('Please select a file to upload');
       return;
     }
@@ -178,8 +180,17 @@ export default function AddModelPage() {
 
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('file', formData.file);
-      formDataToSend.append('name', formData.name || formData.file.name);
+      
+      // Append files with 'files' key for multiple or 'file' for single
+      if (formData.files.length > 1) {
+        formData.files.forEach(file => {
+          formDataToSend.append('files', file);
+        });
+      } else {
+        formDataToSend.append('file', formData.files[0]);
+      }
+      
+      formDataToSend.append('name', formData.name || (formData.files.length === 1 ? formData.files[0].name : 'Model'));
       formDataToSend.append('description', formData.description);
       
       // New fields
@@ -260,7 +271,8 @@ export default function AddModelPage() {
                   id="file"
                   type="file"
                   accept=".safetensors,.pt,.bin,.pth,.html"
-                  onChange={handleFileChange}
+                  onChange={handleFilesChange}
+                  multiple
                   className="hidden"
                 />
                 <label htmlFor="file" className="cursor-pointer">
@@ -269,28 +281,52 @@ export default function AddModelPage() {
                     Click to upload or drag and drop
                   </p>
                   <p className="text-xs text-gray-500">
-                    SafeTensors, PyTorch, or Pickle files
+                    SafeTensors, PyTorch, or Pickle files (single or multiple for sharded models)
                   </p>
                 </label>
               </div>
               
-              {formData.file && (
-                <div className="flex items-center justify-between space-x-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                  <div className="flex items-center space-x-2">
-                    <FileText className="h-4 w-4" />
-                    <span>{formData.file.name}</span>
-                    <span className="text-gray-400">({formatFileSize(formData.file.size)})</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleReset}
-                    className="h-10 w-10 p-0 hover:bg-red-50 hover:text-red-600"
-                    title="Remove file"
-                  >
-                    <Trash2 className="h-7 w-7" />
-                  </Button>
+              {formData.files.length > 0 && (
+                <div className="space-y-2">
+                  {formData.files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between space-x-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-4 w-4" />
+                        <span>{file.name}</span>
+                        <span className="text-gray-400">({formatFileSize(file.size)})</span>
+                      </div>
+                      {index === 0 && formData.files.length === 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleReset}
+                          className="h-10 w-10 p-0 hover:bg-red-50 hover:text-red-600"
+                          title="Remove file"
+                        >
+                          <Trash2 className="h-7 w-7" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {formData.files.length > 1 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">
+                        Total: {formData.files.length} files
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleReset}
+                        className="hover:bg-red-50 hover:text-red-600"
+                        title="Remove all files"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Clear all
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -569,7 +605,7 @@ export default function AddModelPage() {
             <div className="flex space-x-4">
               <Button
                 type="submit"
-                disabled={uploading || !formData.file}
+                disabled={uploading || formData.files.length === 0}
                 className="flex-1"
               >
                 {uploading ? (
