@@ -307,7 +307,7 @@ def upload_model():
             'is_foundation_model': is_foundation_model
         }
 
-        #riccardo   
+        #riccardo fel 
         # Save to Neo4j
         if not neo4j_service.create_model(model_data):
             raise Exception("Failed to save model to Neo4j")
