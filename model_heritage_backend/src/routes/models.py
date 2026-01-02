@@ -306,7 +306,8 @@ def upload_model():
             'readme_uri': readme_uri,
             'is_foundation_model': is_foundation_model
         }
-        
+
+        #riccardo   
         # Save to Neo4j
         if not neo4j_service.create_model(model_data):
             raise Exception("Failed to save model to Neo4j")
