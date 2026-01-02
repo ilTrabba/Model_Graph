@@ -41,7 +41,7 @@ export default function AddModelPage() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    file: null,
+    files: [],
     license: '',
     customLicense: '',
     tasks: [],
@@ -57,16 +57,32 @@ export default function AddModelPage() {
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
   const [showLicenseDropdown, setShowLicenseDropdown] = useState(false);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData(prev => ({
-        ...prev,
-        file,
-        name: prev.name || file.name.replace(/\.[^/.]+$/, '') // Remove extension for default name
-      }));
+  const handleFilesChange = (e) => {
+  const filesArray = Array.from(e.target.files);
+  
+  if (filesArray.length === 0) return;
+  
+  // Validazione client-side per pattern sharded (opzionale, nice-to-have)
+  const shardedPattern = /-\d+-of-\d+\.safetensors$/i;
+  const hasSharded = filesArray.some(f => shardedPattern.test(f.name));
+  
+  if (hasSharded && filesArray.length > 1) {
+    // Verifica che tutti i file siano safetensors se sembrano sharded
+    const allSafetensors = filesArray. every(f => f.name.endsWith('.safetensors'));
+    if (!allSafetensors) {
+      setError('When uploading sharded files, all files must be . safetensors format');
+      return;
     }
-  };
+  }
+  
+  setFormData(prev => ({
+    ...prev,
+    files: filesArray,
+    name: prev.name || filesArray[0].name. replace(/\.[^/.]+$/, '')
+  }));
+  
+  setError(null);
+};
 
   const handleReadmeFileChange = (e) => {
     const file = e.target.files[0];
@@ -140,7 +156,7 @@ export default function AddModelPage() {
     setFormData({
       name: '',
       description: '',
-      file: null,
+      files: [],
       license: '',
       customLicense: '',
       tasks: [],
@@ -162,9 +178,9 @@ export default function AddModelPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.file) {
-      setError('Please select a file to upload');
-      return;
+    if (!formData.files || formData.files.length === 0) {  
+    setError('Please select at least one file to upload');
+    return;
     }
 
     if (datasetUrlError) {
@@ -178,8 +194,13 @@ export default function AddModelPage() {
 
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('file', formData.file);
-      formDataToSend.append('name', formData.name || formData.file.name);
+
+      // Append all files with the same key 'file'
+      formData.files.forEach(file => {  
+        formDataToSend.append('file', file);
+      });
+
+      formDataToSend.append('name', formData.name || formData.files[0].name);
       formDataToSend.append('description', formData.description);
       
       // New fields
@@ -240,6 +261,95 @@ export default function AddModelPage() {
         <p className="text-gray-600">
           Upload a machine learning model to automatically discover its lineage and relationships.
         </p>
+        <div className="space-y-2">
+          <Label htmlFor="file">Model File(s) *</Label>
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+            <input
+              id="file"
+              type="file"
+              multiple  // ← AGGIUNTO: supporto multi-selezione
+              accept=".safetensors,.pt,.bin,.pth,.zip"
+              onChange={handleFilesChange}  // ← MODIFICATO: nuovo handler
+              className="hidden"
+            />
+            <label htmlFor="file" className="cursor-pointer">
+              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <p className="text-sm text-gray-600 mb-2">
+                Click to upload or drag and drop
+              </p>
+              <p className="text-xs text-gray-500">
+                SafeTensors, PyTorch, or Pickle files
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Multiple files supported (Ctrl+Click to select)
+              </p>
+            </label>
+          </div>
+          
+          {/* Display selected files */}
+          {formData.files && formData.files. length > 0 && (
+            <div className="space-y-2 mt-3">
+              {formData.files.length === 1 ? (
+                // Single file display (existing UI)
+                <div className="flex items-center justify-between space-x-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-4 w-4" />
+                    <span>{formData.files[0].name}</span>
+                    <span className="text-gray-400">({formatFileSize(formData.files[0].size)})</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReset}
+                    className="h-10 w-10 p-0 hover:bg-red-50 hover:text-red-600"
+                    title="Remove file"
+                  >
+                    <Trash2 className="h-7 w-7" />
+                  </Button>
+                </div>
+              ) : (
+                // Multiple files display (NEW)
+                <div className="bg-gray-50 p-3 rounded space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-700">
+                      {formData.files.length} files selected
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleReset}
+                      className="h-8 px-3 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Clear all
+                    </Button>
+                  </div>
+                  
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {formData.files.map((file, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center space-x-2 text-xs text-gray-600 bg-white p-2 rounded"
+                      >
+                        <FileText className="h-3 w-3 flex-shrink-0" />
+                        <span className="flex-1 truncate">{file.name}</span>
+                        <span className="text-gray-400 flex-shrink-0">
+                          {formatFileSize(file.size)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <p className="text-xs text-gray-500 mt-2">
+                    Total size: {formatFileSize(formData.files.reduce((acc, f) => acc + f.size, 0))}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -569,7 +679,7 @@ export default function AddModelPage() {
             <div className="flex space-x-4">
               <Button
                 type="submit"
-                disabled={uploading || !formData.file}
+                disabled={uploading || !formData.files || formData.files.length === 0} 
                 className="flex-1"
               >
                 {uploading ? (
