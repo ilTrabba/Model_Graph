@@ -17,7 +17,7 @@ OPERAZIONI PRELIMINARI DA FARE:
 
 NOTE:
 
-   0. Come cambiare metrica utilizzata:
+   Come cambiare metrica utilizzata:
        a. nel Clustering (family_clustering.py)-> in find_best_family_match, basta cambiare la metrica passata quando si chiama la funzione calculate_distance
        b. in MoTHer (Tree_builder.py)-> stessa cosa, nella funzione build_mother_tree cambiare la metrica passata a  calculate_distance 
    
@@ -31,8 +31,10 @@ CLUSTERIZZAZIONE:
    4. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
    5. ✅ Implementare la meccanica dei foundation model
    6. ✅ Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
-   7. Realizzare una soglia adattiva e gestire una confidence (possibile eliminazione, ma vediamo) in grado di generalizzare un corretto funzionamento della fase di clustering
-   8. Valutare re-clustering globale (notturno) che ammortizzi possibili errori del clustering incrementale
+   7. Realizzare una soglia adattiva e gestire una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
+   8. Accettare anche file bin (confersione in file safetensors)
+   9. Convalidare tutta le gestione dei pesi, anche multi-file (per esempio nel riscaricarli dalla fingerprint)
+   10. Valutare (inizialmente teoricamente) un re-clustering globale (per esempio notturno) che ammortizzi possibili errori del clustering incrementale
 
 
 
