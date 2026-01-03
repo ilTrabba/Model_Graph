@@ -187,7 +187,7 @@ def merge_and_convert_shards(source_dir, output_file_path):
     Supporta anche file senza estensione (validati con torch.load).
     """
     # Include file senza estensione ('')
-    extensions = {'.bin', '.pt', '.pth', '.ckpt', '. safetensors', ''}
+    extensions = {'.bin', '.pt', '.pth', '.ckpt', '.safetensors', ''}
     shard_files = []
     
     for root, _, files in os.walk(source_dir):
@@ -513,7 +513,7 @@ def upload_model():
             # ----------------------------------------------------------------
             elif ext == '.safetensors': 
                 logger.info(f"[UPLOAD] Processing single safetensors file: {filename}")
-                file. save(tmp_path)
+                file.save(tmp_path)
                 
                 # Estrai metadata
                 with safe_open(tmp_path, framework="pt", device="cpu") as f:
@@ -897,7 +897,7 @@ def download_model_weights(model_id):
             fingerprint = json.load(f)
         
         mapping = fingerprint. get('mapping', {})
-        original_filename = fingerprint.get('original_filename', f'{model_id}. safetensors')
+        original_filename = fingerprint.get('original_filename', f'{model_id}.safetensors')
         
         # 3. Load the stored safetensors file (normalized layer names)
         tensors_dict = load_file(file_path)
