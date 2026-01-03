@@ -18,7 +18,7 @@ class ShardedFileError(Exception):
     """Custom exception for sharded file validation errors"""
     pass
 
-    def validate_sharded_safetensors(files_list: List[FileStorage]) -> Dict[str, any]:
+    def validate_sharded_safetensors(self,files_list: List[FileStorage]) -> Dict[str, any]:
         """
         Validates that uploaded files follow HuggingFace sharded pattern. 
         
@@ -149,7 +149,7 @@ class ShardedFileError(Exception):
         }
 
 
-    def sort_sharded_files(file_paths: List[str]) -> List[str]:
+    def sort_sharded_files(self,file_paths: List[str]) -> List[str]:
         """
         Intelligently sort files based on their naming pattern.
         
@@ -187,7 +187,7 @@ class ShardedFileError(Exception):
             return sorted_files
 
 
-    def smart_load_bin(file_path: str, extract_dir: str) -> Tuple[bool, Optional[object]]:
+    def smart_load_bin(self,file_path: str, extract_dir: str) -> Tuple[bool, Optional[object]]:
         """
         Attempts to load a . bin file using multiple strategies.
         
@@ -250,7 +250,7 @@ class ShardedFileError(Exception):
         return (False, None)
 
 
-    def scan_for_model_files(directory: str, include_no_extension: bool = True) -> List[str]:
+    def scan_for_model_files(self,directory: str, include_no_extension: bool = True) -> List[str]:
         """
         Recursively scan directory for valid model files.
         
@@ -294,7 +294,7 @@ class ShardedFileError(Exception):
         return found_files
 
 
-    def is_likely_sharded_upload(files_list: List[FileStorage]) -> bool:
+    def is_likely_sharded_upload(self,files_list: List[FileStorage]) -> bool:
         """
         Quick check if uploaded files appear to be sharded safetensors.
         

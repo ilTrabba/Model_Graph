@@ -193,7 +193,8 @@ def merge_and_convert_shards(source_dir:  str, output_file_path:  str, threshold
         output_file_path: Percorso del file . safetensors di output
         threshold_gb:  Soglia in GB oltre la quale salvare su file temporaneo (default: 3.0)
     """
-    VALID_EXTENSIONS = {'.bin', '.pt', '.pth', '.ckpt', '.safetensors'}
+    # Include file senza estensione ('')
+    VALID_EXTENSIONS = {'.bin', '.pt', '.pth', '.ckpt', '.safetensors', ''}
     shard_files = []
     
     # === FASE 1: Scansione file (senza caricarli in RAM) ===
@@ -889,7 +890,7 @@ def download_model_weights(model_id):
             fingerprint = json.load(f)
         
         mapping = fingerprint. get('mapping', {})
-        original_filename = fingerprint.get('original_filename', f'{model_id}. safetensors')
+        original_filename = fingerprint.get('original_filename', f'{model_id}.safetensors')
         
         # 3. Load the stored safetensors file (normalized layer names)
         tensors_dict = load_safetensors(file_path)
