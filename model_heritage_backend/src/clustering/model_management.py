@@ -59,113 +59,131 @@ class ModelManagementSystem:
         
         logger.info("Initialized ModelManagementSystem with components")
     
-    def process_new_model(self, model_data) -> Dict[str, Any]:
+    def process_new_model(self, model_data:  Dict[str, Any]) -> Dict[str, Any]:
         """
         Complete processing pipeline for a new model.
         
-        This includes:
+        Pipeline:
         1. Family assignment (existing or new)
-        2. Parent finding within family
-        3. Tree reconstruction for family
-        4. Database updates
+        2. Tree reconstruction for entire family
+        3. Centroid update
+        4. Status finalization
         
-        Args:
-            model: Model to process
+        Args: 
+            model_data: Dictionary with model attributes
             
         Returns:
             Dictionary with processing results
         """
-        try:
-            # Create a proxy object for compatibility with clustering system
+        model_proxy = None  
+        model_id = model_data. get('id', 'unknown') 
+        
+        try: 
+            # Create proxy object for compatibility with clustering system
             model_proxy = Model(**model_data)
+            model_id = model_proxy.id
             
-            logger.info(f"Uploading model {model_proxy.id}")
+            logger.info(f"[SEARCHING FAMILY] Processing model {model_id}")
             
+            # =====================================================================
             # Step 1: Assign to family
+            # =====================================================================
             family_id, family_confidence = self.family_clustering.assign_model_to_family(model_proxy)
+            logger.info(f"[SEARCHING FAMILY] Assigned model {model_id} to family {family_id} (confidence: {family_confidence:.3f})")
             
-            logger.info(f"✅ Assigned model {model_proxy.id} to family {family_id} with confidence {family_confidence:.3f}")
-            
-            # Step 2: Build complete family tree and update all relationships
-            # Get all existing family models
+            # =====================================================================
+            # Step 2: Build complete family tree
+            # =====================================================================
             existing_family_models = neo4j_service.get_family_models(
                 family_id=family_id,
-                status='ok')
+                status='ok'
+            )
             
-            # Include the new model in the tree building process
-            all_family_models = existing_family_models + [model_proxy]
-
-            family_tree, tree_confidence = self.tree_builder.build_family_tree(family_id, all_family_models)
+            all_family_models = [*existing_family_models, model_proxy]
             
-            # Update all model relationships based on the complete tree
+            family_tree, tree_confidence = self.tree_builder.build_family_tree(
+                family_id, 
+                all_family_models
+            )
+            
+            num_nodes = family_tree.number_of_nodes()
+            num_edges = family_tree.number_of_edges()
+            
+            # Default values
             parent_id = None
             parent_confidence = 0.0
-            num_nodes = family_tree.number_of_nodes()
-
+            
+            # =====================================================================
+            # Step 3: Atomic tree rebuild (if tree has nodes)
+            # =====================================================================
             if num_nodes > 0:
-                # 🚀 ULTRA-OPTIMIZED: Single atomic query for tree rebuild
-                start_time = datetime.now(timezone.utc) 
+                start_time = datetime.now(timezone.utc)
+                
                 success = neo4j_service.atomic_rebuild_genealogy(
                     family_id, 
                     family_tree, 
                     tree_confidence
                 )
+                
                 elapsed_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
                 
                 if not success:
                     logger.error(f"Failed to rebuild tree for family {family_id}")
-                
-                # Extract parent info for the new model (for response only, no DB queries)
-                if family_tree.in_degree(model_proxy.id) > 0:
-                    predecessors = list(family_tree.predecessors(model_proxy.id))
-                    parent_id = predecessors[0]
-                    parent_confidence = tree_confidence.get(model_proxy.id, 0.0)
-                    logger.info(f"✅ Model {model_proxy.id} has parent {parent_id} (confidence: {parent_confidence:.3f})")
                 else:
-                    logger.info(f"✅ Model {model_proxy.id} is a root node")
+                    logger.info(f"⚡ Rebuilt family {family_id} tree ({num_edges} edges) in {elapsed_ms:.2f}ms")
                 
-                logger.info(f"⚡ Rebuilt family {family_id} tree with {family_tree.number_of_edges()} edges "
-                            f"in {elapsed_ms:.2f}ms using ONE atomic query")
+                # Extract parent info for response (no additional DB queries)
+                if family_tree.in_degree(model_id) > 0:
+                    parent_id = next(family_tree.predecessors(model_id))  
+                    parent_confidence = tree_confidence.get(model_id, 0.0)
+                    logger.info(f"✅ Model {model_id} parent:  {parent_id} (confidence:  {parent_confidence:.3f})")
+                else:
+                    logger.info(f"✅ Model {model_id} is a root node")
             else:
-                logger.info(f"=== TREE BUILDING FOR FAMILY {family_id}, WITH ONLY ONE MODEL ===")
-                logger.info(f"✅ Model {model_proxy.id} assigned as root in family {family_id}")
+                logger.info(f"✅ Model {model_id} assigned as first root in family {family_id}")
             
-            # Step 3: Update cantroid statistics
+            # =====================================================================
+            # Step 4: Update centroid statistics 
+            # =====================================================================
             if num_nodes > 1:
-                self.family_clustering.calculate_family_centroid(
-                    family_id,
-                    model_proxy
-                )
-
-            # Step 4: final updates
-            neo4j_service.update_model(model_proxy.id, {
-                'status': 'ok'
-            })
+                self.family_clustering.calculate_family_centroid(family_id, model_proxy)
+            
+            # =====================================================================
+            # Step 5: Finalize status
+            # =====================================================================
+            neo4j_service.update_model(model_id, {'status': 'ok'})
             
             return {
-                'model_id': model_proxy.id,
+                'model_id':  model_id,
                 'family_id': family_id,
                 'family_confidence': family_confidence,
                 'parent_id': parent_id,
                 'parent_confidence': parent_confidence,
-                'tree_nodes': family_tree.number_of_nodes(),
-                'tree_edges': family_tree.number_of_edges(),
+                'tree_nodes': num_nodes,
+                'tree_edges': num_edges,
                 'status': 'success'
-            }    
-        except Exception as e:
-            logHandler.error_handler(e, "process_new_model")
+            }
             
-            # Mark model as error state
-            neo4j_service.update_model(model_proxy.id, {
-                'status': 'error'
-            })
+        except Exception as e: 
+            logHandler.error_handler(e, "process_new_model", f"model_id={model_id}")
+            
+            # Mark model as error state in DB
+            if model_id != 'unknown':
+                try:
+                    neo4j_service.update_model(model_id, {'status': 'error'})
+                except Exception as db_err:
+                    logger.error(f"Failed to update error status for {model_id}: {db_err}")
             
             return {
-                'model_id': model_proxy.id,
+                'model_id': model_id,
                 'status': 'error',
-                'error': str(e)
+                'error':  str(e)
             }
-    
+
+    # =====================================================================
+            #Funzioni non utilizzate nel flusso principale
+    # =====================================================================
+
     # Potenzialmente utile per la realizzazione di una box-view della genealogia di un modello (andrà cambiata)
     def get_family_genealogy(self, family_id: str) -> Dict[str, Any]:
         """

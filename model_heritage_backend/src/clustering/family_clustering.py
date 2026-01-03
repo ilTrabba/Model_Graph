@@ -259,7 +259,7 @@ class FamilyClusteringSystem:
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
             
-            logger.info(f"Model has this structural_hash:{model.structural_hash}")
+            logger.info(f"[SEARCHING FAMILY] Model has this structural_hash:{model.structural_hash}")
 
             if (model.is_foundation_model): 
                 candidate_centroids = neo4j_service.get_all_centroids_without_foundation(model.structural_hash)

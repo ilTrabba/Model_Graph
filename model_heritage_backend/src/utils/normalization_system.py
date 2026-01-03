@@ -167,183 +167,129 @@ def save_layer_mapping_json(
     except Exception as e:
         return logHandler.error_handler(e, "save_layer_mapping_json", f"Errore salvataggio mapping per model_id={model_id}"  )
 
-def normalize_safetensors_layers(weights: Dict[str, Any]) -> Dict[str, Any]:
-    
-        """
-        Normalizza i nomi dei layer di un singolo file safetensors.
+# PATTERNS compilati a livello di modulo (una sola volta all'import)
+STRUCTURAL_PATTERNS = [
+    re.compile(r'(encoder\.layer\.\d+)'),
+    re.compile(r'(decoder\.layer\.\d+)'),
+    re.compile(r'(encoder\.blocks\.\d+)'),
+    re.compile(r'(decoder\.blocks\.\d+)'),
+    re.compile(r'(encoder_block\.\d+)'),
+    re.compile(r'(decoder_block\.\d+)'),
+    re.compile(r'(transformer\.h\.\d+)'),
+    re.compile(r'(transformer\.layers\.\d+)'),
+    re.compile(r'(transformer\.blocks\.\d+)'),
+    re.compile(r'(transformer_block\.\d+)'),
+    re.compile(r'(model\.layers\.\d+)'),
+    re.compile(r'(model\.decoder\.layers\.\d+)'),
+    re.compile(r'(gpt_neox\.layers\.\d+)'),
+    re.compile(r'(layers\.\d+)'),
+    re.compile(r'(blocks\.\d+)'),
+    re.compile(r'(layer\.\d+)'),
+    re.compile(r'(block\.\d+)'),
+    re.compile(r'(h\.\d+)'),
+    re.compile(r'(vision_model\.encoder\.layers\.\d+)'),
+    re.compile(r'(visual\. encoder\.blocks\.\d+)'),
+    re.compile(r'(vision_tower\.blocks\.\d+)'),
+    re.compile(r'(backbone\.stages\.\d+)'),
+    re.compile(r'(modules\.\d+)'),
+    re.compile(r'(block_list\.\d+)'),
+]
 
-        Gestisce molteplici architetture Hugging Face (ViT, BERT, GPT, LLaMA, T5, 
-        Whisper, CLIP, Swin, ecc.) per garantire compatibilità cross-framework.
+CLEANUP_PATTERN = re.compile(r'^(?:model|base_model|transformer)\.')
 
-        Operazioni applicate:
-        1. LayerNorm TensorFlow → PyTorch (.beta → .bias, .gamma → .weight)
-        2. Estrazione core strutturale (layer.X, block.X, h.X, etc.)
-        3. Rimozione prefissi di wrapping del modello
-        4. Normalizzazione abbreviazioni comuni
-        5. Pulizia finale
-        
-        Args:
-            weights: Dizionario {layer_name: tensor}
+KNOWN_PREFIXES = (
+    'backbone.', 'base_model.', 'decoder.', 'discriminator.', 'encoder.',
+    'generator.', 'head.', 'model.', 'proj.', 'student.', 'teacher.',
+    'transformer.', 'unet.', 'vae.',
+    'bart.', 'bert.', 'bloom.', 'deberta.', 'distilbert.', 'falcon.',
+    'gpt_neox.', 'gptj.', 'llama.', 'marian.', 'mistral.', 'mt5.',
+    'opt.', 'roberta.', 't5.',
+    'beit.', 'clip.', 'clip_model.', 'clip_vision_model.', 'convnext.',
+    'dino.', 'dinov2.', 'open_clip.', 'sam.', 'swin.', 'vit.',
+    'image_encoder.', 'speech_encoder_decoder.', 'text_encoder.',
+    'text_model.', 'vision_model.', 'vision_tower.', 'visual.', 'whisper.',
+)
 
-        Returns:
-            Dizionario normalizzato {normalized_layer_name: tensor}
-            
-        Raises:
-            Nessuna eccezione; logga warning per collisioni
-        """
-        if not weights:
-            logger.warning("Input weights vuoto")
-            return {}
+ABBREVIATION_MAP = {
+    '.ln_f.': '.layernorm_final.',
+    '.ln_1.': '.layernorm_before.',
+    '.ln_2.': '.layernorm_after.',
+    '.ln.': '.layernorm.',
+    '.attn.': '.attention.',
+    '.mlp.':  '.feedforward.',
+    '.c_attn.': '.attention.combined.',
+    '.c_proj.': '.attention.projection.',
+    '.c_fc.': '.feedforward.fc.',
+}
 
-        normalized_weights = {}
+def normalize_single_name(name: str) -> str:
+    """Normalizza un singolo nome di layer."""
+    # Step 1: TensorFlow → PyTorch LayerNorm
+    name = name.replace('.beta', '.bias').replace('.gamma', '.weight')
 
-        # =========================================================================
-        # PATTERN STRUTTURALI (ordinati per priorità/specificità)
-        # =========================================================================
-        structural_patterns = [
-            # Encoder-Decoder specifici (più specifici prima)
-            r'(encoder\.layer\.\d+)',
-            r'(decoder\.layer\.\d+)',
-            r'(encoder\.blocks\.\d+)',
-            r'(decoder\.blocks\.\d+)',
-            r'(encoder_block\.\d+)',
-            r'(decoder_block\.\d+)',
-            
-            # Transformer generici
-            r'(transformer\.h\.\d+)',
-            r'(transformer\.layers\.\d+)',
-            r'(transformer\.blocks\.\d+)',
-            r'(transformer_block\.\d+)',
-            
-            # Layer/Block generici (LLaMA, GPT, Mistral, etc.)
-            r'(model\.layers\.\d+)',
-            r'(model\.decoder\.layers\.\d+)',
-            r'(gpt_neox\.layers\.\d+)',
-            r'(layers\.\d+)',
-            r'(blocks\.\d+)',
-            r'(layer\.\d+)',
-            r'(block\.\d+)',
-            r'(h\.\d+)',
-            
-            # Vision Models (CLIP, ViT, Swin, SAM, etc.)
-            r'(vision_model\.encoder\.layers\.\d+)',
-            r'(visual\.encoder\.blocks\.\d+)',
-            r'(vision_tower\.blocks\.\d+)',
-            r'(backbone\.stages\.\d+)',
-            
-            # Altri pattern
-            r'(modules\.\d+)',
-            r'(block_list\.\d+)',
-        ]
-
-        # =========================================================================
-        # PREFISSI DA RIMUOVERE (ordinati alfabeticamente per manutenibilità)
-        # =========================================================================
-        known_prefixes = [
-            # Generici
-            'backbone.', 'base_model.', 'decoder.', 'discriminator.', 'encoder.',
-            'generator.', 'head.', 'model.', 'proj.', 'student.', 'teacher.', 
-            'transformer.', 'unet.', 'vae.',
-            
-            # Text Models
-            'bart.', 'bert.', 'bloom.', 'deberta.', 'distilbert.', 'falcon.', 
-            'gpt_neox.', 'gptj.', 'llama.', 'marian.', 'mistral.', 'mt5.', 
-            'opt.', 'roberta.', 't5.',
-            
-            # Vision Models
-            'beit.', 'clip.', 'clip_model.', 'clip_vision_model.', 'convnext.', 
-            'dino.', 'dinov2.', 'open_clip.', 'sam.', 'swin.', 'vit.',
-            
-            # Multimodal
-            'clip.', 'image_encoder.', 'speech_encoder_decoder.', 'text_encoder.', 
-            'text_model.', 'vision_model.', 'vision_tower.', 'visual.', 'whisper.',
-        ]
-
-        # =========================================================================
-        # ABBREVIAZIONI DA NORMALIZZARE
-        # =========================================================================
-        abbreviation_map = {
-            '.ln_f.': '.layernorm_final.',
-            '.ln_1.': '.layernorm_before.',
-            '.ln_2.': '.layernorm_after.',
-            '.ln.': '.layernorm.',
-            '.attn.': '.attention.',
-            '.mlp.': '.feedforward.',
-            '.c_attn.': '.attention.combined.',  
-            '.c_proj.': '.attention.projection.',
-            '.c_fc.': '.feedforward.fc.',
-        }
-
-        # =========================================================================
-        # NORMALIZZAZIONE
-        # =========================================================================
-        collision_count = 0
-        
-        for original_name, tensor in weights.items():
-            normalized_name = original_name
-
-            # Step 1: TensorFlow → PyTorch LayerNorm
-            normalized_name = normalized_name.replace('.beta', '.bias')
-            normalized_name = normalized_name.replace('.gamma', '.weight')
-
-            # Step 2: Cerca pattern strutturali (dal più specifico al generico)
-            core_name_found = False
-            for pattern in structural_patterns:
-                match = re.search(pattern, normalized_name)
-                if match:
-                    start_idx = match.start()
-                    normalized_name = normalized_name[start_idx:]
-                    core_name_found = True
+    # Step 2: Pattern strutturali
+    for pattern in STRUCTURAL_PATTERNS:
+        match = pattern.search(name)
+        if match:
+            name = name[match.start():]
+            break
+    else:
+        # Step 3: Prefissi noti (solo se nessun pattern trovato)
+        if name.startswith(KNOWN_PREFIXES):
+            for prefix in KNOWN_PREFIXES:
+                if name.startswith(prefix):
+                    name = name[len(prefix):]
                     break
 
-            # Step 3: Se non trovato pattern, rimuovi prefissi noti
-            if not core_name_found:
-                for prefix in known_prefixes:
-                    if normalized_name.startswith(prefix):
-                        normalized_name = normalized_name[len(prefix):]
-                        break
+    # Step 4: Abbreviazioni
+    for abbrev, expanded in ABBREVIATION_MAP.items():
+        if abbrev in name:
+            name = name.replace(abbrev, expanded)
 
-            # Step 4: Normalizza abbreviazioni comuni
-            for abbrev, expanded in abbreviation_map.items():
-                normalized_name = normalized_name.replace(abbrev, expanded)
+    # Step 5: Pulizia finale
+    return CLEANUP_PATTERN.sub('', name)
 
-            # Step 5: Pulizia finale - rimuovi prefissi residui
-            # (potrebbe esserci dopo Step 2 se pattern non era all'inizio)
-            normalized_name = re.sub(
-                r'^(?:model|base_model|transformer)\.',
-                '',
-                normalized_name
-            )
+def normalize_safetensors_layers(weights:  Dict[str, Any]) -> Dict[str, Any]: 
+    """
+    Normalizza i nomi dei layer IN-PLACE (zero overhead memoria per tensori).
+    
+    I tensori non vengono mai copiati né modificati - solo le chiavi stringa
+    vengono rinominate.  Reversibile tramite fingerprint/mapping.
+    """
+    if not weights:
+        logger.warning("Input weights vuoto")
+        return weights
 
-            # Step 6: Gestisci collisioni
-            if normalized_name in normalized_weights:
-                collision_count += 1
-                logger.warning(
-                    f"Collisione durante la normalizzazione #{collision_count}: "
-                    f"'{original_name}' → '{normalized_name}' (già esistente). "
-                    f"Layer in collisione trovato!."
-                )
-                logHandler.error_handler(None, "normalize_safetensors_layers", "Collision occured between layer's names: original name → " + f"{original_name}" + ", normalized name → " + f"{normalized_name}")
-
-            # Step 7: Aggiungi al risultato
-            normalized_weights[normalized_name] = tensor
-
-        # =========================================================================
-        # LOGGING FINALE
-        # =========================================================================
-        original_count = len(weights)
-        normalized_count = len(normalized_weights)
+    original_count = len(weights)
+    
+    # Calcola tutte le rinominazioni prima di modificare
+    renames = []  # (old_key, new_key)
+    seen = {}     # new_key -> old_key (per collisioni)
+    collisions = []
+    
+    for old_name in list(weights.keys()):
+        new_name = normalize_single_name(old_name)
         
-        if collision_count > 0:
-            logger.warning(
-                f"Normalizzazione completata con {collision_count} collisioni: "
-                f"{original_count} layer originali → {normalized_count} layer normalizzati "
-                f"({original_count - normalized_count} scartati)"
-            )
+        if new_name in seen:
+            collisions.append((old_name, new_name, seen[new_name]))
+            del weights[old_name]  # Scarta duplicato
+        elif new_name != old_name: 
+            seen[new_name] = old_name
+            renames.append((old_name, new_name))
         else:
-            logger.info(
-                f"Normalizzazione completata: "
-                f"{original_count} layer originali → {normalized_count} layer normalizzati"
-            )
-
-        return normalized_weights
+            seen[new_name] = old_name
+    
+    # Applica rinominazioni
+    for old_key, new_key in renames: 
+        weights[new_key] = weights.pop(old_key)
+    
+    # Logging
+    for old, new, first in collisions:
+        logger.warning(f"Collisione: '{old}' → '{new}' (già usato da '{first}')")
+    
+    if collisions:
+        logger.warning(f"Normalizzazione:  {original_count} → {len(weights)} layer ({len(collisions)} collisioni)")
+    else:
+        logger.info(f"Normalizzazione: {original_count} → {len(weights)} layer")
+    
+    return weights
