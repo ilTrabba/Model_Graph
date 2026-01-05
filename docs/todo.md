@@ -56,6 +56,7 @@ ULTERIORI OBIETTIVI PROGETTUALI:
    7.	Scelta di nuovi modelli per l’ampliamento del dataset con l’obiettivo di estendere il sistema su scala massiva
    8.	Testare modelli massivi e vedere come il sistema reagisce
    9.	Valutare l’utilizzo di nuove metriche al posto della L2 norm
+   10. Per il problema dei modelli LORA fine-tuned, testare kurtosi con media della kurtosi di output.dense, query,value e key. 
 
 
 

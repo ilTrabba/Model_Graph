@@ -73,7 +73,13 @@ def calc_ku(weights: Dict[str, Any]) -> float:
     """
     try:
         # Layer kind required for Full Fine-Tuning mode in MoTHer
-        LAYER_KIND = "output.dense"
+        LAYER_KINDS = [
+            'output.dense',  # BERT style
+            'o_proj',        # Llama style
+            'out_proj',      # GPT-Neo/J style
+            'c_proj',        # GPT-2 style
+            'wo',            # T5 style
+            'self_attn.out']
 
         excluded_count = 0
         shape_filtered_count = 0
@@ -93,7 +99,8 @@ def calc_ku(weights: Dict[str, Any]) -> float:
                 continue
 
             # Require the FullFT-specific layer kind substring
-            if LAYER_KIND not in param_lower:
+            
+            if not any(kind in param_lower for kind in LAYER_KINDS):
                 layer_kind_filtered_count += 1
                 continue
 
@@ -112,7 +119,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
                 param_tensor_cpu = param_tensor_cpu.float()
 
             # Flatten to numpy array for kurtosis calculation
-            param_weights = param_tensor.detach().cpu().numpy().ravel()
+            param_weights = param_tensor_cpu.numpy().ravel()
             total_weights_from_valid_layers += param_weights.size
 
             # Calculate kurtosis per-layer (Fisher definition)
