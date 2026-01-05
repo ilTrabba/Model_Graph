@@ -104,68 +104,37 @@ def count_structural_layers(normalized_keys: List[str]) -> Dict:
     return result
 
 def save_layer_mapping_json(
-    original_keys: List[str],
-    normalized_keys: List[str],
-    model_id: str,
+    mapping: Dict[str, str], 
+    model_id: str, 
     original_filename: str
 ) -> int:
     """
-    Crea e salva un file JSON contenente il mapping tra nomi layer originali e normalizzati.
-    
-    Questo fingerprint permette di ricostruire il file safetensors originale a partire
-    dalla versione normalizzata, mantenendo traccia della corrispondenza nome-per-nome.
-    
-    Args:
-        original_keys: Lista ordinata dei nomi layer originali (grezzi)
-        normalized_keys: Lista ordinata dei nomi layer normalizzati
-        model_id: ID univoco del modello
-        original_filename: Nome del file safetensors originale
-        
-    Note:
-        - Le due liste devono avere la stessa lunghezza
-        - L'ordine è significativo: original_keys[i] corrisponde a normalized_keys[i]
-        - Il file viene salvato in MAPPING_FOLDER con nome {model_id}_mapping.json
-        - In caso di errore logga warning senza sollevare eccezioni
+    Salva il fingerprint JSON usando il mapping garantito.
     """
-    if len(original_keys) != len(normalized_keys):
-        logger.error(
-            f"Errore salvataggio mapping per model_id={model_id}: "
-            f"lunghezza liste non corrispondente "
-            f"(original={len(original_keys)}, normalized={len(normalized_keys)})"
-        )
-        return
+    # Estraiamo i nomi normalizzati per il conteggio strutturale
+    normalized_keys = list(mapping.keys())
     
-    # Crea la struttura del fingerprint
     fingerprint = {
         "model_id": model_id,
         "original_filename": original_filename,
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "layer_count": count_structural_layers(normalized_keys),
         "metadata": {},
-        "mapping": {
-            normalized: original 
-            for normalized, original in zip(normalized_keys, original_keys)
-        }
+        "mapping": mapping  # Usiamo il mapping passato, senza fare zip()
     }
     
-    # Prepara il path di salvataggio
     os.makedirs(MAPPING_FOLDER, exist_ok=True)
-    mapping_filename = f"{model_id}_mapping.json"
-    mapping_path = os.path.join(MAPPING_FOLDER, mapping_filename)
+    mapping_path = os.path.join(MAPPING_FOLDER, f"{model_id}_mapping.json")
     
-    # Salva il file JSON
     try:
         with open(mapping_path, 'w', encoding='utf-8') as f:
             json.dump(fingerprint, f, indent=2, ensure_ascii=False)
         
-        logger.info(
-            f"Mapping salvato con successo: {mapping_path} "
-            f"({len(original_keys)} layer mappati)"
-        )
-
+        logger.info(f"Mapping salvato con successo: {mapping_path}")
         return fingerprint["layer_count"].get("total_layers", 0)
     except Exception as e:
-        return logHandler.error_handler(e, "save_layer_mapping_json", f"Errore salvataggio mapping per model_id={model_id}"  )
+        # Assumendo che logHandler sia disponibile nel tuo scope
+        return logHandler.error_handler(e, "save_layer_mapping_json", f"Errore salvataggio mapping {model_id}")
 
 # PATTERNS compilati a livello di modulo (una sola volta all'import)
 STRUCTURAL_PATTERNS = [
@@ -249,47 +218,40 @@ def normalize_single_name(name: str) -> str:
     # Step 5: Pulizia finale
     return CLEANUP_PATTERN.sub('', name)
 
-def normalize_safetensors_layers(weights:  Dict[str, Any]) -> Dict[str, Any]: 
+def normalize_safetensors_layers(weights: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, str]]: 
     """
-    Normalizza i nomi dei layer IN-PLACE (zero overhead memoria per tensori).
-    
-    I tensori non vengono mai copiati né modificati - solo le chiavi stringa
-    vengono rinominate.  Reversibile tramite fingerprint/mapping.
+    Normalizza i nomi dei layer e restituisce (pesi_aggiornati, mapping_nomi).
     """
     if not weights:
         logger.warning("Input weights vuoto")
-        return weights
+        return weights, {}
 
     original_count = len(weights)
+    mapping = {}  # Struttura: { "nome_normalizzato": "nome_originale" }
     
-    # Calcola tutte le rinominazioni prima di modificare
-    renames = []  # (old_key, new_key)
-    seen = {}     # new_key -> old_key (per collisioni)
-    collisions = []
+    # Creiamo una lista statica delle chiavi per evitare errori durante la mutazione del dict
+    original_keys = list(weights.keys())
     
-    for old_name in list(weights.keys()):
+    for old_name in original_keys:
+        # Calcoliamo il nuovo nome
         new_name = normalize_single_name(old_name)
         
-        if new_name in seen:
-            collisions.append((old_name, new_name, seen[new_name]))
-            del weights[old_name]  # Scarta duplicato
-        elif new_name != old_name: 
-            seen[new_name] = old_name
-            renames.append((old_name, new_name))
-        else:
-            seen[new_name] = old_name
+        # Gestione Collisioni
+        if new_name in mapping:
+            first_original = mapping[new_name]
+            logger.warning(f"Collisione rilevata: '{old_name}' verrebbe normalizzato in '{new_name}', "
+                           f"ma questo nome è già occupato da '{first_original}'. "
+                           f"Il layer '{old_name}' verrà rimosso.")
+            weights.pop(old_name)
+            continue
+        
+        # Registriamo il mapping atomico
+        mapping[new_name] = old_name
+        
+        # Se il nome è cambiato, aggiorniamo il dizionario dei pesi
+        if new_name != old_name:
+            weights[new_name] = weights.pop(old_name)
     
-    # Applica rinominazioni
-    for old_key, new_key in renames: 
-        weights[new_key] = weights.pop(old_key)
+    logger.info(f"Normalizzazione: {original_count} -> {len(weights)} layer (Collisioni: {original_count - len(weights)})")
     
-    # Logging
-    for old, new, first in collisions:
-        logger.warning(f"Collisione: '{old}' → '{new}' (già usato da '{first}')")
-    
-    if collisions:
-        logger.warning(f"Normalizzazione:  {original_count} → {len(weights)} layer ({len(collisions)} collisioni)")
-    else:
-        logger.info(f"Normalizzazione: {original_count} → {len(weights)} layer")
-    
-    return weights
+    return weights, mapping

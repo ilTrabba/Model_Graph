@@ -25,7 +25,7 @@ from flask import send_file
 from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
-from src.mother_algorithm.mother_utils import calc_ku, load_model_weights
+from src.mother_algorithm.mother_utils import calc_ku
 from src.utils.normalization_system import normalize_safetensors_layers, save_layer_mapping_json
 
 ### Setup instances initialization ###
@@ -464,22 +464,20 @@ def upload_model():
         # ========================================================================
         logger.info("[UPLOAD] Loading safetensors for normalization...")
         tensors_dict = load_safetensors(tmp_path)
-        original_keys = list(tensors_dict.keys())
-        
+
         os.unlink(tmp_path)
         tmp_path = None  
         logger.info("[UPLOAD] Starting layer name normalization...")
 
-        tensors_dict = normalize_safetensors_layers(tensors_dict)
-        normalized_keys = list(tensors_dict.keys())
-        logger.info(f"[UPLOAD] Normalization completed:  {len(normalized_keys)} layers")
+        tensors_dict, mapping_dict = normalize_safetensors_layers(tensors_dict)
+
+        logger.info(f"[UPLOAD] Normalization completed: {len(tensors_dict)} layers")
 
         # ========================================================================
         # 9. SAVING FINGERPRINT
         # ========================================================================
         num_layers = save_layer_mapping_json(
-            original_keys, 
-            normalized_keys, 
+            mapping_dict, 
             model_id, 
             first_file.filename
         )
