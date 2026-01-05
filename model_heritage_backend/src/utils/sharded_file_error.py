@@ -51,7 +51,7 @@ class ShardedFileError(Exception):
         
         # Pattern regex:  capture base_name, shard_num, total_shards
         # Example: model-00001-of-00003.safetensors
-        pattern = re.compile(r'^(. +? )-(\d+)-of-(\d+)\.safetensors$', re.IGNORECASE)
+        pattern = re.compile(r'^(.+?)-(\d+)-of-(\d+)\.safetensors$', re.IGNORECASE)
         
         parsed_files = []
         base_names = set()
