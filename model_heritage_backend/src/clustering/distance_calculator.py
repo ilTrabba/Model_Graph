@@ -64,7 +64,16 @@ class ModelDistanceCalculator:
         Returns:
             L2 distance as float
         """
-        diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+
+        tensor1 = tensor1.detach().cpu()
+        tensor2 = tensor2.detach().cpu()
+
+        if tensor1.dtype == torch.bfloat16:
+            tensor1 = tensor1.float()
+        if tensor2.dtype == torch.bfloat16:
+            tensor2 = tensor2.float()
+
+        diff = tensor1.numpy() - tensor2.numpy()
         l2_dist = np.linalg.norm(diff.flatten())
         return l2_dist
 
@@ -79,8 +88,17 @@ class ModelDistanceCalculator:
         Returns:
             Cosine distance as float, or None if calculation fails (e.g., zero norm)
         """
-        vec1 = tensor1.detach().cpu().numpy().flatten()
-        vec2 = tensor2.detach().cpu().numpy().flatten()
+
+        tensor1 = tensor1.detach().cpu()
+        tensor2 = tensor2.detach().cpu()
+
+        if tensor1.dtype == torch.bfloat16:
+            tensor1 = tensor1.float()
+        if tensor2.dtype == torch.bfloat16:
+            tensor2 = tensor2.float()
+
+        vec1 = tensor1.numpy().flatten()
+        vec2 = tensor2.numpy().flatten()
         
         norm1 = np.linalg.norm(vec1)
         norm2 = np.linalg.norm(vec2)
@@ -109,7 +127,16 @@ class ModelDistanceCalculator:
         Returns:
             RMS-L2 distance as float
         """
-        diff = tensor1.detach().cpu().numpy() - tensor2.detach().cpu().numpy()
+
+        tensor1 = tensor1.detach().cpu()
+        tensor2 = tensor2.detach().cpu()
+
+        if tensor1.dtype == torch.bfloat16:
+            tensor1 = tensor1.float()
+        if tensor2.dtype == torch.bfloat16:
+            tensor2 = tensor2.float()
+
+        diff = tensor1.numpy() - tensor2.numpy()
         diff_flat = diff.flatten()
         rms_dist = np.sqrt(np.mean(diff_flat ** 2))
         return rms_dist

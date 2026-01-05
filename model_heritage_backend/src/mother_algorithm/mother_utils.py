@@ -105,6 +105,11 @@ def calc_ku(weights: Dict[str, Any]) -> float:
             if not (param_tensor.ndim == 2 and param_tensor.shape[0] == param_tensor.shape[1]):
                 shape_filtered_count += 1
                 continue
+            
+            # Convert to float if the type is bfloat16
+            param_tensor_cpu = param_tensor.detach().cpu()
+            if param_tensor_cpu.dtype == torch.bfloat16:
+                param_tensor_cpu = param_tensor_cpu.float()
 
             # Flatten to numpy array for kurtosis calculation
             param_weights = param_tensor.detach().cpu().numpy().ravel()
