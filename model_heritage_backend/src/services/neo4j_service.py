@@ -811,6 +811,30 @@ class Neo4jService:
             logHandler.error_handler(f"Failed to get models for family {family_id}: {e}", "get_family_models_new")
             return []
 
+    def get_family_root(self, family_id: str) -> Optional[Dict[str, Any]]:
+        """Get the root model of a family (model without parent)"""
+        if not self.driver:
+            return None
+        
+        try:
+            with self.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model)-[:BELONGS_TO]->(f:Family {id: $family_id})
+                WHERE NOT (m)-[:IS_CHILD_OF]->(:Model)
+                RETURN m
+                LIMIT 1
+                """
+                result = session.run(query, {'family_id': family_id})
+                record = result.single()
+                
+                if record:
+                    return dict(record['m'])
+                return None
+                
+        except Exception as e:
+            logHandler.error_handler(f"Failed to get root model for family {family_id}: {e}", "get_family_root")
+            return None
+
     def get_stats(self) -> Dict[str, int]:
         """Get system statistics"""
         if not self.driver:

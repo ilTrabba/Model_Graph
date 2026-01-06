@@ -368,7 +368,6 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
 
-
     def calculate_adaptive_threshold(self, family_stats: Dict):
 
         try:
@@ -636,7 +635,6 @@ class FamilyClusteringSystem:
                     best_distance = distance
                     best_family_id = family_id
 
-            
             if best_family_id is None:
                 return "", 0.0
             

@@ -32,8 +32,8 @@ CLUSTERIZZAZIONE:
    5. ✅ Implementare la meccanica dei foundation model
    6. ✅ Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
    7. Realizzare una soglia adattiva e gestire una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
-   8. Accettare anche file bin (confersione in file safetensors)
-   9. Convalidare tutta le gestione dei pesi, anche multi-file (per esempio nel riscaricarli dalla fingerprint)
+   8. ✅ Accettare anche file bin (confersione in file safetensors)
+   9. ✅ Convalidare tutta le gestione dei pesi, anche multi-file (per esempio nel riscaricarli dalla fingerprint)
    10. Valutare (inizialmente teoricamente) un re-clustering globale (per esempio notturno) che ammortizzi possibili errori del clustering incrementale
 
 
