@@ -1090,6 +1090,26 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to get family subgraph: {e}")
             return {'nodes': [], 'edges': [], 'error': str(e)}
+        
+    def get_family_leaves(self, family_id: str) -> List[Dict[str, Any]]:
+        """Get all leaf models in a family (models without children)"""
+        if not neo4j_service.driver:
+            return []
+        
+        try:
+            with neo4j_service.driver.session(database=Config.NEO4J_DATABASE) as session:
+                query = """
+                MATCH (m:Model)-[:BELONGS_TO]->(f:Family {id: $family_id})
+                WHERE ((m)-[:IS_CHILD_OF]->(:Model)) AND NOT ((:Model)-[:IS_CHILD_OF]->(m))
+                RETURN m
+                """
+                result = session.run(query, {'family_id': family_id})
+                leaves = [dict(record['m']) for record in result]
+                return leaves
+                
+        except Exception as e:
+            logHandler.error_handler(f"Failed to get leaf models for family {family_id}: {e}", "get_family_leaves")
+            return []
 
 # Global instance
 neo4j_service = Neo4jService()

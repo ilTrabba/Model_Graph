@@ -31,7 +31,7 @@ CLUSTERIZZAZIONE:
    4. ✅ Confrontare nel dettaglio come facciamo la distanza L2 tra modelli noi e come la fanno quelli di MoTher
    5. ✅ Implementare la meccanica dei foundation model
    6. ✅ Effettuare l’integrazione di un hash strutturale (con annesse questioni legate all’abbattimento dei costi computazionali)
-   7. Realizzare una soglia adattiva e gestire una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
+   7. ✅ Realizzare una soglia adattiva e gestire una confidence in grado di generalizzare un corretto funzionamento della fase di clustering
    8. ✅ Accettare anche file bin (confersione in file safetensors)
    9. ✅ Convalidare tutta le gestione dei pesi, anche multi-file (per esempio nel riscaricarli dalla fingerprint)
    10. Valutare (inizialmente teoricamente) un re-clustering globale (per esempio notturno) che ammortizzi possibili errori del clustering incrementale
@@ -52,11 +52,11 @@ ULTERIORI OBIETTIVI PROGETTUALI:
    3. ✅ Implementare l'operazione di download tramite fingerprint dei file safetensors originali
    4. Realizzare una vista (box view), accessibile tramite model card singola o creando una sezione dedicata, che mostri la famiglia (ad albero) del relativo modello di interesse.
    5.	Creare un modello in grado di elaborare prompt in NL e interpretarlo come query cypher, utile per cercare modelli o interrogare la knowledge generale accumulata dal sistema. Inizialmente sarà necessario concentrarsi su query semplici e poi successivamente più complesse (facenti uso di tag dedicati)
-   6.	Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene. (Confrontare accuracy usando centroide e usando file dei foundation model come centroidi)
+   6.	✅ Testare in maniera un po' più rigorosa la teoria legata all’uso dei centroidi su base media aritmetica per approssimare un cluster di modelli, tutti riferiti allo stesso task. Valutare sia casi semplici che peggiori, capire in sostanza quanto il centroide funziona bene. (Confrontare accuracy usando centroide e usando file dei foundation model come centroidi)
    7.	Scelta di nuovi modelli per l’ampliamento del dataset con l’obiettivo di estendere il sistema su scala massiva
    8.	Testare modelli massivi e vedere come il sistema reagisce
-   9.	Valutare l’utilizzo di nuove metriche al posto della L2 norm
-   10. Per il problema dei modelli LORA fine-tuned, testare kurtosi con media della kurtosi di output.dense, query,value e key. 
+   9.	✅ Valutare l’utilizzo di nuove metriche al posto della L2 norm
+   10. Per il problema dei modelli LORA fine-tuned, testare kurtosi con media della kurtosi di output.dense, query, value e key. 
 
 
 

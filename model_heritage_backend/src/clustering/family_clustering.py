@@ -38,6 +38,7 @@ CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
 
 class ClusteringMethod(Enum):
     """Available clustering methods"""
+
     DBSCAN = "dbscan"
     KMEANS = "kmeans" 
     THRESHOLD = "threshold"
@@ -149,13 +150,14 @@ class FamilyGuardian:
     def check_admissibility(self, 
                           dist_to_centroid: float, 
                           dist_to_root: Optional[float] = None, 
-                          cosine_sim: float = 1.0) -> Tuple[bool, float, float, str]:
+                          cosine_sim: float = 1.0,
+                          max_family_radius: Optional[float] = None) -> Tuple[bool, float, float, str]:
         """
         Valuta se accettare il modello nella famiglia.
         
         Args:
-            dist_to_centroid: Distanza L2 dal centroide corrente
-            dist_to_root: Distanza L2 dalla radice (se disponibile)
+            dist_to_centroid: Distanza L2 tra il centroide corrente e il modello candidato
+            dist_to_root: Distanza tra la radice e il modello candidato(se disponibile)
             cosine_sim: Similarità coseno direzionale (se disponibile)
             
         Returns:
@@ -175,7 +177,7 @@ class FamilyGuardian:
         alpha = 1.0 
         penalty_factor = 1 + alpha * (1 - cosine_sim)
         dist_penalized = dist_to_centroid * penalty_factor
-
+        
         # 3. Statistica Robusta (Median + MAD)
         if len(self.distances_history) < 3:
             # Cold Start: Se abbiamo < 3 distanze, la statistica è inaffidabile.
@@ -193,13 +195,13 @@ class FamilyGuardian:
             stats_threshold = median_val + (k * mad_val)
 
         # 4. Vincolo Evolutivo (Max Cap)
-        #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine.
-        if dist_to_root is not None:
-            # Cerchiamo il raggio massimo storico della famiglia
+        #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine. 
+        #    Cerchiamo il raggio massimo storico della famiglia
+        #    Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
+        #    Usiamo dist_to_root come riferimento per "quanto lontano può andare"
+        if max_family_radius is not None:
             max_history_dist = np.max(self.distances_history) if len(self.distances_history) > 0 else 0.0
-            # Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
-            # Usiamo dist_to_root come riferimento per "quanto lontano può andare"
-            evolutionary_cap = max(max_history_dist, dist_to_root) * 1.5
+            evolutionary_cap = max(max_history_dist, max_family_radius) * 1.5
             # Safety floor per evitare cap troppo stretti all'inizio
             evolutionary_cap = max(evolutionary_cap, self.min_threshold * 2)
         else:
@@ -368,6 +370,7 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
 
+    '''
     def calculate_adaptive_threshold(self, family_stats: Dict):
 
         try:
@@ -391,7 +394,8 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "calculate_adaptive_threshold")
             return None
-
+    '''
+    '''
     def calculate_confidence(self, best_distance, avg_intra_distance, threshold):
         try:
             if best_distance <= avg_intra_distance:
@@ -404,7 +408,8 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e,"calculate_confidence")
             return 0.0
-
+    '''
+    '''
     def extract_family_metrics(self, best_family_id: str) -> Dict:
         try:
             models = neo4j_service.get_family_models(best_family_id)
@@ -423,7 +428,30 @@ class FamilyClusteringSystem:
         except Exception as e:
             logHandler.error_handler(e, "extract_family_metrics")
             return None
- 
+    '''
+    def max_distance_root_leaves(self, root_weights: Dict[str, Any], best_family_id: str) -> Any:
+        try:
+            max_distance = 0.0
+            family_leaves = neo4j_service.get_family_leaves(best_family_id)
+            
+            for model in family_leaves:
+                model_weights = load_model_weights(model['file_path'])
+                if model_weights is None:
+                    continue
+                
+                distance = self.distance_calculator.calculate_distance(
+                    root_weights, model_weights, DistanceMetric.L2_DISTANCE, FilteringPatterns.FULL_MODEL
+                )
+                
+                if distance > max_distance:
+                    max_distance = distance
+            
+            return max_distance
+            
+        except Exception as e:
+            logHandler.error_handler(e, "max_distance_root_leaves")
+            return None
+
     def assign_model_to_family(self, 
                              model: Model,
                              model_weights: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
@@ -450,78 +478,78 @@ class FamilyClusteringSystem:
             if not candidate_centroids:
                 logger.info("No candidates found. Creating new family.")
                 family_id = self.create_new_family(model, model_weights)
-                return family_id, 1.0
+                confidence = 1.0
 
             # 3. Best Match L2 sul Centroide
-            best_family_id, best_distance_l2 = self.find_best_family_match(
-                model_weights, candidate_centroids
-            )
-            
-            if not best_family_id:
-                logger.info("No valid distance calculated. Creating new family.")
-                return self.create_new_family(model, model_weights), 1.0
-
-            # =========================================================
-            # LOGICA FAMILY GUARDIAN
-            # =========================================================
-            
-            # A. Recupero dati storici (Distanze padre-figlio)
-            raw_distances = neo4j_service.get_direct_relationship_distances(best_family_id)
-            
-            # B. Carica Centroide
-            centroid_data = self.load_family_centroid(best_family_id)
-            
-            # C. Recupero Radice (Incondizionato)
-            root_weights = None
-            dist_to_root = None
-            cosine_sim = 1.0 # Default neutro
-            
-            try:
-                # Recuperiamo la radice (esiste sempre: o flaggata o la più vecchia)
-                root_model = neo4j_service.get_family_root(best_family_id)
-                
-                if root_model:
-                    # Carichiamo i pesi se il file esiste
-                    root_weights = load_model_weights(root_model.file_path)
-                    if root_weights is None:
-                         logger.warning(f"Root model found ({root_model.id}) but weights file missing.")
-                else:
-                    logger.error(f"Logic Error: Family {best_family_id} exists but has no root/members.")
-
-            except Exception as e:
-                logger.warning(f"Error retrieving root weights for family {best_family_id}: {e}")
-
-            # D. Calcoli Geometrici Avanzati (Solo se file radice e centroide esistono)
-            if root_weights and centroid_data:
-                # Safe Harbor metric
-                dist_to_root = self.distance_calculator.calculate_distance(
-                    model_weights, root_weights, DistanceMetric.L2_DISTANCE, FilteringPatterns.FULL_MODEL
-                )
-                
-                # Directional Metric
-                cosine_sim = MetricUtils.calculate_directional_cosine(
-                    root_weights, centroid_data, model_weights
-                )
-            
-            # E. Interroga il Guardiano
-            guardian = FamilyGuardian(raw_distances, min_threshold=self.family_threshold)
-            
-            is_accepted, confidence, threshold_used, reason = guardian.check_admissibility(
-                dist_to_centroid=best_distance_l2,
-                dist_to_root=dist_to_root,
-                cosine_sim=cosine_sim
-            )
-            
-            logger.info(f"Family {best_family_id} check: {reason} | Decision: {'ACCEPTED' if is_accepted else 'REJECTED'}")
-
-            # F. Decisione Finale
-            if is_accepted and confidence > MIN_CONFIDENCE:
-                family_id = best_family_id
             else:
-                logger.info(f"Model rejected from {best_family_id} (Conf: {confidence:.2f}). Creating new family.")
-                family_id = self.create_new_family(model, model_weights)
-                confidence = 1.0
+                best_family_id, best_distance_l2 = self.find_best_family_match(
+                model_weights, candidate_centroids
+                )
+
+                # =========================================================
+                # LOGICA FAMILY GUARDIAN
+                # =========================================================
+                
+                # A. Recupero dati storici (Distanze padre-figlio)
+                raw_distances = neo4j_service.get_direct_relationship_distances(best_family_id)
+                
+                # B. Carica Centroide
+                centroid_data = self.load_family_centroid(best_family_id)
             
+                # C. Carica Radice
+                root_weights = None
+                dist_to_root = None
+                cosine_sim = 1.0 # default
+                
+                try:
+                    # Recuperiamo la radice (esiste sempre: o flaggata o la più vecchia)
+                    root_model = neo4j_service.get_family_root(best_family_id)
+                    
+                    if root_model:
+                        # Carichiamo i pesi se il file esiste
+                        root_weights = load_model_weights(root_model['file_path'])
+                        if root_weights is None:
+                            logger.warning(f"Root model found ({root_model['id']}) but weights file missing.")
+                    else:
+                        logger.error(f"Logic Error: Family {best_family_id} exists but has no root/members.")
+
+                except Exception as e:
+                    logger.warning(f"Error retrieving root weights for family {best_family_id}: {e}")
+
+                # D. Calcoli Geometrici Avanzati (Solo se file radice e centroide esistono)
+                if root_weights and centroid_data:
+                    # Safe Harbor metric
+                    max_family_radius = self.max_distance_root_leaves(root_weights, best_family_id)
+                    
+                    dist_to_root = self.distance_calculator.calculate_distance(
+                        root_weights, model_weights, DistanceMetric.L2_DISTANCE, FilteringPatterns.FULL_MODEL
+                    )
+                    
+                    # Directional Metric
+                    cosine_sim = MetricUtils.calculate_directional_cosine(
+                        root_weights, centroid_data, model_weights
+                    )
+            
+                # E. Interroga il Guardiano
+                guardian = FamilyGuardian(raw_distances, min_threshold=self.family_threshold)
+
+                is_accepted, confidence, threshold_used, reason = guardian.check_admissibility(
+                    dist_to_centroid=best_distance_l2,
+                    dist_to_root=dist_to_root,
+                    cosine_sim=cosine_sim,
+                    max_family_radius=max_family_radius
+                )
+                
+                logger.info(f"Family {best_family_id} check: {reason} | Decision: {'ACCEPTED' if is_accepted else 'REJECTED'}")
+
+                # F. Decisione Finale
+                if is_accepted and confidence > MIN_CONFIDENCE:
+                    family_id = best_family_id
+                else:
+                    logger.info(f"Model rejected from {best_family_id} (Conf: {confidence:.2f}). Creating new family.")
+                    family_id = self.create_new_family(model, model_weights)
+                    confidence = 1.0
+                
             # G. Aggiornamento DB
             neo4j_service.update_model(model.id, {'family_id': family_id})
 
