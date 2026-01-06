@@ -1066,6 +1066,32 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to get family subgraph: {e}")
             return {'nodes': [], 'edges': [], 'error': str(e)}
+    
+    def get_family_root(self, family_id: str) -> Optional[Model]:
+        """
+        Recupera il modello Radice della famiglia.
+        Logica:
+        1. Se c'è un modello flaggato come 'is_foundation_model', vince lui.
+        2. Altrimenti, vince il membro più vecchio (created_at minore), che è la radice de facto.
+        """
+        try:
+            query = """
+            MATCH (f:Family {id: $family_id})-[:HAS_MEMBER]->(m:Model)
+            RETURN m
+            ORDER BY m.is_foundation_model DESC, m.created_at ASC
+            LIMIT 1
+            """
+            
+            result = self.run_query(query, {'family_id': family_id})
+            
+            if result and result[0] and result[0]['m']:
+                 return self._map_to_model(result[0]['m'])
+                 
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding family root for {family_id}: {e}")
+            return None
 
 # Global instance
 neo4j_service = Neo4jService()

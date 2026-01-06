@@ -11,6 +11,7 @@ import uuid
 import re
 import safetensors.torch
 import os
+import numpy as np
 
 from src.log_handler import logHandler
 from src.mother_algorithm.mother_utils import load_model_weights
@@ -41,6 +42,191 @@ class ClusteringMethod(Enum):
     KMEANS = "kmeans" 
     THRESHOLD = "threshold"
     AUTO = "auto"
+
+
+class MetricUtils:
+    """Utility per calcoli geometrici efficienti sui pesi per la FamilyGuardian."""
+    
+    @staticmethod
+    def calculate_directional_cosine(
+        root_weights: Dict[str, Any],
+        centroid_weights: Dict[str, Any],
+        new_model_weights: Dict[str, Any]
+    ) -> float:
+        """
+        Calcola il coseno di similarità tra il vettore storia (Centroid - Root) 
+        e il vettore nuovo (NewModel - Root).
+        
+        Opera layer-wise per efficienza di memoria, evitando di concatenare 
+        l'intero modello in un unico vettore gigante.
+        """
+        try:
+            dot_product = 0.0
+            norm_history_sq = 0.0
+            norm_new_sq = 0.0
+            
+            # Identifica i layer comuni a tutti e tre i set di pesi
+            common_layers = set(root_weights.keys()) & set(centroid_weights.keys()) & set(new_model_weights.keys())
+            
+            if not common_layers:
+                return 1.0  # Fallback neutro se non ci sono layer comuni
+                
+            for layer in common_layers:
+                t_root = root_weights[layer]
+                t_cent = centroid_weights[layer]
+                t_new = new_model_weights[layer]
+                
+                # Assicuriamoci che siano tensori torch
+                if not (isinstance(t_root, torch.Tensor) and 
+                        isinstance(t_cent, torch.Tensor) and 
+                        isinstance(t_new, torch.Tensor)):
+                    continue
+
+                # Normalizzazione tipo e device (CPU float32)
+                t_root = t_root.detach().cpu()
+                t_cent = t_cent.detach().cpu()
+                t_new = t_new.detach().cpu()
+                
+                if t_root.dtype == torch.bfloat16: t_root = t_root.float()
+                if t_cent.dtype == torch.bfloat16: t_cent = t_cent.float()
+                if t_new.dtype == torch.bfloat16: t_new = t_new.float()
+                
+                # Verifica compatibilità shape
+                if t_root.shape != t_cent.shape or t_root.shape != t_new.shape:
+                    continue
+
+                # Vettori differenza (History e New Candidate)
+                diff_history = t_cent - t_root
+                diff_new = t_new - t_root
+                
+                # Calcoli parziali (dot product e norm squares)
+                # Flattening implicito nelle operazioni sum
+                dot_product += torch.sum(diff_history * diff_new).item()
+                norm_history_sq += torch.sum(diff_history ** 2).item()
+                norm_new_sq += torch.sum(diff_new ** 2).item()
+                
+            norm_history = np.sqrt(norm_history_sq)
+            norm_new = np.sqrt(norm_new_sq)
+            
+            # Se la storia è ferma (norm_history=0) o il nuovo è fermo, cos=1 (neutro)
+            if norm_history == 0 or norm_new == 0:
+                return 1.0 
+                
+            # Calcolo coseno finale
+            cosine_sim = dot_product / (norm_history * norm_new)
+            return float(np.clip(cosine_sim, -1.0, 1.0))
+            
+        except Exception as e:
+            logger.error(f"Error calculating directional cosine: {e}")
+            return 1.0 # Fallback neutro in caso di errore
+
+class FamilyGuardian:
+    """
+    Implementa la soglia adattiva 'Bounded Hybrid'.
+    Combina statistica robusta (MAD), geometria (Coseno) e limiti evolutivi (Safe Harbor).
+    """
+    def __init__(self, distances_history: List[float], min_threshold: float = 0.2):
+        # Convertiamo la history in numpy array per calcoli veloci
+        self.distances_history = np.array(distances_history) if distances_history else np.array([])
+        # n_members stimato (storia + 1 per il centroide/radice)
+        self.n_members = len(self.distances_history) + 1 
+        self.min_threshold = min_threshold
+        
+    def _get_adaptive_k(self) -> float:
+        """
+        Calcola il fattore k (severità) che decade con la numerosità.
+        Rule: Più membri ho (più certezza statistica), più divento severo (k basso).
+        """
+        k_max = 5.0  # Molto permissivo all'inizio
+        k_min = 2.5  # Standard gaussiano a regime
+        decay_rate = 0.1
+        
+        # Formula di decadimento esponenziale inversa
+        # Usa max(0, n-2) per ritardare il decadimento ai primissimi membri
+        current_k = k_min + (k_max - k_min) * np.exp(-decay_rate * max(0, self.n_members - 2))
+        return current_k
+
+    def check_admissibility(self, 
+                          dist_to_centroid: float, 
+                          dist_to_root: Optional[float] = None, 
+                          cosine_sim: float = 1.0) -> Tuple[bool, float, float, str]:
+        """
+        Valuta se accettare il modello nella famiglia.
+        
+        Args:
+            dist_to_centroid: Distanza L2 dal centroide corrente
+            dist_to_root: Distanza L2 dalla radice (se disponibile)
+            cosine_sim: Similarità coseno direzionale (se disponibile)
+            
+        Returns:
+            Tuple(is_accepted, confidence_score, final_threshold, reason_string)
+        """
+        # 1. Safe Harbor: Se il modello è molto vicino alla radice, entra sempre.
+        #    Questo gestisce la forma a "Stella" (figli ortogonali diretti).
+        if dist_to_root is not None:
+            # Safe harbor è un po' più largo del minimo globale
+            safe_harbor_limit = self.min_threshold * 1.5
+            if dist_to_root < safe_harbor_limit:
+                return True, 1.0, safe_harbor_limit, "Accepted (Safe Harbor: Near Root)"
+
+        # 2. Penalità Direzionale (Gestione forma a "Verme")
+        #    Se il coseno è basso (direzione diversa dalla storia), penalizziamo la distanza.
+        #    alpha = 1.0 significa che a 90° (cos=0) la distanza percepita raddoppia.
+        alpha = 1.0 
+        penalty_factor = 1 + alpha * (1 - cosine_sim)
+        dist_penalized = dist_to_centroid * penalty_factor
+
+        # 3. Statistica Robusta (Median + MAD)
+        if len(self.distances_history) < 3:
+            # Cold Start: Se abbiamo < 3 distanze, la statistica è inaffidabile.
+            # Usiamo un'euristica basata sul max storico o sul min_threshold.
+            if len(self.distances_history) > 0:
+                stats_threshold = max(self.min_threshold * 3, np.max(self.distances_history) * 1.5)
+            else:
+                stats_threshold = self.min_threshold * 3
+        else:
+            median_val = np.median(self.distances_history)
+            # MAD (Median Absolute Deviation) normalizzata per consistenza con StdDev
+            mad_val = np.median(np.abs(self.distances_history - median_val)) * 1.4826
+            
+            k = self._get_adaptive_k()
+            stats_threshold = median_val + (k * mad_val)
+
+        # 4. Vincolo Evolutivo (Max Cap)
+        #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine.
+        if dist_to_root is not None:
+            # Cerchiamo il raggio massimo storico della famiglia
+            max_history_dist = np.max(self.distances_history) if len(self.distances_history) > 0 else 0.0
+            # Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
+            # Usiamo dist_to_root come riferimento per "quanto lontano può andare"
+            evolutionary_cap = max(max_history_dist, dist_to_root) * 1.5
+            # Safety floor per evitare cap troppo stretti all'inizio
+            evolutionary_cap = max(evolutionary_cap, self.min_threshold * 2)
+        else:
+            evolutionary_cap = float('inf')
+
+        # 5. Soglia Finale Bounded
+        #    La soglia è statistica, ma "clippata" dal tetto evolutivo.
+        #    Mai inferiore al min_threshold globale.
+        final_threshold = max(self.min_threshold, min(stats_threshold, evolutionary_cap))
+
+        # Decisione
+        is_accepted = dist_penalized <= final_threshold
+        
+        # Calcolo Confidence (Scala lineare inversa)
+        # Se dist_penalized è esattamente sulla soglia -> conf = 0.5
+        # Se dist_penalized è 0 -> conf = 1.0
+        if dist_penalized > final_threshold:
+             # Decrescita rapida fuori soglia
+             confidence = max(0.0, 0.5 * (final_threshold / dist_penalized))
+        else:
+             # Crescita lineare dentro soglia
+             confidence = 0.5 + 0.5 * ((final_threshold - dist_penalized) / final_threshold)
+        
+        reason = (f"Score: {dist_penalized:.4f} (L2: {dist_to_centroid:.4f}, Pen: {penalty_factor:.2f}) "
+                  f"vs Thr: {final_threshold:.4f} [Stat: {stats_threshold:.4f}, Cap: {evolutionary_cap:.4f}]")
+        
+        return is_accepted, float(confidence), final_threshold, reason
 
 class FamilyClusteringSystem:
     """
@@ -243,68 +429,116 @@ class FamilyClusteringSystem:
                              model: Model,
                              model_weights: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
         """
-        Assign a model to an existing family or create a new one.
-        
-        Args:
-            model: Model object to assign
-            model_weights: Pre-loaded model weights (optional, will load if None)
-            
-        Returns:
-            Tuple of (family_id, confidence_score)
+        Assign a model to an existing family or create a new one using FamilyGuardian logic.
+        Uses adaptive thresholds, robust statistics, and directional analysis.
         """
         try:
-            # Load model weights if not provided
+            # 1. Caricamento Pesi
             if model_weights is None:
                 model_weights = load_model_weights(model.file_path)
                 if model_weights is None:
                     raise Exception("Model weights could not be loaded")
             
-            logger.info(f"[SEARCHING FAMILY] Model has this structural_hash:{model.structural_hash}")
+            logger.info(f"[SEARCHING FAMILY] Model structural_hash:{model.structural_hash}")
 
-            if (model.is_foundation_model): 
+            # 2. Identificazione Candidati
+            if model.is_foundation_model: 
                 candidate_centroids = neo4j_service.get_all_centroids_without_foundation(model.structural_hash)
             else:
-                # Get all existing models with the same structural pattern
                 candidate_centroids = neo4j_service.get_all_centroids(model.structural_hash)
 
-            # If there aren't candidate centroids create a new one with the model weights for the centroid
+            # Caso Nuova Famiglia
             if not candidate_centroids:
+                logger.info("No candidates found. Creating new family.")
                 family_id = self.create_new_family(model, model_weights)
-                confidence = 1.0
-            else:
+                return family_id, 1.0
+
+            # 3. Best Match L2 sul Centroide
+            best_family_id, best_distance_l2 = self.find_best_family_match(
+                model_weights, candidate_centroids
+            )
+            
+            if not best_family_id:
+                logger.info("No valid distance calculated. Creating new family.")
+                return self.create_new_family(model, model_weights), 1.0
+
+            # =========================================================
+            # LOGICA FAMILY GUARDIAN
+            # =========================================================
+            
+            # A. Recupero dati storici (Distanze padre-figlio)
+            raw_distances = neo4j_service.get_direct_relationship_distances(best_family_id)
+            
+            # B. Carica Centroide
+            centroid_data = self.load_family_centroid(best_family_id)
+            
+            # C. Recupero Radice (Incondizionato)
+            root_weights = None
+            dist_to_root = None
+            cosine_sim = 1.0 # Default neutro
+            
+            try:
+                # Recuperiamo la radice (esiste sempre: o flaggata o la più vecchia)
+                root_model = neo4j_service.get_family_root(best_family_id)
                 
-                # Calculate distances to family centroids
-                best_family_id, best_distance = self.find_best_family_match(
-                    model_weights, candidate_centroids
+                if root_model:
+                    # Carichiamo i pesi se il file esiste
+                    root_weights = load_model_weights(root_model.file_path)
+                    if root_weights is None:
+                         logger.warning(f"Root model found ({root_model.id}) but weights file missing.")
+                else:
+                    logger.error(f"Logic Error: Family {best_family_id} exists but has no root/members.")
+
+            except Exception as e:
+                logger.warning(f"Error retrieving root weights for family {best_family_id}: {e}")
+
+            # D. Calcoli Geometrici Avanzati (Solo se file radice e centroide esistono)
+            if root_weights and centroid_data:
+                # Safe Harbor metric
+                dist_to_root = self.distance_calculator.calculate_distance(
+                    model_weights, root_weights, DistanceMetric.L2_DISTANCE, FilteringPatterns.FULL_MODEL
                 )
                 
-                family_stats = self.extract_family_metrics(best_family_id)  # mean, std, member_count
-
-                threshold = self.calculate_adaptive_threshold(family_stats)
-
-                confidence = self.calculate_confidence(best_distance, family_stats["avg_intra_distance"], threshold)
-                
-                if best_distance < threshold and confidence > MIN_CONFIDENCE:
-                    family_id = best_family_id
-                    
-                else:
-                    family_id = self.create_new_family(model, model_weights)
-                    confidence = 1.0
+                # Directional Metric
+                cosine_sim = MetricUtils.calculate_directional_cosine(
+                    root_weights, centroid_data, model_weights
+                )
             
-            # Update model with family assignment
+            # E. Interroga il Guardiano
+            guardian = FamilyGuardian(raw_distances, min_threshold=self.family_threshold)
+            
+            is_accepted, confidence, threshold_used, reason = guardian.check_admissibility(
+                dist_to_centroid=best_distance_l2,
+                dist_to_root=dist_to_root,
+                cosine_sim=cosine_sim
+            )
+            
+            logger.info(f"Family {best_family_id} check: {reason} | Decision: {'ACCEPTED' if is_accepted else 'REJECTED'}")
+
+            # F. Decisione Finale
+            if is_accepted and confidence > MIN_CONFIDENCE:
+                family_id = best_family_id
+            else:
+                logger.info(f"Model rejected from {best_family_id} (Conf: {confidence:.2f}). Creating new family.")
+                family_id = self.create_new_family(model, model_weights)
+                confidence = 1.0
+            
+            # G. Aggiornamento DB
             neo4j_service.update_model(model.id, {'family_id': family_id})
 
-            if(model.is_foundation_model):
+            if model.is_foundation_model:
                 updates = {
                     'has_foundation_model': True,
                     'updated_at': datetime.now(timezone.utc)
-                    }
+                }
                 neo4j_service.update_family(family_id, updates)
 
             return family_id, confidence
+
         except Exception as e:
             logHandler.error_handler(e, "assign_model_to_family")
-    
+            return self.create_new_family(model, model_weights), 1.0
+
     def calculate_family_centroid(self, family_id: str, new_model: Model) -> Optional[Dict[str, Any]]:
         """
         Calculate the centroid (average weights) for a family.
