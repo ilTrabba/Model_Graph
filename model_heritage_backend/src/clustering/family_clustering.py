@@ -25,13 +25,12 @@ from ..db_entities.entity import Model
 from src.services.neo4j_service import neo4j_service
 from .distance_calculator import ModelDistanceCalculator
 from src.utils.architecture_filtering import FilteringPatterns
+from src.utils.extract_mad_values import extract_mad_values
 
 logger = logging.getLogger(__name__)
 
 #FIXME: capire bene quali soglie settare empiricamente e non
 MIN_CONFIDENCE = 0.2
-THRESHOLD_SINGLE_MEMBER = 5
-THRESHOLD_DOUBLE_MEMBER = 5
 
 # Costante per soglia chunking automatico
 CENTROID_CHUNK_THRESHOLD = 10_000_000  # 40 MB in float32
@@ -126,7 +125,7 @@ class FamilyGuardian:
     Implementa la soglia adattiva 'Bounded Hybrid'.
     Combina statistica robusta (MAD), geometria (Coseno) e limiti evolutivi (Safe Harbor).
     """
-    def __init__(self, distances_history: List[float], min_threshold: float = 0.2):
+    def __init__(self, distances_history: List[float], min_threshold: float = 1):
         # Convertiamo la history in numpy array per calcoli veloci
         self.distances_history = np.array(distances_history) if distances_history else np.array([])
         # n_members stimato (storia + 1 per il centroide/radice)
@@ -151,7 +150,11 @@ class FamilyGuardian:
                           dist_to_centroid: float, 
                           dist_to_root: Optional[float] = None, 
                           cosine_sim: float = 1.0,
-                          max_family_radius: Optional[float] = None) -> Tuple[bool, float, float, str]:
+                          max_family_radius: Optional[float] = None,
+                          median: Optional[float] = None,
+                          mad_val: Optional[float] = None,
+                          max_dist_from_centroid: Optional[float] = None,
+                          num_of_nodes: int = 0) -> Tuple[bool, float, float, str]:
         """
         Valuta se accettare il modello nella famiglia.
         
@@ -166,33 +169,39 @@ class FamilyGuardian:
         # 1. Safe Harbor: Se il modello è molto vicino alla radice, entra sempre.
         #    Questo gestisce la forma a "Stella" (figli ortogonali diretti).
         if dist_to_root is not None:
-            # Safe harbor è un po' più largo del minimo globale
-            safe_harbor_limit = self.min_threshold * 1.5
+            # Safe harbor definito come il max tra un valore hard coded e la distanza massima registrata tra i figli diretti della radice
+            safe_harbor_limit = max(self.min_threshold * 2.5, 2.5)
             if dist_to_root < safe_harbor_limit:
                 return True, 1.0, safe_harbor_limit, "Accepted (Safe Harbor: Near Root)"
 
         # 2. Penalità Direzionale (Gestione forma a "Verme")
         #    Se il coseno è basso (direzione diversa dalla storia), penalizziamo la distanza.
         #    alpha = 1.0 significa che a 90° (cos=0) la distanza percepita raddoppia.
-        alpha = 1.0 
+        #    La penalty potrebbe dover dipendere dalla anzianità della famiglia, troppo penalizzante all'inizio.
+        nun_of_nodes = len(self.distances_history)
+
+        if nun_of_nodes < 4:
+            alpha = 0.1  
+        elif nun_of_nodes < 7:
+            alpha = 0.2
+        elif nun_of_nodes < 10:
+            alpha = 0.3
+        else:
+            alpha = 0.5
         penalty_factor = 1 + alpha * (1 - cosine_sim)
         dist_penalized = dist_to_centroid * penalty_factor
         
         # 3. Statistica Robusta (Median + MAD)
-        if len(self.distances_history) < 3:
+        if num_of_nodes < 3:
             # Cold Start: Se abbiamo < 3 distanze, la statistica è inaffidabile.
             # Usiamo un'euristica basata sul max storico o sul min_threshold.
-            if len(self.distances_history) > 0:
-                stats_threshold = max(self.min_threshold * 3, np.max(self.distances_history) * 1.5)
+            if num_of_nodes > 0:
+                stats_threshold = max(self.min_threshold * 3, max_dist_from_centroid * 1.5)
             else:
                 stats_threshold = self.min_threshold * 3
         else:
-            median_val = np.median(self.distances_history)
-            # MAD (Median Absolute Deviation) normalizzata per consistenza con StdDev
-            mad_val = np.median(np.abs(self.distances_history - median_val)) * 1.4826
-            
             k = self._get_adaptive_k()
-            stats_threshold = median_val + (k * mad_val)
+            stats_threshold = median + (k * mad_val)
 
         # 4. Vincolo Evolutivo (Max Cap)
         #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine. 
@@ -370,65 +379,6 @@ class FamilyClusteringSystem:
             logger.error(f"Error loading centroid for family {family_id}: {e}")
             return None
 
-    '''
-    def calculate_adaptive_threshold(self, family_stats: Dict):
-
-        try:
-            k = 5.0  # moltiplicatore di deviazione standard
-            member_count = family_stats["members"]
-            avg_intra_distance = family_stats["avg_intra_distance"]
-            std_intra_distance = family_stats["std_intra_distance"]
-
-            if member_count == 1:
-                # Famiglia con 1 solo membro: soglia conservativa fissa
-                return THRESHOLD_SINGLE_MEMBER # now is 5
-            
-            elif member_count == 2:
-                # 1 sola relazione: std non affidabile, usa margine sulla media
-                return THRESHOLD_DOUBLE_MEMBER # now is 5
-            
-            else:
-                # >= 3 membri: formula standard
-                return avg_intra_distance + k * std_intra_distance
-            
-        except Exception as e:
-            logHandler.error_handler(e, "calculate_adaptive_threshold")
-            return None
-    '''
-    '''
-    def calculate_confidence(self, best_distance, avg_intra_distance, threshold):
-        try:
-            if best_distance <= avg_intra_distance:
-                return 1.0
-            elif best_distance <= threshold:
-                # Scala lineare tra mean e threshold
-                return 1.0 - (best_distance - avg_intra_distance) / (threshold - avg_intra_distance)
-            else:
-                return 0.0
-        except Exception as e:
-            logHandler.error_handler(e,"calculate_confidence")
-            return 0.0
-    '''
-    '''
-    def extract_family_metrics(self, best_family_id: str) -> Dict:
-        try:
-            models = neo4j_service.get_family_models(best_family_id)
-            distances = neo4j_service.get_direct_relationship_distances(best_family_id)
-            avg_intra_distance = neo4j_service.get_family_by_id(best_family_id).get('avg_intra_distance')
-
-            std_intra_distance = self.distance_calculator.calculate_std_intra_distance(distances, avg_intra_distance)
-            members = len(models)
-
-            return {
-                'avg_intra_distance': avg_intra_distance,
-                'std_intra_distance': std_intra_distance,
-                'members': members
-            }
-
-        except Exception as e:
-            logHandler.error_handler(e, "extract_family_metrics")
-            return None
-    '''
     def max_distance_root_leaves(self, root_weights: Dict[str, Any], best_family_id: str) -> Any:
         try:
             max_distance = 0.0
@@ -529,7 +479,9 @@ class FamilyClusteringSystem:
                     cosine_sim = MetricUtils.calculate_directional_cosine(
                         root_weights, centroid_data, model_weights
                     )
-            
+
+                    median, mad_val, max_dist_from_centroid, num_of_nodes = extract_mad_values(best_family_id, centroid_data, self.distance_calculator)
+
                 # E. Interroga il Guardiano
                 guardian = FamilyGuardian(raw_distances, min_threshold=self.family_threshold)
 
@@ -537,7 +489,11 @@ class FamilyClusteringSystem:
                     dist_to_centroid=best_distance_l2,
                     dist_to_root=dist_to_root,
                     cosine_sim=cosine_sim,
-                    max_family_radius=max_family_radius
+                    max_family_radius=max_family_radius,
+                    median=median,
+                    mad_val=mad_val,
+                    max_dist_from_centroid=max_dist_from_centroid,
+                    num_of_nodes=num_of_nodes
                 )
                 
                 logger.info(f"Family {best_family_id} check: {reason} | Decision: {'ACCEPTED' if is_accepted else 'REJECTED'}")

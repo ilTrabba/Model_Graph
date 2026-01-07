@@ -31,7 +31,7 @@ class ModelManagementSystem:
     """
     
     def __init__(self,
-                 family_threshold: float = 0.5,
+                 family_threshold: float = 1,
                  clustering_method: ClusteringMethod = ClusteringMethod.THRESHOLD,
                  tree_method: TreeBuildingMethod = TreeBuildingMethod.MOTHER,
                  lambda_param: float = 0.5):
