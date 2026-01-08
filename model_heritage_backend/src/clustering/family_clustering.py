@@ -137,8 +137,8 @@ class FamilyGuardian:
         Calcola il fattore k (severità) che decade con la numerosità.
         Rule: Più membri ho (più certezza statistica), più divento severo (k basso).
         """
-        k_max = 5.0  # Molto permissivo all'inizio
-        k_min = 2.5  # Standard gaussiano a regime
+        k_max = 5.7  # Molto permissivo all'inizio
+        k_min = 3.2  # Standard gaussiano a regime
         decay_rate = 0.1
         
         # Formula di decadimento esponenziale inversa
@@ -178,8 +178,21 @@ class FamilyGuardian:
         #    Se il coseno è basso (direzione diversa dalla storia), penalizziamo la distanza.
         #    alpha = 1.0 significa che a 90° (cos=0) la distanza percepita raddoppia.
         #    La penalty potrebbe dover dipendere dalla anzianità della famiglia, troppo penalizzante all'inizio.
-        nun_of_nodes = len(self.distances_history)
 
+        growth_factor = None
+        alpha = 1.0
+        if cosine_sim >= 0.5:
+            growth_factor = 0.85
+            penalty_factor = 1.0
+        elif cosine_sim >= 0.2:
+            growth_factor = 0.6          
+            penalty_factor = 1.05
+        elif cosine_sim >= 0:             
+            penalty_factor = 1 + (alpha * 0.2 * (1 - cosine_sim))         
+        else:             
+            penalty_factor = 1 + alpha * (1 - cosine_sim)
+
+        '''
         if nun_of_nodes < 4:
             alpha = 0.1  
         elif nun_of_nodes < 7:
@@ -189,9 +202,15 @@ class FamilyGuardian:
         else:
             alpha = 0.5
         penalty_factor = 1 + alpha * (1 - cosine_sim)
+        '''
+        
         dist_penalized = dist_to_centroid * penalty_factor
         
-        # 3. Statistica Robusta (Median + MAD)
+        # 3. Statistica Robusta (Median + MAD) unita al punto 4. Vincolo Evolutivo (Max Cap)
+        #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine. 
+        #    Cerchiamo il raggio massimo storico della famiglia
+        #    Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
+        #    Usiamo dist_to_root come riferimento per "quanto lontano può andare"
         if num_of_nodes < 3:
             # Cold Start: Se abbiamo < 3 distanze, la statistica è inaffidabile.
             # Usiamo un'euristica basata sul max storico o sul min_threshold.
@@ -199,28 +218,26 @@ class FamilyGuardian:
                 stats_threshold = max(self.min_threshold * 3, max_dist_from_centroid * 1.5)
             else:
                 stats_threshold = self.min_threshold * 3
+            evolutionary_cap = stats_threshold
         else:
-            k = self._get_adaptive_k()
-            stats_threshold = median + (k * mad_val)
-
-        # 4. Vincolo Evolutivo (Max Cap)
-        #    La soglia non può espandersi all'infinito. Limitiamo al max storico + margine. 
-        #    Cerchiamo il raggio massimo storico della famiglia
-        #    Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
-        #    Usiamo dist_to_root come riferimento per "quanto lontano può andare"
-        if max_family_radius is not None:
-            max_history_dist = np.max(self.distances_history) if len(self.distances_history) > 0 else 0.0
-            evolutionary_cap = max(max_history_dist, max_family_radius) * 1.5
-            # Safety floor per evitare cap troppo stretti all'inizio
-            evolutionary_cap = max(evolutionary_cap, self.min_threshold * 2)
-        else:
-            evolutionary_cap = float('inf')
+            if max_family_radius is not None:
+                max_history_dist = np.max(self.distances_history) if len(self.distances_history) > 0 else 0.0
+                evolutionary_cap = max(max_history_dist, max_family_radius) * 1.5
+                # Safety floor per evitare cap troppo stretti all'inizio
+                evolutionary_cap = max(evolutionary_cap, self.min_threshold * 2)
+                if growth_factor:
+                    stats_threshold = max_dist_from_centroid * (1 + growth_factor)
+                else:
+                    k = self._get_adaptive_k()
+                    stats_threshold = max_dist_from_centroid + (k * mad_val)
+            else:
+                evolutionary_cap = float('inf') 
 
         # 5. Soglia Finale Bounded
         #    La soglia è statistica, ma "clippata" dal tetto evolutivo.
         #    Mai inferiore al min_threshold globale.
-        final_threshold = max(self.min_threshold, min(stats_threshold, evolutionary_cap))
-
+        final_threshold = max(self.min_threshold, min(stats_threshold, evolutionary_cap)) * 1.01 # arrotondamento dell'1%
+        
         # Decisione
         is_accepted = dist_penalized <= final_threshold
         
