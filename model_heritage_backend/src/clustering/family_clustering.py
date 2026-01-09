@@ -181,7 +181,7 @@ class FamilyGuardian:
 
         growth_factor = None
         alpha = 1.0
-        if cosine_sim >= 0.5:
+        if cosine_sim >= 0.5:   # 0.4 ?
             growth_factor = 0.85
             penalty_factor = 1.0
         elif cosine_sim >= 0.2:
@@ -236,7 +236,7 @@ class FamilyGuardian:
         # 5. Soglia Finale Bounded
         #    La soglia è statistica, ma "clippata" dal tetto evolutivo.
         #    Mai inferiore al min_threshold globale.
-        final_threshold = max(self.min_threshold, min(stats_threshold, evolutionary_cap)) * 1.01 # arrotondamento dell'1%
+        final_threshold = max(self.min_threshold, min(stats_threshold, evolutionary_cap)) * 1.017 # arrotondamento dell'1%
         
         # Decisione
         is_accepted = dist_penalized <= final_threshold
