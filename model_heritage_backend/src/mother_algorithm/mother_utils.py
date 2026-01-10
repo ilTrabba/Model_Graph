@@ -94,7 +94,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
             param_lower = param_name.lower()
 
             # Exclude normalization, embedding, and head layers (your existing filter)
-            if any(pattern in param_lower for pattern in FilteringPatterns.BACKBONE_ONLY):
+            if any(pattern in param_lower for pattern in FilteringPatterns.FULL_MODEL):
                 excluded_count += 1
                 continue
 
@@ -123,7 +123,7 @@ def calc_ku(weights: Dict[str, Any]) -> float:
             total_weights_from_valid_layers += param_weights.size
 
             # Calculate kurtosis per-layer (Fisher definition)
-            ku = stats.kurtosis(param_weights, fisher=True)
+            ku = stats.kurtosis(param_weights.flatten()) #ku = stats.kurtosis(param_weights, fisher=True)
 
             # Handle NaN/Inf for this layer: skip and count, but don't let it poison the sum
             if np.isnan(ku) or np.isinf(ku):
