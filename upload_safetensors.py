@@ -12,19 +12,19 @@ from pathlib import Path
 # CONFIGURAZIONE
 # ============================================
 
-# Policy di inserimento disponibili: 
-# - "casuale": ordine completamente random
+# Policy di inserimento disponibili:  
+# - "casuale":  ordine completamente random
 # - "corretto": depth 0 → depth 1 → depth 2 → ...  → depth n (tutti gli alberi per ogni depth)
 # - "inverso": depth n → depth n-1 → ...  → depth 0
-# - "incrociato":  depth n → depth 0 → depth n-1 → depth 1 → depth n-2 → depth 2 → ...
+# - "incrociato": depth n → depth 0 → depth n-1 → depth 1 → depth n-2 → depth 2 → ... 
 # - "breadth_first_per_albero": completa un albero intero prima di passare al successivo
-# - "round_robin": un file da ogni albero a depth 0, poi un file da ogni albero a depth 1, ecc.
+# - "round_robin": un file da ogni albero a depth 0, poi un file da ogni albero a depth 1, ecc. 
 # - "worst_case": figli prima dei genitori (massimizza conflitti di dipendenza)
 
-POLICY = "corretto"
+POLICY = "casuale"
 
 # Path della directory contenente i file safetensors
-DATASET_PATH = "/mnt/c/Users/hp/dataset_model_heritage"
+DATASET_PATH = "/mnt/c/Users/hp/dataset_model_heritage/Tree-0-MoTher"
 
 # Path del repository Model_Graph
 REPO_PATH = os.path.expanduser("~/projects/Model_Graph")
@@ -40,6 +40,25 @@ POLL_INTERVAL = 2
 
 # Tempo massimo di attesa per un singolo upload (secondi)
 UPLOAD_TIMEOUT = 120
+
+# ============================================
+# CONFIGURAZIONE SINCRONIZZAZIONE
+# ============================================
+
+# Tempo di attesa dopo ogni upload (secondi)
+SLEEP_AFTER_UPLOAD = 2.0
+
+# Tempo di attesa aggiuntivo dopo upload a depth 0 (root models)
+SLEEP_AFTER_ROOT = 5.0
+
+# Abilita verifica che il modello sia effettivamente presente dopo l'upload
+VERIFY_UPLOAD = True
+
+# Numero massimo di tentativi per la verifica
+VERIFY_MAX_RETRIES = 5
+
+# Intervallo tra i tentativi di verifica (secondi)
+VERIFY_INTERVAL = 1.0
 
 
 # ============================================
@@ -64,31 +83,36 @@ def log_separator():
 def explore_dataset(dataset_path):
     """
     Esplora la directory del dataset e cataloga tutti i file safetensors
-    per albero e profondità. 
+    per albero e profondità.
     
-    Ritorna un dizionario: 
-    {
-        "nome_albero": {
-            0: [{"filename": ".. .", "path": "..."}],
-            1: [{"filename": "...", "path": "..."}, ... ],
-            ... 
-        },
-        ... 
-    }
+    Supporta sia:  
+    - Path alla cartella contenente più alberi (es.  dataset_model_heritage/)
+    - Path diretto a un singolo albero (es.  dataset_model_heritage/Tree-1-Mother/)
     """
     catalog = {}
-    
     dataset = Path(dataset_path)
     
     if not dataset.exists():
         log(f"ERRORE: Directory non trovata: {dataset_path}")
         sys.exit(1)
     
-    # Itera su ogni sottocartella (albero)
-    for tree_dir in sorted(dataset.iterdir()):
-        if not tree_dir.is_dir():
-            continue
-        
+    # Verifica se il path è già un albero (contiene file . safetensors o cartelle depth_N)
+    is_single_tree = False
+    for item in dataset.iterdir():
+        if (item.is_file() and item.suffix == ". safetensors") or \
+           (item.is_dir() and item.name.startswith("depth_")):
+            is_single_tree = True
+            break
+    
+    if is_single_tree:
+        # Il path passato È già un albero
+        tree_dirs = [dataset]
+    else:
+        # Il path contiene più alberi come sottocartelle
+        tree_dirs = [d for d in sorted(dataset.iterdir()) if d.is_dir()]
+    
+    # Itera su ogni albero
+    for tree_dir in tree_dirs:
         tree_name = tree_dir.name
         catalog[tree_name] = {}
         
@@ -97,14 +121,14 @@ def explore_dataset(dataset_path):
             if item.is_file() and item.suffix == ".safetensors":
                 if 0 not in catalog[tree_name]:
                     catalog[tree_name][0] = []
-                catalog[tree_name][0]. append({
+                catalog[tree_name][0].append({
                     "filename": item. name,
-                    "path":  str(item)
+                    "path": str(item)
                 })
         
         # Cerca cartelle depth_N
-        for item in tree_dir. iterdir():
-            if item. is_dir() and item.name.startswith("depth_"):
+        for item in tree_dir.iterdir():
+            if item.is_dir() and item.name.startswith("depth_"):
                 try:
                     depth = int(item.name. split("_")[1])
                 except (IndexError, ValueError):
@@ -135,11 +159,11 @@ def get_all_files_at_depth(catalog, depth):
     """Ritorna tutti i file a una specifica profondità (da tutti gli alberi)."""
     files = []
     for tree_name in sorted(catalog.keys()):
-        if depth in catalog[tree_name]:
+        if depth in catalog[tree_name]: 
             for file_info in catalog[tree_name][depth]:
                 files. append({
                     **file_info,
-                    "tree":  tree_name,
+                    "tree": tree_name,
                     "depth": depth
                 })
     return files
@@ -172,7 +196,7 @@ def apply_policy(catalog, policy):
         for depth in range(max_depth + 1):
             ordered_files.extend(get_all_files_at_depth(catalog, depth))
     
-    elif policy == "inverso": 
+    elif policy == "inverso":
         # depth n → depth n-1 → ... → depth 0
         for depth in range(max_depth, -1, -1):
             ordered_files.extend(get_all_files_at_depth(catalog, depth))
@@ -187,12 +211,12 @@ def apply_policy(catalog, policy):
             if turn_high:
                 ordered_files.extend(get_all_files_at_depth(catalog, high))
                 high -= 1
-            else: 
+            else:
                 ordered_files.extend(get_all_files_at_depth(catalog, low))
                 low += 1
             turn_high = not turn_high
     
-    elif policy == "breadth_first_per_albero": 
+    elif policy == "breadth_first_per_albero":
         # Completa un albero intero prima di passare al successivo
         for tree_name in sorted(catalog.keys()):
             for depth in sorted(catalog[tree_name].keys()):
@@ -204,7 +228,7 @@ def apply_policy(catalog, policy):
                     })
     
     elif policy == "round_robin":
-        # Un file da ogni albero a depth 0, poi un file da ogni albero a depth 1, ecc. 
+        # Un file da ogni albero a depth 0, poi un file da ogni albero a depth 1, ecc.
         for depth in range(max_depth + 1):
             tree_names = sorted(catalog.keys())
             # Crea iteratori per ogni albero a questa profondità
@@ -255,7 +279,7 @@ def start_tool(repo_path):
     
     os.chdir(repo_path)
     
-    # Avvia run.sh in background
+    # Avvia run. sh in background
     process = subprocess.Popen(
         ["./run.sh"],
         stdout=subprocess.PIPE,
@@ -273,9 +297,9 @@ def wait_for_backend(timeout=BACKEND_TIMEOUT):
     
     start_time = time.time()
     
-    while time.time() - start_time < timeout: 
+    while time.time() - start_time < timeout:
         try:
-            response = requests.get(API_URL. replace("/api/models", "/api/models"), timeout=5)
+            response = requests.get(API_URL, timeout=5)
             if response.status_code in [200, 404, 405]:  # Backend risponde
                 log("Backend pronto!")
                 return True
@@ -292,7 +316,7 @@ def wait_for_backend(timeout=BACKEND_TIMEOUT):
 
 def stop_tool(process):
     """Ferma il tool Model_Graph."""
-    if process: 
+    if process:
         log("Arresto del tool...")
         try:
             # Termina l'intero gruppo di processi
@@ -308,13 +332,58 @@ def stop_tool(process):
 
 
 # ============================================
+# VERIFICA E SINCRONIZZAZIONE
+# ============================================
+
+def verify_model_exists(model_id):
+    """
+    Verifica che un modello sia effettivamente presente e processato.
+    Ritorna True se il modello esiste ed è pronto, False altrimenti.
+    """
+    for attempt in range(VERIFY_MAX_RETRIES):
+        try:
+            response = requests.get(
+                f"{API_URL}/{model_id}",
+                timeout=10
+            )
+            if response.status_code == 200:
+                model_data = response.json()
+                # Verifica che il modello sia completamente processato
+                # (adatta questa logica in base alla tua API)
+                if model_data.get("status") == "ready" or "id" in model_data:
+                    return True
+        except Exception: 
+            pass
+        
+        time.sleep(VERIFY_INTERVAL)
+    
+    return False
+
+
+def wait_after_upload(file_info):
+    """
+    Applica le pause necessarie dopo un upload in base alla depth. 
+    """
+    # Sleep base dopo ogni upload
+    if SLEEP_AFTER_UPLOAD > 0:
+        log(f"         Attesa {SLEEP_AFTER_UPLOAD}s...")
+        time.sleep(SLEEP_AFTER_UPLOAD)
+    
+    # Sleep aggiuntivo per i modelli root (depth 0)
+    if file_info['depth'] == 0 and SLEEP_AFTER_ROOT > SLEEP_AFTER_UPLOAD:
+        extra_sleep = SLEEP_AFTER_ROOT - SLEEP_AFTER_UPLOAD
+        log(f"         Attesa extra per root:  {extra_sleep}s...")
+        time.sleep(extra_sleep)
+
+
+# ============================================
 # UPLOAD
 # ============================================
 
 def upload_file(file_info):
     """
     Esegue l'upload di un singolo file safetensors. 
-    Ritorna (success, message, duration).
+    Ritorna (success, message, duration, model_id).
     """
     start_time = time.time()
     
@@ -341,20 +410,21 @@ def upload_file(file_info):
         
         duration = time.time() - start_time
         
-        if response. status_code in [200, 201]:
+        if response.status_code in [200, 201]:
             result = response.json()
-            return True, f"OK - Model ID: {result. get('model', {}).get('id', 'N/A')}", duration
+            model_id = result.get('model', {}).get('id', None)
+            return True, f"OK - Model ID: {model_id}", duration, model_id
         else:
             error_msg = response.json().get("error", response.text)
-            return False, f"ERRORE ({response.status_code}): {error_msg}", duration
+            return False, f"ERRORE ({response.status_code}): {error_msg}", duration, None
     
     except requests.exceptions. Timeout:
-        duration = time.time() - start_time
-        return False, "ERRORE: Timeout durante l'upload", duration
+        duration = time. time() - start_time
+        return False, "ERRORE: Timeout durante l'upload", duration, None
     
     except Exception as e:
         duration = time.time() - start_time
-        return False, f"ERRORE: {str(e)}", duration
+        return False, f"ERRORE: {str(e)}", duration, None
 
 
 # ============================================
@@ -368,7 +438,10 @@ def main():
     
     log(f"Policy selezionata: {POLICY}")
     log(f"Dataset path: {DATASET_PATH}")
-    log(f"Repository path:  {REPO_PATH}")
+    log(f"Repository path: {REPO_PATH}")
+    log(f"Sleep dopo upload: {SLEEP_AFTER_UPLOAD}s")
+    log(f"Sleep dopo root: {SLEEP_AFTER_ROOT}s")
+    log(f"Verifica upload: {'Sì' if VERIFY_UPLOAD else 'No'}")
     log_separator()
     
     # 1. Esplora e cataloga i file
@@ -408,7 +481,7 @@ def main():
         
         # 4. Attendi che il backend sia pronto
         if not wait_for_backend():
-            log("Impossibile procedere:  backend non disponibile")
+            log("Impossibile procedere: backend non disponibile")
             stop_tool(process)
             sys.exit(1)
         
@@ -420,18 +493,32 @@ def main():
         
         success_count = 0
         error_count = 0
+        verified_count = 0
         total_duration = 0
         
         for i, file_info in enumerate(ordered_files, 1):
-            log(f"[{i}/{len(ordered_files)}] Upload:  {file_info['filename']}")
+            log(f"[{i}/{len(ordered_files)}] Upload: {file_info['filename']}")
             log(f"         Albero: {file_info['tree']}, Depth: {file_info['depth']}")
             
-            success, message, duration = upload_file(file_info)
+            success, message, duration, model_id = upload_file(file_info)
             total_duration += duration
             
             if success:
                 success_count += 1
                 log(f"         {message} ({duration:.2f}s)")
+                
+                # Verifica che il modello sia effettivamente pronto
+                if VERIFY_UPLOAD and model_id: 
+                    log(f"         Verifica completamento...")
+                    if verify_model_exists(model_id):
+                        log(f"         ✓ Modello verificato e pronto")
+                        verified_count += 1
+                    else:
+                        log(f"         ⚠ Verifica fallita, continuo comunque")
+                
+                # Applica le pause di sincronizzazione
+                wait_after_upload(file_info)
+            
             else:
                 error_count += 1
                 log(f"         {message} ({duration:.2f}s)")
@@ -443,11 +530,13 @@ def main():
         log("RIEPILOGO FINALE")
         log_separator()
         log(f"Policy utilizzata: {POLICY}")
-        log(f"File totali:  {len(ordered_files)}")
+        log(f"File totali: {len(ordered_files)}")
         log(f"Upload riusciti: {success_count}")
+        log(f"Upload verificati: {verified_count}")
         log(f"Upload falliti: {error_count}")
-        log(f"Tempo totale: {total_duration:. 2f}s")
-        log(f"Tempo medio per upload: {total_duration/len(ordered_files):.2f}s" if ordered_files else "N/A")
+        log(f"Tempo totale: {total_duration:.2f}s")
+        if ordered_files:
+            log(f"Tempo medio per upload: {total_duration/len(ordered_files):.2f}s")
         log_separator()
     
     except KeyboardInterrupt:

@@ -188,7 +188,7 @@ class FamilyGuardian:
             growth_factor = 0.6          
             penalty_factor = 1.05
         elif cosine_sim >= 0:             
-            penalty_factor = 1 + (alpha * 0.2 * (1 - cosine_sim))         
+            penalty_factor = 1 + (alpha * 0.2 * (1 - cosine_sim))      #da 0.2 a 0.1?   
         else:             
             penalty_factor = 1 + alpha * (1 - cosine_sim)
 
@@ -211,13 +211,10 @@ class FamilyGuardian:
         #    Cerchiamo il raggio massimo storico della famiglia
         #    Il cap è il massimo tra il raggio storico e la distanza attuale dalla radice (con margine)
         #    Usiamo dist_to_root come riferimento per "quanto lontano può andare"
-        if num_of_nodes < 3:
-            # Cold Start: Se abbiamo < 3 distanze, la statistica è inaffidabile.
+        if num_of_nodes <= 3: #minore uguale invece che minore
+            # Cold Start: Se abbiamo <= 3 distanze, la statistica è inaffidabile.
             # Usiamo un'euristica basata sul max storico o sul min_threshold.
-            if num_of_nodes > 0:
-                stats_threshold = max(self.min_threshold * 3, max_dist_from_centroid * 1.5)
-            else:
-                stats_threshold = self.min_threshold * 3
+            stats_threshold = max(self.min_threshold * 5, max_dist_from_centroid * 1.5) 
             evolutionary_cap = stats_threshold
         else:
             if max_family_radius is not None:

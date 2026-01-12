@@ -9,7 +9,7 @@ from safetensors import safe_open
 from scipy.stats import kurtosis
 import numpy as np
 
-# python mother_kurtosis.py /home/gabriele/projects/Model_Graph/model_heritage_backend/weights/models/ca2bc85a-dfb9-4374-ac21-24a5bc92dfe9_T3_D2_LZSJJ3Mu.safetensors -v
+# python mother_kurtosis.py /home/gabriele/projects/Model_Graph/model_heritage_backend/weights/models/6dcc3c27-173d-4a63-b1f0-52554585cae8_T0_D1_gW3N7Rwh.safetensors --layer-kind "output.dense" -v
 
 def calc_ku(state_dict:  dict, layer_kind: str = "output.dense") -> float:
     """
